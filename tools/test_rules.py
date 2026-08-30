@@ -1,0 +1,293 @@
+#!/usr/bin/env python3
+"""Rule-level tests for the grid engine + Zip patrol layer.
+
+Mirrors the Cangjie types in entry/src/main/cangjie/src/{engine,game}.
+This file is the executable spec: if a Cangjie change disagrees with these
+behaviours, the Cangjie side is wrong unless this spec is updated first.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+from solve_levels import load_levels, solve, wall_key  # noqa: E402
+
+
+class Cell:
+    def __init__(self, x: int, y: int) -> None:
+        self.x = x
+        self.y = y
+
+    def equals(self, other: Cell) -> bool:
+        return self.x == other.x and self.y == other.y
+
+
+class GridLayout:
+    def __init__(self, origin_x: float, origin_y: float, cell_size: float, cols: int, rows: int) -> None:
+        self.origin_x = origin_x
+        self.origin_y = origin_y
+        self.cell_size = cell_size
+        self.cols = cols
+        self.rows = rows
+
+
+def touch_to_cell(px: float, py: float, layout: GridLayout) -> Cell | None:
+    if px < layout.origin_x or py < layout.origin_y:
+        return None
+    cx = int((px - layout.origin_x) / layout.cell_size)
+    cy = int((py - layout.origin_y) / layout.cell_size)
+    if cx < 0 or cy < 0 or cx >= layout.cols or cy >= layout.rows:
+        return None
+    return Cell(cx, cy)
+
+
+class UndoStack:
+    def __init__(self) -> None:
+        self.items: list = []
+
+    def push(self, item) -> None:
+        self.items.append(item)
+
+    def pop(self):
+        if not self.items:
+            return None
+        return self.items.pop()
+
+    def peek(self):
+        return self.items[-1] if self.items else None
+
+    def clear(self) -> None:
+        self.items.clear()
+
+    def size(self) -> int:
+        return len(self.items)
+
+
+class GridPath:
+    def __init__(self) -> None:
+        self.stack = UndoStack()
+
+    def cells(self) -> list:
+        return list(self.stack.items)
+
+    def push(self, cell: Cell) -> None:
+        self.stack.push(cell)
+
+    def undo(self) -> Cell | None:
+        return self.stack.pop()
+
+    def clear(self) -> None:
+        self.stack.clear()
+
+    def last(self) -> Cell | None:
+        return self.stack.peek()
+
+    def prev(self) -> Cell | None:
+        if self.stack.size() < 2:
+            return None
+        return self.stack.items[-2]
+
+    def contains(self, cell: Cell) -> bool:
+        return any(c.equals(cell) for c in self.stack.items)
+
+    def size(self) -> int:
+        return self.stack.size()
+
+
+class GridMap:
+    def __init__(self, cols: int, rows: int, walls: list[tuple[int, int, int, int]]) -> None:
+        self.cols = cols
+        self.rows = rows
+        self.walls = {wall_key(x1, y1, x2, y2) for x1, y1, x2, y2 in walls}
+
+    def in_bounds(self, cell: Cell) -> bool:
+        return 0 <= cell.x < self.cols and 0 <= cell.y < self.rows
+
+    def orthogonal(self, a: Cell, b: Cell) -> bool:
+        return abs(a.x - b.x) + abs(a.y - b.y) == 1
+
+    def blocked(self, a: Cell, b: Cell) -> bool:
+        return wall_key(a.x, a.y, b.x, b.y) in self.walls
+
+
+class PatrolGame:
+    """THIS game's rules: ordered waypoints + fill-all Hamiltonian path."""
+
+    def __init__(self, level: dict) -> None:
+        self.level = level
+        walls = [(int(w["x1"]), int(w["y1"]), int(w["x2"]), int(w["y2"])) for w in level.get("walls") or []]
+        self.grid = GridMap(int(level["cols"]), int(level["rows"]), walls)
+        self.wps = {(int(w["x"]), int(w["y"])): int(w["n"]) for w in level["waypoints"]}
+        self.max_n = max(self.wps.values())
+        self.path = GridPath()
+
+    def number_at(self, x: int, y: int) -> int:
+        return self.wps.get((x, y), 0)
+
+    def next_required(self) -> int:
+        seen = 0
+        for c in self.path.cells():
+            n = self.number_at(c.x, c.y)
+            if n == seen + 1:
+                seen = n
+        return seen + 1
+
+    def _can_enter(self, cell: Cell) -> bool:
+        if not self.grid.in_bounds(cell):
+            return False
+        if self.path.contains(cell):
+            return False
+        last = self.path.last()
+        if last is None:
+            return self.number_at(cell.x, cell.y) == 1
+        if not self.grid.orthogonal(last, cell):
+            return False
+        if self.grid.blocked(last, cell):
+            return False
+        num = self.number_at(cell.x, cell.y)
+        nxt = self.next_required()
+        if num != 0 and num != nxt:
+            return False
+        if num == self.max_n and self.path.size() + 1 != self.grid.cols * self.grid.rows:
+            return False
+        return True
+
+    def try_step(self, cell: Cell) -> bool:
+        prev = self.path.prev()
+        if prev is not None and cell.equals(prev):
+            self.path.undo()
+            return True
+        if self._can_enter(cell):
+            self.path.push(cell)
+            return True
+        return False
+
+    def undo(self) -> bool:
+        return self.path.undo() is not None
+
+    def clear(self) -> None:
+        self.path.clear()
+
+    def is_win(self) -> bool:
+        last = self.path.last()
+        if last is None:
+            return False
+        if self.path.size() != self.grid.cols * self.grid.rows:
+            return False
+        return self.number_at(last.x, last.y) == self.max_n and self.next_required() == self.max_n + 1
+
+
+class TouchToCellTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.layout = GridLayout(8.0, 8.0, 64.0, 5, 5)
+
+    def test_maps_center_of_cell(self) -> None:
+        cell = touch_to_cell(8 + 64 * 2 + 32, 8 + 64 * 3 + 10, self.layout)
+        self.assertIsNotNone(cell)
+        self.assertEqual((cell.x, cell.y), (2, 3))
+
+    def test_rejects_outside(self) -> None:
+        self.assertIsNone(touch_to_cell(7, 40, self.layout))
+        self.assertIsNone(touch_to_cell(8 + 64 * 5 + 1, 40, self.layout))
+
+
+class UndoStackTests(unittest.TestCase):
+    def test_push_pop_clear(self) -> None:
+        s = UndoStack()
+        s.push("a")
+        s.push("b")
+        self.assertEqual(s.peek(), "b")
+        self.assertEqual(s.pop(), "b")
+        self.assertEqual(s.pop(), "a")
+        self.assertIsNone(s.pop())
+        s.push("c")
+        s.clear()
+        self.assertEqual(s.size(), 0)
+
+
+class PatrolRuleTests(unittest.TestCase):
+    def level(self) -> dict:
+        return {
+            "id": 99,
+            "name": "试驿",
+            "cols": 3,
+            "rows": 3,
+            "waypoints": [{"n": 1, "x": 0, "y": 0}, {"n": 2, "x": 2, "y": 2}],
+            "walls": [{"x1": 0, "y1": 0, "x2": 1, "y2": 0}],
+        }
+
+    def test_must_start_on_one(self) -> None:
+        g = PatrolGame(self.level())
+        self.assertFalse(g.try_step(Cell(1, 1)))
+        self.assertTrue(g.try_step(Cell(0, 0)))
+
+    def test_rejects_diagonal(self) -> None:
+        g = PatrolGame(self.level())
+        g.try_step(Cell(0, 0))
+        self.assertFalse(g.try_step(Cell(1, 1)))
+
+    def test_rejects_wall(self) -> None:
+        g = PatrolGame(self.level())
+        g.try_step(Cell(0, 0))
+        self.assertFalse(g.try_step(Cell(1, 0)))
+        self.assertTrue(g.try_step(Cell(0, 1)))
+
+    def test_drag_back_undo(self) -> None:
+        g = PatrolGame(self.level())
+        g.try_step(Cell(0, 0))
+        g.try_step(Cell(0, 1))
+        self.assertTrue(g.try_step(Cell(0, 0)))
+        self.assertEqual(g.path.size(), 1)
+        self.assertTrue(g.path.last().equals(Cell(0, 0)))
+
+    def test_button_undo_and_clear(self) -> None:
+        g = PatrolGame(self.level())
+        g.try_step(Cell(0, 0))
+        g.try_step(Cell(0, 1))
+        self.assertTrue(g.undo())
+        self.assertEqual(g.path.size(), 1)
+        g.clear()
+        self.assertEqual(g.path.size(), 0)
+
+    def test_rejects_revisit(self) -> None:
+        g = PatrolGame(self.level())
+        g.try_step(Cell(0, 0))
+        g.try_step(Cell(0, 1))
+        g.try_step(Cell(0, 2))
+        g.try_step(Cell(1, 2))
+        g.try_step(Cell(1, 1))
+        self.assertFalse(g.try_step(Cell(0, 1)))
+
+    def test_cannot_enter_two_early(self) -> None:
+        g = PatrolGame(self.level())
+        g.try_step(Cell(0, 0))
+        g.try_step(Cell(0, 1))
+        g.try_step(Cell(0, 2))
+        g.try_step(Cell(1, 2))
+        self.assertFalse(g.try_step(Cell(2, 2)))
+        self.assertEqual(g.path.size(), 4)
+        self.assertFalse(g.is_win())
+
+
+class ShippedLevelPlaythroughTests(unittest.TestCase):
+    def test_solver_path_wins_every_shipped_level(self) -> None:
+        levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
+        self.assertGreaterEqual(len(levels), 12)
+        for level in levels:
+            path = solve(level)[0]
+            game = PatrolGame(level)
+            for x, y in path:
+                self.assertTrue(
+                    game.try_step(Cell(x, y)),
+                    f"{level['name']} rejected ({x},{y}) at size={game.path.size()}",
+                )
+            self.assertTrue(game.is_win(), f"{level['name']} did not win after solver path")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

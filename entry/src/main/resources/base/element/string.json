@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "驿路巡点 entry"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "驿路巡点"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "驿路巡点"
+    }
+  ]
+}
