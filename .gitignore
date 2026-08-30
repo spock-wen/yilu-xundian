@@ -1,0 +1,17 @@
+.hvigor/
+.idea/
+oh_modules/
+**/oh_modules/
+**/build/
+.preview/
+**/.preview/
+**/.cxx/
+local.properties
+*.hap
+.DS_Store
+__pycache__/
+*.pyc
+.clangd
+*.so
+.cxx
+node_modules/
