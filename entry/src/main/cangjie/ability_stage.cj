@@ -2,8 +2,7 @@ package ohos_app_cangjie_entry
 
 import kit.AbilityKit.AbilityStage
 
-/* Empty Ability stage entry. Shape matches official OpenHarmony Cangjie samples
-   (Huawei Device Co., 2025 filemanagement_cangjie_wrapper). */
+/* Official Empty Ability stage entry. */
 class MyAbilityStage <: AbilityStage {
     public func onCreate(): Unit {
     }

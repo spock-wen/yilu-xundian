@@ -1,17 +1,18 @@
 package ohos_app_cangjie_entry
 
-import ohos.base.*
-import ohos.component.*
-import ohos.state_manage.*
-import ohos.state_macro_manage.*
+import kit.ArkUI.*
+import ohos.arkui.state_macro_manage.*
 import ohos_app_cangjie_entry.engine.{GridLayout, touchToCell}
-import ohos_app_cangjie_entry.game.{LevelDef, PatrolGame, Waypoint}
+import ohos_app_cangjie_entry.game.{LevelDef, PatrolGame}
 
 /*
- * Canvas + onTouch pattern verified against published HarmonyOS NEXT
- * Cangjie drawing-board writeups (RenderingContextSettings / Path2D /
- * e.eventType.toString() == "Down"|"Move"|"Up").
- * Do not assume ArkTS TouchType exists in Cangjie.
+ * Canvas + onTouch from official docs_cangjie:
+ * - arkui-cj/cj-drawing-customization-on-canvas.md
+ * - reference/arkui-cj/cj-canvas-drawing-canvasrenderingcontext2d.md
+ * - arkui-cj/cj-common-events-touch-screen-event.md
+ * Imports: kit.ArkUI.* + ohos.arkui.state_macro_manage.*
+ * lineWidth / strokeStyle / fillStyle are properties. Draw after onReady.
+ * Touch field is event.eventType (not ArkTS event.type).
  */
 @Entry
 @Component
@@ -24,16 +25,6 @@ class EntryView {
     @State var levelIndex: Int64 = 0
     @State var tick: Int64 = 0
     @State var winTitle: String = ""
-
-    protected open func onPageShow() {
-        this.context.lineWidth(3)
-        this.context.strokeStyle(Theme.gridLine)
-        this.drawBoard()
-    }
-
-    public func aboutToAppear(): Unit {
-        this.drawBoard()
-    }
 
     func currentLayout(): GridLayout {
         let cols = this.game.level.cols
@@ -90,13 +81,9 @@ class EntryView {
         this.refresh()
     }
 
-    func handleTouch(e: TouchEvent): Unit {
-        let kind = e.eventType.toString()
-        if (kind != "Down" && kind != "Move") {
-            return
-        }
-        let px = e.touches[0].x
-        let py = e.touches[0].y
+    func handleDrag(event: TouchEvent): Unit {
+        let px = event.touches[0].x
+        let py = event.touches[0].y
         let hit = touchToCell(px, py, this.currentLayout())
         match (hit) {
             case None => ()
@@ -111,20 +98,6 @@ class EntryView {
         }
     }
 
-    func addLine(path: Path2D, x1: Float64, y1: Float64, x2: Float64, y2: Float64): Unit {
-        path.moveTo(x1, y1)
-        path.bezierCurveTo(x1, y1, x2, y2, x2, y2)
-    }
-
-    func addCircle(path: Path2D, cx: Float64, cy: Float64, r: Float64): Unit {
-        let k = 0.55228475 * r
-        path.moveTo(cx, cy - r)
-        path.bezierCurveTo(cx + k, cy - r, cx + r, cy - k, cx + r, cy)
-        path.bezierCurveTo(cx + r, cy + k, cx + k, cy + r, cx, cy + r)
-        path.bezierCurveTo(cx - k, cy + r, cx - r, cy + k, cx - r, cy)
-        path.bezierCurveTo(cx - r, cy - k, cx - k, cy - r, cx, cy - r)
-    }
-
     func drawBoard(): Unit {
         this.context.clearRect(0.0, 0.0, 3000.0, 3000.0)
         let layout = this.currentLayout()
@@ -134,24 +107,32 @@ class EntryView {
         let oy = layout.originY
         let cs = layout.cellSize
 
-        let grid = Path2D()
+        this.context.fillStyle = Theme.paper
+        this.context.fillRect(ox, oy, Float64(cols) * cs, Float64(rows) * cs)
+
+        this.context.lineWidth = 2.0
+        this.context.strokeStyle = Theme.gridLine
         var x: Int64 = 0
         while (x <= cols) {
             let px = ox + Float64(x) * cs
-            this.addLine(grid, px, oy, px, oy + Float64(rows) * cs)
+            this.context.beginPath()
+            this.context.moveTo(px, oy)
+            this.context.lineTo(px, oy + Float64(rows) * cs)
+            this.context.stroke()
             x = x + 1
         }
         var y: Int64 = 0
         while (y <= rows) {
             let py = oy + Float64(y) * cs
-            this.addLine(grid, ox, py, ox + Float64(cols) * cs, py)
+            this.context.beginPath()
+            this.context.moveTo(ox, py)
+            this.context.lineTo(ox + Float64(cols) * cs, py)
+            this.context.stroke()
             y = y + 1
         }
-        this.context.lineWidth(2)
-        this.context.strokeStyle(Theme.gridLine)
-        this.context.stroke(grid)
 
-        let walls = Path2D()
+        this.context.lineWidth = 6.0
+        this.context.strokeStyle = Theme.wallInk
         for (wall in this.game.level.walls) {
             var ax = wall.x1
             var ay = wall.y1
@@ -159,61 +140,62 @@ class EntryView {
             var by = wall.y2
             if (ay == by && ax + 1 == bx) {
                 let px = ox + Float64(bx) * cs
-                this.addLine(walls, px, oy + Float64(ay) * cs + 4.0, px, oy + Float64(ay + 1) * cs - 4.0)
+                this.context.beginPath()
+                this.context.moveTo(px, oy + Float64(ay) * cs + 4.0)
+                this.context.lineTo(px, oy + Float64(ay + 1) * cs - 4.0)
+                this.context.stroke()
             } else if (ay == by && bx + 1 == ax) {
                 let px = ox + Float64(ax) * cs
-                this.addLine(walls, px, oy + Float64(ay) * cs + 4.0, px, oy + Float64(ay + 1) * cs - 4.0)
+                this.context.beginPath()
+                this.context.moveTo(px, oy + Float64(ay) * cs + 4.0)
+                this.context.lineTo(px, oy + Float64(ay + 1) * cs - 4.0)
+                this.context.stroke()
             } else if (ax == bx && ay + 1 == by) {
                 let py = oy + Float64(by) * cs
-                this.addLine(walls, ox + Float64(ax) * cs + 4.0, py, ox + Float64(ax + 1) * cs - 4.0, py)
+                this.context.beginPath()
+                this.context.moveTo(ox + Float64(ax) * cs + 4.0, py)
+                this.context.lineTo(ox + Float64(ax + 1) * cs - 4.0, py)
+                this.context.stroke()
             } else if (ax == bx && by + 1 == ay) {
                 let py = oy + Float64(ay) * cs
-                this.addLine(walls, ox + Float64(ax) * cs + 4.0, py, ox + Float64(ax + 1) * cs - 4.0, py)
+                this.context.beginPath()
+                this.context.moveTo(ox + Float64(ax) * cs + 4.0, py)
+                this.context.lineTo(ox + Float64(ax + 1) * cs - 4.0, py)
+                this.context.stroke()
             }
         }
-        this.context.lineWidth(6)
-        this.context.strokeStyle(Theme.wallInk)
-        this.context.stroke(walls)
 
         if (this.game.path.size() >= 2) {
-            let trail = Path2D()
+            this.context.lineWidth = 8.0
+            this.context.strokeStyle = Theme.pathInk
+            this.context.beginPath()
             let first = this.game.path.at(0)
-            var lx = ox + (Float64(first.x) + 0.5) * cs
-            var ly = oy + (Float64(first.y) + 0.5) * cs
+            this.context.moveTo(ox + (Float64(first.x) + 0.5) * cs, oy + (Float64(first.y) + 0.5) * cs)
             var i: Int64 = 1
             while (i < this.game.path.size()) {
                 let cell = this.game.path.at(i)
-                let nx = ox + (Float64(cell.x) + 0.5) * cs
-                let ny = oy + (Float64(cell.y) + 0.5) * cs
-                this.addLine(trail, lx, ly, nx, ny)
-                lx = nx
-                ly = ny
+                this.context.lineTo(ox + (Float64(cell.x) + 0.5) * cs, oy + (Float64(cell.y) + 0.5) * cs)
                 i = i + 1
             }
-            this.context.lineWidth(8)
-            this.context.strokeStyle(Theme.pathInk)
-            this.context.stroke(trail)
+            this.context.stroke()
         }
 
-        let rings = Path2D()
+        let fs = this.numberFont()
+        this.context.font = "normal bolder ${fs}px sans-serif"
         for (wp in this.game.level.waypoints) {
             let cx = ox + (Float64(wp.x) + 0.5) * cs
             let cy = oy + (Float64(wp.y) + 0.5) * cs
-            this.addCircle(rings, cx, cy, cs * 0.32)
+            let r = cs * 0.32
+            this.context.beginPath()
+            this.context.arc(cx, cy, r, 0.0, 6.28)
+            this.context.fillStyle = Theme.stationFill
+            this.context.fill()
+            this.context.lineWidth = 3.0
+            this.context.strokeStyle = Theme.ink
+            this.context.stroke()
+            this.context.fillStyle = Theme.ink
+            this.context.fillText("${wp.n}", cx - Float64(fs) * 0.28, cy + Float64(fs) * 0.34)
         }
-        this.context.lineWidth(3)
-        this.context.strokeStyle(Theme.stationRing)
-        this.context.stroke(rings)
-    }
-
-    func waypointLeft(wp: Waypoint): Int64 {
-        let layout = this.currentLayout()
-        return Int64(layout.originX + Float64(wp.x) * layout.cellSize)
-    }
-
-    func waypointTop(wp: Waypoint): Int64 {
-        let layout = this.currentLayout()
-        return Int64(layout.originY + Float64(wp.y) * layout.cellSize)
     }
 
     func build() {
@@ -239,7 +221,7 @@ class EntryView {
                                     .backgroundColor(Theme.buttonFill)
                                     .fontColor(Theme.buttonText)
                                     .fontSize(18)
-                                    .onClick({e => this.openLevel(index)})
+                                    .onClick({event => this.openLevel(index)})
                             }
                         )
                     }
@@ -264,21 +246,21 @@ class EntryView {
                     .fontColor(Theme.buttonText)
                     .fontSize(18)
                     .margin(bottom: 12)
-                    .onClick({e => this.nextLevel()})
+                    .onClick({event => this.nextLevel()})
                 Button("返回驿册")
                     .width(80.percent)
                     .height(Theme.buttonHeight)
                     .backgroundColor(Theme.ink)
                     .fontColor(Theme.buttonText)
                     .fontSize(18)
-                    .onClick({e => this.screen = 0})
+                    .onClick({event => this.screen = 0})
             } else {
                 Row {
                     Button("返回")
                         .height(40)
                         .backgroundColor(Theme.ink)
                         .fontColor(Theme.buttonText)
-                        .onClick({e => this.screen = 0})
+                        .onClick({event => this.screen = 0})
                     Text("${this.game.level.name}  ${this.game.level.cols}×${this.game.level.rows}")
                         .fontSize(20)
                         .fontColor(Theme.ink)
@@ -291,28 +273,21 @@ class EntryView {
                     .fontSize(13)
                     .fontColor(Theme.muted)
                     .margin(bottom: 8)
-                Stack {
-                    Canvas(this.context)
-                        .width(Theme.boardPx)
-                        .height(Theme.boardPx)
-                        .backgroundColor(Theme.paper)
-                        .onTouch({e: TouchEvent => this.handleTouch(e)})
-                    ForEach(
-                        this.game.level.waypoints,
-                        itemGeneratorFunc: {wp: Waypoint, index: Int64 =>
-                            Text("${wp.n}")
-                                .fontSize(this.numberFont())
-                                .fontColor(Theme.ink)
-                                .fontWeight(FontWeight.Bold)
-                                .width(Int64(this.currentLayout().cellSize).px)
-                                .height(Int64(this.currentLayout().cellSize).px)
-                                .textAlign(TextAlign.Center)
-                                .position(x: this.waypointLeft(wp).px, y: this.waypointTop(wp).px)
+                Canvas(this.context)
+                    .width(Theme.boardPx)
+                    .height(Theme.boardPx)
+                    .backgroundColor(Theme.paper)
+                    .onReady({
+                        =>
+                        this.drawBoard()
+                    })
+                    .onTouch({event =>
+                        match (event.eventType) {
+                            case TouchType.Down => this.handleDrag(event)
+                            case TouchType.Move => this.handleDrag(event)
+                            case _ => ()
                         }
-                    )
-                }
-                .width(Theme.boardPx)
-                .height(Theme.boardPx)
+                    })
                 Row(12) {
                     Button("撤销")
                         .width(48.percent)
@@ -320,14 +295,14 @@ class EntryView {
                         .backgroundColor(Theme.buttonFill)
                         .fontColor(Theme.buttonText)
                         .fontSize(18)
-                        .onClick({e => this.doUndo()})
+                        .onClick({event => this.doUndo()})
                     Button("重置")
                         .width(48.percent)
                         .height(Theme.buttonHeight)
                         .backgroundColor(Theme.ink)
                         .fontColor(Theme.buttonText)
                         .fontSize(18)
-                        .onClick({e => this.doClear()})
+                        .onClick({event => this.doClear()})
                 }
                 .width(Theme.boardPx)
                 .margin(top: 16)

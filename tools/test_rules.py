@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Rule-level tests for the grid engine + Zip patrol layer.
 
-Mirrors the Cangjie types in entry/src/main/cangjie/src/{engine,game}.
+Mirrors the Cangjie types in entry/src/main/cangjie/{engine,game}.
 This file is the executable spec: if a Cangjie change disagrees with these
 behaviours, the Cangjie side is wrong unless this spec is updated first.
 """
@@ -287,6 +287,23 @@ class ShippedLevelPlaythroughTests(unittest.TestCase):
                     f"{level['name']} rejected ({x},{y}) at size={game.path.size()}",
                 )
             self.assertTrue(game.is_win(), f"{level['name']} did not win after solver path")
+
+
+class VerifiedCatalogTests(unittest.TestCase):
+    """Lock the 12 solver-verified levels. Do not invent replacements."""
+
+    def test_json_is_the_verified_table(self) -> None:
+        from build_levels import EXPECTED_NAMES, emit, load_verified
+
+        levels = load_verified()
+        self.assertEqual([lv["name"] for lv in levels], list(EXPECTED_NAMES))
+        self.assertNotIn("汽梁", [lv["name"] for lv in levels])
+        self.assertEqual(levels[2]["name"], "汴梁")
+        self.assertEqual((levels[2]["cols"], levels[2]["rows"]), (3, 3))
+        self.assertEqual(levels[3]["waypoints"][-1], {"n": 3, "x": 1, "y": 2})
+        generated = emit(levels)
+        shipped = (ROOT / "entry/src/main/cangjie/levels.cj").read_text(encoding="utf-8")
+        self.assertEqual(shipped, generated, "levels.cj must be emitted from verified JSON")
 
 
 if __name__ == "__main__":
