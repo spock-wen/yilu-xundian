@@ -589,6 +589,9 @@ class StationNumberSkinTests(unittest.TestCase):
             "densityDpi" in ui or "densityPixels" in ui or "vp2px" in ui,
             "density must come from Display.densityDpi/densityPixels or vp2px",
         )
+        self.assertIn("160.0", ui)
+        self.assertIn("try {", ui)
+        self.assertIn("getDefaultDisplaySync", ui)
         self.assertRegex(board, r"cs\s*/\s*48")
         self.assertIn("22", board)
         self.assertIn("stationD", board)

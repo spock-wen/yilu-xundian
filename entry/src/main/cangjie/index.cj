@@ -197,10 +197,16 @@ class EntryView {
             case None => raw = 0.0
         }
         if (raw <= 0.0) {
-            raw = getDefaultDisplaySync().densityDpi
-        }
-        if (raw <= 0.0) {
-            raw = getDefaultDisplaySync().densityPixels
+            /* getDefaultDisplaySync throws BusinessException (1400001 /
+               1400003) in the official sample; keep the board drawable. */
+            try {
+                raw = getDefaultDisplaySync().densityDpi
+                if (raw <= 0.0) {
+                    raw = getDefaultDisplaySync().densityPixels
+                }
+            } catch (e: Exception) {
+                raw = 3.0
+            }
         }
         if (raw > 16.0) {
             raw = raw / 160.0
