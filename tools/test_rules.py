@@ -353,5 +353,55 @@ class VerifiedCatalogTests(unittest.TestCase):
             self.assertIn(token, theme)
 
 
+def road_title(name: str, catalog_index: int) -> str:
+    """Board / win header: 1-based 驿程 serial, not waypoint maxNumber()."""
+    return f"{name}·第 {catalog_index + 1} 驿"
+
+
+def _road_title_func_body(ui: str) -> str:
+    start = ui.index("func roadTitle()")
+    brace = ui.index("{", start)
+    depth = 0
+    i = brace
+    while i < len(ui):
+        if ui[i] == "{":
+            depth += 1
+        elif ui[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return ui[start : i + 1]
+        i += 1
+    raise AssertionError("roadTitle() body not closed")
+
+
+class RoadTitleCopyTests(unittest.TestCase):
+    """Header number is 驿程 serial (1-based catalog index), not station count."""
+
+    def test_tutorial_is_first_post_not_five_waypoints(self) -> None:
+        levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
+        tutorial = levels[0]
+        self.assertEqual(tutorial["name"], "长安")
+        self.assertEqual((int(tutorial["cols"]), int(tutorial["rows"])), (6, 8))
+        waypoint_max = max(int(w["n"]) for w in tutorial["waypoints"])
+        self.assertEqual(waypoint_max, 5)
+        self.assertEqual(road_title(tutorial["name"], 0), "长安·第 1 驿")
+        self.assertNotEqual(road_title(tutorial["name"], 0), f"长安·第 {waypoint_max} 驿")
+
+    def test_second_changan_is_second_post(self) -> None:
+        levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
+        second = levels[1]
+        self.assertEqual(second["name"], "长安")
+        self.assertEqual((int(second["cols"]), int(second["rows"])), (3, 3))
+        self.assertEqual(road_title(second["name"], 1), "长安·第 2 驿")
+
+    def test_ui_road_title_uses_catalog_index_not_max_number(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        body = _road_title_func_body(ui)
+        self.assertIn("this.levelIndex + 1", body)
+        self.assertNotIn("maxNumber()", body)
+        self.assertEqual(ui.count("func roadTitle()"), 1)
+        self.assertEqual(ui.count("this.roadTitle()"), 2)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

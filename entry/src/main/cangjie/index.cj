@@ -47,7 +47,7 @@ class EntryView {
     }
 
     func roadTitle(): String {
-        return "${this.game.level.name}·第 ${this.game.level.maxNumber()} 驿"
+        return "${this.game.level.name}·第 ${this.levelIndex + 1} 驿"
     }
 
     func currentName(): String {
