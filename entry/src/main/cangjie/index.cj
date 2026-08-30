@@ -18,6 +18,10 @@ class EntryView {
     var context: CanvasRenderingContext2D = CanvasRenderingContext2D(this.boardSettings)
     var markSettings: RenderingContextSettings = RenderingContextSettings(antialias: true)
     var markContext: CanvasRenderingContext2D = CanvasRenderingContext2D(this.markSettings)
+    var undoSettings: RenderingContextSettings = RenderingContextSettings(antialias: true)
+    var undoContext: CanvasRenderingContext2D = CanvasRenderingContext2D(this.undoSettings)
+    var redrawSettings: RenderingContextSettings = RenderingContextSettings(antialias: true)
+    var redrawContext: CanvasRenderingContext2D = CanvasRenderingContext2D(this.redrawSettings)
     var game: PatrolGame = PatrolGame(LevelCatalog.byIndex(0))
 
     @State var screen: Int64 = 0
@@ -102,6 +106,44 @@ class EntryView {
     func doClear(): Unit {
         this.game.clear()
         this.refresh()
+    }
+
+    /* Mock 甲 24vp hairline arrows. Path2D + stroke(path) / fill(path)
+       from docs_cangjie cj-canvas-drawing-canvasrenderingcontext2d.md
+       (lineWidth is a property). Harmony Button default start-icon tofu
+       is avoided by drawing on Canvas inside a clickable Row. */
+    func drawUndoIcon(): Unit {
+        this.undoContext.clearRect(0.0, 0.0, Float64(Theme.iconVp), Float64(Theme.iconVp))
+        this.undoContext.lineWidth = Theme.hairline
+        this.undoContext.strokeStyle = Theme.ink
+        this.undoContext.fillStyle = Theme.ink
+        this.undoContext.lineCap = "round"
+        let undoArc = Path2D()
+        undoArc.arc(12.0, 12.0, 7.0, 0.35, 3.32, counterclockwise: true)
+        this.undoContext.stroke(undoArc)
+        this.undoContext.beginPath()
+        this.undoContext.moveTo(1.5, 10.8)
+        this.undoContext.lineTo(5.1, 8.7)
+        this.undoContext.lineTo(5.1, 12.9)
+        this.undoContext.closePath()
+        this.undoContext.fill()
+    }
+
+    func drawRedrawIcon(): Unit {
+        this.redrawContext.clearRect(0.0, 0.0, Float64(Theme.iconVp), Float64(Theme.iconVp))
+        this.redrawContext.lineWidth = Theme.hairline
+        this.redrawContext.strokeStyle = Theme.ink
+        this.redrawContext.fillStyle = Theme.ink
+        this.redrawContext.lineCap = "round"
+        let redrawArc = Path2D()
+        redrawArc.arc(12.0, 12.0, 7.0, 3.93, 2.36, counterclockwise: false)
+        this.redrawContext.stroke(redrawArc)
+        this.redrawContext.beginPath()
+        this.redrawContext.moveTo(4.5, 19.5)
+        this.redrawContext.lineTo(5.5, 15.4)
+        this.redrawContext.lineTo(8.5, 18.4)
+        this.redrawContext.closePath()
+        this.redrawContext.fill()
     }
 
     func handleDrag(event: TouchEvent): Unit {
@@ -616,24 +658,48 @@ class EntryView {
                     .color(Theme.paperLine)
                     .width(100.percent)
                 Row(space: 12) {
-                    Button("撤销")
-                        .layoutWeight(1)
-                        .height(Theme.undoH)
-                        .backgroundColor(Theme.whitePaper)
-                        .fontColor(Theme.ink)
-                        .fontSize(16)
-                        .fontFamily(Theme.sans)
-                        .border(width: 1, color: Theme.ink)
-                        .onClick({event => this.doUndo()})
-                    Button("重绘驿道")
-                        .layoutWeight(1)
-                        .height(Theme.undoH)
-                        .backgroundColor(Theme.whitePaper)
-                        .fontColor(Theme.ink)
-                        .fontSize(16)
-                        .fontFamily(Theme.sans)
-                        .border(width: 1, color: Theme.ink)
-                        .onClick({event => this.doClear()})
+                    Row(space: 8) {
+                        Canvas(this.undoContext)
+                            .width(Theme.iconVp)
+                            .height(Theme.iconVp)
+                            .onReady({
+                                =>
+                                this.drawUndoIcon()
+                            })
+                        Text("撤销")
+                            .fontSize(16)
+                            .fontColor(Theme.ink)
+                            .fontFamily(Theme.sans)
+                    }
+                    .layoutWeight(1)
+                    .height(Theme.undoH)
+                    .justifyContent(FlexAlign.Center)
+                    .alignItems(VerticalAlign.Center)
+                    .backgroundColor(Theme.whitePaper)
+                    .borderRadius(8)
+                    .border(width: 1, color: Theme.ink)
+                    .onClick({event => this.doUndo()})
+                    Row(space: 8) {
+                        Canvas(this.redrawContext)
+                            .width(Theme.iconVp)
+                            .height(Theme.iconVp)
+                            .onReady({
+                                =>
+                                this.drawRedrawIcon()
+                            })
+                        Text("重绘驿道")
+                            .fontSize(16)
+                            .fontColor(Theme.ink)
+                            .fontFamily(Theme.sans)
+                    }
+                    .layoutWeight(1)
+                    .height(Theme.undoH)
+                    .justifyContent(FlexAlign.Center)
+                    .alignItems(VerticalAlign.Center)
+                    .backgroundColor(Theme.whitePaper)
+                    .borderRadius(8)
+                    .border(width: 1, color: Theme.ink)
+                    .onClick({event => this.doClear()})
                 }
                 .width(100.percent)
                 .height(Theme.bottomBar)
