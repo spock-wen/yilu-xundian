@@ -1,9 +1,11 @@
 package ohos_app_cangjie_entry
 
+import ohos.window.WindowStage
 import kit.AbilityKit.*
 
 /* Official Empty Ability UIAbility. loadContent uses the @Entry class name.
-   WindowStage comes from kit.AbilityKit (docs_cangjie window-stage guide). */
+   WindowStage: import ohos.window.WindowStage (OpenHarmony
+   filemanagement_filemanagement_cangjie_wrapper test MainAbility). */
 class MainAbility <: UIAbility {
     public func onCreate(want: Want, launchParam: LaunchParam): Unit {
     }

@@ -1,4 +1,4 @@
-import { appTasks } from '@ohos/hvigor-ohos-plugin';
+import { appTasks } from '@ohos/cangjie-build-support';
 
 export default {
   system: appTasks,
