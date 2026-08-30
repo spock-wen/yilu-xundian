@@ -403,5 +403,98 @@ class RoadTitleCopyTests(unittest.TestCase):
         self.assertEqual(ui.count("this.roadTitle()"), 2)
 
 
+def _play_bottom_bar(ui: str) -> str:
+    """Slice the play-screen 撤销 / 重绘驿道 bar (last Row that contains both labels)."""
+    start = ui.rfind("Row(space: 12)")
+    if start < 0:
+        raise AssertionError("play bottom bar Row(space: 12) missing")
+    return ui[start:]
+
+
+def _func_body(src: str, name: str) -> str:
+    start = src.index(f"func {name}()")
+    brace = src.index("{", start)
+    depth = 0
+    i = brace
+    while i < len(src):
+        if src[i] == "{":
+            depth += 1
+        elif src[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return src[start : i + 1]
+        i += 1
+    raise AssertionError(f"{name}() body not closed")
+
+
+class BottomBarIconTests(unittest.TestCase):
+    """Mock 甲: thin-stroke Path2D arrows, not Harmony Button default tofu icons."""
+
+    def test_undo_clear_are_not_harmony_buttons(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        bar = _play_bottom_bar(ui)
+        self.assertNotIn('Button("撤销")', ui)
+        self.assertNotIn('Button("重绘驿道")', ui)
+        self.assertNotIn("SymbolGlyph", ui)
+        self.assertNotIn("startIcon", bar)
+        self.assertIn("撤销", bar)
+        self.assertIn("重绘驿道", bar)
+        self.assertIn("this.doUndo()", bar)
+        self.assertIn("this.doClear()", bar)
+
+    def test_undo_clear_use_24vp_canvas_path_arrows(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        theme = (ROOT / "entry/src/main/cangjie/theme.cj").read_text(encoding="utf-8")
+        self.assertIn("public static let iconVp: Int64 = 24", theme)
+        undo = _func_body(ui, "drawUndoIcon")
+        redraw = _func_body(ui, "drawRedrawIcon")
+        self.assertIn("counterclockwise: true", undo)
+        self.assertIn("counterclockwise: false", redraw)
+        self.assertIn("lineWidth", undo)
+        self.assertIn("Theme.hairline", undo)
+        self.assertIn("Theme.ink", undo)
+        self.assertIn("Theme.ink", redraw)
+        self.assertIn("Path2D()", undo)
+        self.assertIn("Path2D()", redraw)
+        self.assertIn(".arc(", undo.replace(" ", ""))
+        self.assertIn(".stroke(", undo)
+        self.assertIn(".arc(", redraw.replace(" ", ""))
+        self.assertIn(".stroke(", redraw)
+        self.assertNotIn("fillRect", undo)
+        self.assertNotIn("fillRect", redraw)
+        bar = _play_bottom_bar(ui)
+        self.assertIn("Theme.iconVp", bar)
+        self.assertIn("Canvas(this.undoContext)", bar)
+        self.assertIn("Canvas(this.redrawContext)", bar)
+
+    def test_icon_geometry_matches_mock_jia(self) -> None:
+        from bar_icons import (  # noqa: E402
+            ICON_VP,
+            REDRAW,
+            UNDO,
+            arrowhead_points,
+            assert_inside_icon,
+        )
+
+        self.assertEqual(ICON_VP, 24)
+        self.assertTrue(UNDO.counterclockwise)
+        self.assertFalse(REDRAW.counterclockwise)
+        self.assertGreater(UNDO.sweep_rad(), 3.0)
+        self.assertLess(UNDO.sweep_rad(), 4.1)
+        self.assertGreater(REDRAW.sweep_rad(), 4.0)
+        self.assertLess(REDRAW.sweep_rad(), 5.2)
+        for spec in (UNDO, REDRAW):
+            assert_inside_icon(spec.end_point())
+            for pt in arrowhead_points(spec):
+                assert_inside_icon(pt)
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        undo = _func_body(ui, "drawUndoIcon")
+        redraw = _func_body(ui, "drawRedrawIcon")
+        for token in UNDO.cj_tokens():
+            self.assertIn(token, undo, f"missing undo token {token}")
+        for token in REDRAW.cj_tokens():
+            self.assertIn(token, redraw, f"missing redraw token {token}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -26,6 +26,7 @@ public class Theme {
     public static let pathStroke: Float64 = 8.0
     public static let primaryH: Int64 = 52
     public static let undoH: Int64 = 56
+    public static let iconVp: Int64 = 24
     public static let hairline: Float64 = 1.0
 
     /* docs_cangjie Text.fontFamily takes a family string (e.g. "serif",
