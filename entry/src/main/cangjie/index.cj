@@ -411,7 +411,7 @@ class EntryView {
                     .color(Theme.paperLine)
                     .width(100.percent)
                 Scroll {
-                    Column(10) {
+                    Column(space: 10) {
                         ForEach(
                             LevelCatalog.all(),
                             itemGeneratorFunc: {item: LevelDef, index: Int64 =>
@@ -615,7 +615,7 @@ class EntryView {
                     .strokeWidth(1)
                     .color(Theme.paperLine)
                     .width(100.percent)
-                Row(12) {
+                Row(space: 12) {
                     Button("撤销")
                         .layoutWeight(1)
                         .height(Theme.undoH)

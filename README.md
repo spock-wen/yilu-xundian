@@ -157,7 +157,7 @@ entry/
 - `hvigor/hvigor-config.json5` 里的仓颉 hvigor 支持包版本
 - `local.properties`（SDK 路径，已 gitignore）
 
-这些文件因本机插件而异，不要从网上抄一个对不上的 `cangjie-build-support-*.tgz` 版本。
+这些文件因本机插件而异，不要从网上抄一个对不上的 `cangjie-build-support-*.tgz` 版本。仓颉插件会在本机提供 `@ohos/cangjie-build-support`，该本机路径不要提交进 `hvigor/hvigor-config.json5`（仓库里保持 `dependencies: {}`）。
 
 ## API 依据（未编造 `@ohos.*` / ArkTS-only）
 
