@@ -13,24 +13,25 @@
 2. 必须经过每一个格子恰好一次。
 3. 有数字的驿站必须按 1..N **升序**经过；最高号是整盘的终点。
 4. 相邻格之间可以有墙，路径不能穿墙、不能自交。墙只挡住正交边，不删格子。
-5. 拖回上一格 = 撤销一步。另有 **撤销**、**重置**。
+5. 拖回上一格 = 撤销一步。另有 **撤销**、**重绘驿道**。
 6. 原型不提供 Hint。
 
-### 界面
+### 界面（设计师手稿 01–06 为视觉源）
 
-| 屏 | 内容 |
+| 屏 | 文案 |
 | --- | --- |
-| 驿册 | 关卡名 + 尺寸 |
-| 巡点 | Canvas 棋盘，撤销 / 重置，返回驿册 |
-| 达驿 | 文案「文书达驿」，下一站 |
+| 首页 | 标题「驿路巡点」，副题「传书过驿」，主按钮「开始传书」，次入口「驿程」，朱印「关防」 |
+| 棋盘 | 顶栏「{驿名}·第 N 驿」，底栏「撤销」「重绘驿道」 |
+| 通关 | 「通关」+ 同标题；「驿道已通」「文书递达本驿」；朱印「文书到」；「下一驿」 |
+| 驿程 | 顶栏「驿程」；行态：已通 / 当前 / 锁 |
 
-视觉是占位驿路 / 信使风（纸色 `#F3EBDD` / `0XF3EBDD`、墨色 `#2B2A27`、路色 `#4A6670`），颜色和间距集中在 `entry/src/main/cangjie/theme.cj`。不要当成春节皮肤。设计师可整文件替换。
+视觉 token 只来自手稿，写在 `entry/src/main/cangjie/theme.cj`。禁止熊猫、红包、灯笼堆、龙兔贴图、宪法海报风。金只作发丝线，朱砂只作关防 / 文书到印。
 
 ## 关卡 JSON（12/12 已由求解器验证）
 
 路径：`entry/src/main/resources/rawfile/levels.json`（给求解器用）。应用内用同内容的仓颉字面量 `entry/src/main/cangjie/levels.cj`——**未采用** rawfile 读取 API，因为仓颉 1.1.3 的资源读取绑定未在官方文档里核对到可安全使用的写法。
 
-这 12 关按已验证表 **原样上架**。唯一改动：地名笔误「汽梁」写作 **汴梁**。禁止再发明关卡或改坐标。
+第一关是设计师教程 **长安 6×8**（驿站 `1=(2,0) 2=(3,2) 3=(1,4) 4=(5,5) 5=(0,7)`），其后 12 关是已验证表 **原样上架**。唯一改名：汽梁 → **汴梁**。禁止再发明关卡或改教程坐标。
 
 ```json
 {"id":1,"name":"长安","cols":3,"rows":3,"waypoints":[{"n":1,"x":0,"y":0},{"n":2,"x":2,"y":2}],"walls":[]}
@@ -42,6 +43,7 @@
 
 | id | 驿名 | 尺寸 | 驿站数 | 墙 |
 | --- | --- | --- | --- | --- |
+| 0 | 长安（教程） | 6×8 | 5 | 0 |
 | 1 | 长安 | 3×3 | 2 | 0 |
 | 2 | 洛阳 | 3×3 | 3 | 0 |
 | 3 | 汴梁 | 3×3 | 4 | 0 |
@@ -69,7 +71,7 @@
 | 可复用网格引擎 | `entry/src/main/cangjie/engine/` | 格子、墙、触摸落格、撤销栈、路径。无 Canvas、无本关规则。 |
 | 本游戏规则 | `entry/src/main/cangjie/game/` | 升序驿站 + 填满网格 + 终点最高号。 |
 | 关卡数据 | `levels.json` + `levels.cj` | 同一套已验证 12 关。 |
-| 占位皮肤 | `theme.cj` + Canvas 描线 | 纸墨色、驿站圆环、`fillText` 数字。 |
+| 设计师皮肤 | `theme.cj` + Canvas 描线 | 手稿 token：纸底、已访底、墨环、青填已过、金发丝下一驿、朱印。 |
 
 引擎可以在没有 Canvas 的情况下被推理 / 用 Python 镜像单测（`tools/test_rules.py`）。仓颉侧目前没有在本机跑 `cjpm test`（无 `cjc`）。
 
@@ -80,7 +82,7 @@ python3 tools/solve_levels.py
 python3 tools/test_rules.py
 ```
 
-`solve_levels.py` 与应用代码无关，用回溯证明每关至少一条解。未通过的关不得入库。
+`solve_levels.py` 与应用代码无关，用回溯证明每关至少一条解。未通过的关不得入库。设计师 6×8 教程格点多为 48，DFS 可能超时：关卡仍保留、驿站坐标不改，求解器打印 `TIMEOUT` 并在本 README 记录。
 
 `tools/build_levels.py` **只**把已验证的 `levels.json` 抄成仓颉字面量，不生成路径、不发明关卡。改关后必须先改 JSON，再：
 
@@ -167,7 +169,9 @@ entry/
 | `import kit.ArkUI.*` + `import ohos.arkui.state_macro_manage.*`；`@Entry` `@Component` `@State` | 同上 `index.cj` 初始代码；Canvas 指南同套 import |
 | `kit.AbilityKit.*`、`UIAbility`、`windowStage.loadContent("EntryView")` | [cj-application-window-stage.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/windowmanager/cj-application-window-stage.md) |
 | `RenderingContextSettings(antialias: true)` 再 `CanvasRenderingContext2D(settings)`（无 `new`） | [cj-drawing-customization-on-canvas.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/arkui-cj/cj-drawing-customization-on-canvas.md) |
-| 颜色 `0XF3EBDD`，坐标 `Float64` vp（`50.0`） | 同上示例 `0XF5DC62`、`fillRect(50.0, 50.0, …)` |
+| 颜色 `0XF3E8D6` 等 token 整数，坐标 `Float64` vp（`50.0`） | 同上示例 `0XF5DC62`、`fillRect(50.0, 50.0, …)`；色值来自设计师手稿 |
+| `Text.fontFamily("serif")` / `"sans-serif"` | [cj-text-input-text.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/reference/arkui-cj/cj-text-input-text.md) `func fontFamily`。手稿指定 Noto Serif/Sans SC，但仓颉文档**没有**可核对的 Noto 资源绑定，因此用系统 `serif` / `sans-serif`，**未**自造 font kit import |
+| `Divider` / `Blank` / `Stack` / `.rotate(angle:)` / `.border` / `.layoutWeight` | docs_cangjie 对应通用属性与容器页 |
 | `lineWidth` / `strokeStyle` / `fillStyle` / `font` 是 **属性**：`this.context.lineWidth = 2.0` | [cj-canvas-drawing-canvasrenderingcontext2d.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/reference/arkui-cj/cj-canvas-drawing-canvasrenderingcontext2d.md)（`prop lineWidth`） |
 | 首次绘制在 `onReady`；`clearRect` / `fillRect` / `beginPath` / `moveTo` / `lineTo` / `stroke` / `fill` / `fillText` / `arc` | 上述两篇 Canvas 文档 |
 | `onTouch({ event => match (event.eventType) { case TouchType.Down => … } })`；点 `event.touches[0].x` / `.y` | [cj-common-events-touch-screen-event.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/arkui-cj/cj-common-events-touch-screen-event.md) 的**代码示例**。字段是 `event.eventType`（类型定义见 `cj-common-types.md` 的 `TouchEvent.eventType`），**不是** ArkTS 的 `event.type`（该页散文里的 `event.type` 与示例不一致，以代码与类型定义为准） |
@@ -195,4 +199,24 @@ python3 tools/solve_levels.py
 python3 tools/test_rules.py
 ```
 
-当前环境：`cjc` / DevEco **不存在**，因此没有声称编过 HAP。
+当前环境：`cjc` / DevEco **不存在**，因此没有声称编过 HAP，也无法在真机上对照六张手稿逐像素验收。
+
+## 设计师 token（勿漂移）
+
+| token | hex | 仓颉 |
+| --- | --- | --- |
+| paper | `#F3E8D6` | `0XF3E8D6` |
+| paper-shade | `#E6D5B8` | `0XE6D5B8` |
+| paper-line | `#D4C4A8` | `0XD4C4A8` |
+| ink | `#2C2A26` | `0X2C2A26` |
+| ink-muted | `#5C574E` | `0X5C574E` |
+| qing | `#6B7A78` | `0X6B7A78` |
+| qing-deep | `#3D4A47` | `0X3D4A47` |
+| path | `#3F4F4C` | `0X3F4F4C` |
+| gold | `#C4A35A` | `0XC4A35A`（只作发丝线） |
+| vermillion-seal | `#9B3A2F` | `0X9B3A2F`（只作印） |
+| locked | `#C9BBA6` | `0XC9BBA6` |
+| success-celadon | `#5E7A6A` | `0X5E7A6A` |
+| white-paper | `#FBF6EC` | `0XFBF6EC` |
+
+间距（vp）：屏边 20，顶栏 56，底栏 72，教程格 48，驿站直径 40，路宽 8，主按钮高 52，撤销/重绘 56。

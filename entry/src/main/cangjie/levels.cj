@@ -8,6 +8,15 @@ import ohos_app_cangjie_entry.game.{LevelDef, Waypoint}
 public class LevelCatalog {
     public static func all(): ArrayList<LevelDef> {
         let levels = ArrayList<LevelDef>()
+        let wps0 = ArrayList<Waypoint>()
+        wps0.add(Waypoint(1, 2, 0))
+        wps0.add(Waypoint(2, 3, 2))
+        wps0.add(Waypoint(3, 1, 4))
+        wps0.add(Waypoint(4, 5, 5))
+        wps0.add(Waypoint(5, 0, 7))
+        let walls0 = ArrayList<Wall>()
+        levels.add(LevelDef(0, "长安", 6, 8, wps0, walls0))
+
         let wps1 = ArrayList<Waypoint>()
         wps1.add(Waypoint(1, 0, 0))
         wps1.add(Waypoint(2, 2, 2))
