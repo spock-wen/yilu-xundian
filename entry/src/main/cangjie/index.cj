@@ -183,6 +183,34 @@ class EntryView {
         return 0
     }
 
+    /* Canvas font size is physical px (cj-drawing-customization-on-canvas.md
+       "normal bolder 50px"). Geometry (arc/fillRect) is vp.
+       density = px per vp: UIContext.vp2px(1.vp) from
+       cj-common-pixelunits.md / cj-apis-uicontext-uicontext.md.
+       Display.densityDpi is documented as that scale (1.0 on low-res);
+       densityPixels is documented as PPI. If a binding returns PPI
+       (~160–640), divide by 160. */
+    func canvasDensity(): Float64 {
+        var raw: Float64 = 0.0
+        match (getUIContext().vp2px(1.vp)) {
+            case Some(pxLen) => raw = pxLen.value
+            case None => raw = 0.0
+        }
+        if (raw <= 0.0) {
+            raw = getDefaultDisplaySync().densityDpi
+        }
+        if (raw <= 0.0) {
+            raw = getDefaultDisplaySync().densityPixels
+        }
+        if (raw > 16.0) {
+            raw = raw / 160.0
+        }
+        if (raw < 0.5) {
+            raw = 1.0
+        }
+        return raw
+    }
+
     func drawHomeMark(): Unit {
         this.markContext.clearRect(0.0, 0.0, 400.0, 260.0)
         this.markContext.globalAlpha = 0.18
@@ -314,14 +342,15 @@ class EntryView {
         }
 
         /* Scale circle + digit with cell (cs / 48). Tutorial 48 → 40 / 24vp.
-           Canvas geometry is vp; font 'px' is physical px (vp × density).
-           Use the documented 'vp' unit so 24vp is 24vp on device. */
+           Font string uses physical px: numPx = numVp * density. */
         let r = Theme.stationD * cs / 48.0 / 2.0
         var numVp: Int64 = Int64(Float64(Theme.stationNumber) * cs / 48.0 + 0.5)
         if (numVp < Theme.stationNumberMin) {
             numVp = 22
         }
-        this.context.font = "normal bold ${numVp}vp Noto Serif SC"
+        let density = this.canvasDensity()
+        var numPx: Int64 = Int64(Float64(numVp) * density + 0.5)
+        this.context.font = "normal bold ${numPx}px Noto Serif SC"
         this.context.textAlign = "center"
         this.context.textBaseline = "middle"
         for (wp in this.game.level.waypoints) {
@@ -352,7 +381,7 @@ class EntryView {
                     this.context.fillStyle = Theme.gold
                     this.context.font = "normal 11px sans-serif"
                     this.context.fillText("下一驿", cx, cy + r + 12.0)
-                    this.context.font = "normal bold ${numVp}vp Noto Serif SC"
+                    this.context.font = "normal bold ${numPx}px Noto Serif SC"
                 }
                 this.context.fillStyle = Theme.ink
                 this.context.fillText("${wp.n}", cx, cy)

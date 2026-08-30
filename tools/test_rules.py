@@ -507,14 +507,32 @@ def station_diameter(cell_size: float) -> float:
     return 40.0 * cell_size / 48.0
 
 
+def normalize_density(raw: float) -> float:
+    """vp→px scale. Display.densityDpi is documented as that scale (1.0 on
+    low-res). If a binding returns PPI (~160–640) instead, dpi/160."""
+    if raw > 16.0:
+        return raw / 160.0
+    if raw < 0.5:
+        return 1.0
+    return raw
+
+
+def station_number_px(cell_size: float, density: float) -> int:
+    """Canvas font px = numVp × density (physical pixels)."""
+    return int(station_number_vp(cell_size) * normalize_density(density) + 0.5)
+
+
 class StationNumberSkinTests(unittest.TestCase):
-    """Board waypoint digits: Noto Serif SC Bold, vp unit, scale with cell.
+    """Board waypoint digits: Noto Serif SC Bold, density-scaled px, scale with cell.
 
     Source: designer mock 03-station.png (22–24vp Noto Serif SC, circle ~40
     on the 6×8 tutorial). Later boards share the 288-wide board so cells
     grow; both circle and number scale with cs/48.
-    Canvas font 'px' is physical pixels (px = vp × density); use the
-    documented 'vp' unit so 24vp lands at 24vp.
+    Canvas geometry is vp; font size in Cangjie examples is physical px
+    (cj-drawing-customization-on-canvas.md ``50px``). Do not put ``vp`` in
+    the font string — testers measured ``24vp`` as 24 physical px (~1.66×
+    ink vs 18px, not ~9× area for 24vp on a 3× screen).
+    numPx = numVp * density via kit.ArkUI getUIContext().vp2px / Display.
     """
 
     def test_spec_tutorial_is_24vp_in_40_circle(self) -> None:
@@ -535,23 +553,42 @@ class StationNumberSkinTests(unittest.TestCase):
         self.assertAlmostEqual(station_number_vp(cell), 29)
         self.assertGreater(station_diameter(cell), 40.0)
 
+    def test_spec_font_px_is_density_times_vp(self) -> None:
+        self.assertEqual(station_number_px(48, 3.0), 72)
+        self.assertEqual(station_number_px(48, 1.0), 24)
+        self.assertEqual(station_number_px(48, 480.0), 72)
+        self.assertEqual(normalize_density(3.0), 3.0)
+        self.assertEqual(normalize_density(480.0), 3.0)
+
     def test_index_drops_hardcoded_px_serif_for_waypoint_digits(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         board = _func_body(ui, "drawBoard")
         self.assertNotIn("18px serif", board)
-        self.assertNotRegex(board, r"\d+px Noto Serif SC")
+        self.assertNotRegex(board, r'(?<!\$\{numPx\})\d+px Noto Serif SC')
         self.assertNotIn('"24px"', board)
         self.assertNotIn('"22px"', board)
         self.assertIn('fillText("${wp.n}", cx, cy)', board)
         self.assertIn('textAlign = "center"', board)
         self.assertIn('textBaseline = "middle"', board)
 
-    def test_index_uses_vp_unit_bold_noto_and_scales(self) -> None:
+    def test_index_font_string_is_density_scaled_px_not_vp(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         theme = (ROOT / "entry/src/main/cangjie/theme.cj").read_text(encoding="utf-8")
         board = _func_body(ui, "drawBoard")
+        self.assertNotIn("vp Noto", board)
+        self.assertNotIn("${numVp}vp", board)
+        self.assertNotRegex(board, r"\$\{numVp\}vp")
         self.assertIn("Noto Serif SC", board)
-        self.assertRegex(board, r"bold \$\{numVp\}vp Noto Serif SC")
+        self.assertRegex(board, r"bold \$\{numPx\}px Noto Serif SC")
+        self.assertRegex(board, r"numPx.*=.*numVp.*\*.*density|Float64\(numVp\)\s*\*\s*density")
+        self.assertTrue(
+            "vp2px" in board or "vp2px" in ui,
+            "must call documented UIContext.vp2px",
+        )
+        self.assertTrue(
+            "densityDpi" in ui or "densityPixels" in ui or "vp2px" in ui,
+            "density must come from Display.densityDpi/densityPixels or vp2px",
+        )
         self.assertRegex(board, r"cs\s*/\s*48")
         self.assertIn("22", board)
         self.assertIn("stationD", board)
