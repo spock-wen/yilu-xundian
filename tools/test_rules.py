@@ -601,6 +601,29 @@ class StationNumberSkinTests(unittest.TestCase):
         self.assertIn("stationNumber: Int64 = 24", theme)
         self.assertIn("stationNumberMin: Int64 = 22", theme)
 
+    def test_display_density_fallback_uses_explicit_float64(self) -> None:
+        """HarmonyOS 6.1.1 Display.densityDpi/densityPixels are Float32.
+
+        Cangjie will not implicit-convert Float32 → Float64. Assigning
+        them to var raw: Float64 failed assembleHap at index.cj:203/205
+        (b6be94c). Constructor Float64(...) is the same conversion this
+        file already uses for Int64 (Float64(this.cellVp()), etc.).
+        """
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        density = _func_body(ui, "canvasDensity")
+        self.assertIn("var raw: Float64", density)
+        self.assertIn("Float64(getDefaultDisplaySync().densityDpi)", density)
+        self.assertIn("Float64(getDefaultDisplaySync().densityPixels)", density)
+        self.assertNotRegex(
+            density,
+            r"raw\s*=\s*getDefaultDisplaySync\(\)\.densityDpi\b",
+        )
+        self.assertNotRegex(
+            density,
+            r"raw\s*=\s*getDefaultDisplaySync\(\)\.densityPixels\b",
+        )
+        self.assertIn("Float64(pxLen.value)", density)
+
     def test_index_contrast_ink_on_paper_and_paper_on_qing(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         theme = (ROOT / "entry/src/main/cangjie/theme.cj").read_text(encoding="utf-8")

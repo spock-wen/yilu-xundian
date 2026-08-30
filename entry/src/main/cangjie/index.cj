@@ -193,16 +193,18 @@ class EntryView {
     func canvasDensity(): Float64 {
         var raw: Float64 = 0.0
         match (getUIContext().vp2px(1.vp)) {
-            case Some(pxLen) => raw = pxLen.value
+            case Some(pxLen) => raw = Float64(pxLen.value)
             case None => raw = 0.0
         }
         if (raw <= 0.0) {
             /* getDefaultDisplaySync throws BusinessException (1400001 /
-               1400003) in the official sample; keep the board drawable. */
+               1400003) in the official sample; keep the board drawable.
+               HarmonyOS 6.1.1 densityDpi/densityPixels are Float32;
+               Cangjie will not implicit-convert to Float64. */
             try {
-                raw = getDefaultDisplaySync().densityDpi
+                raw = Float64(getDefaultDisplaySync().densityDpi)
                 if (raw <= 0.0) {
-                    raw = getDefaultDisplaySync().densityPixels
+                    raw = Float64(getDefaultDisplaySync().densityPixels)
                 }
             } catch (e: Exception) {
                 raw = 3.0
