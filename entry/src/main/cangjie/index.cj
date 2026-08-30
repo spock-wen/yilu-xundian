@@ -313,8 +313,15 @@ class EntryView {
             this.context.stroke()
         }
 
-        let r = Theme.stationD / 2.0
-        this.context.font = "normal 18px serif"
+        /* Scale circle + digit with cell (cs / 48). Tutorial 48 → 40 / 24vp.
+           Canvas geometry is vp; font 'px' is physical px (vp × density).
+           Use the documented 'vp' unit so 24vp is 24vp on device. */
+        let r = Theme.stationD * cs / 48.0 / 2.0
+        var numVp: Int64 = Int64(Float64(Theme.stationNumber) * cs / 48.0 + 0.5)
+        if (numVp < Theme.stationNumberMin) {
+            numVp = 22
+        }
+        this.context.font = "normal bold ${numVp}vp Noto Serif SC"
         this.context.textAlign = "center"
         this.context.textBaseline = "middle"
         for (wp in this.game.level.waypoints) {
@@ -345,7 +352,7 @@ class EntryView {
                     this.context.fillStyle = Theme.gold
                     this.context.font = "normal 11px sans-serif"
                     this.context.fillText("下一驿", cx, cy + r + 12.0)
-                    this.context.font = "normal 18px serif"
+                    this.context.font = "normal bold ${numVp}vp Noto Serif SC"
                 }
                 this.context.fillStyle = Theme.ink
                 this.context.fillText("${wp.n}", cx, cy)

@@ -22,15 +22,21 @@ public class Theme {
     public static let bottomBar: Int64 = 72
     public static let tutorialCell: Int64 = 48
     public static let boardInner: Int64 = 288
+    /* Mock 03-station: ~40 circle on the 48vp tutorial cell. */
     public static let stationD: Float64 = 40.0
+    /* Mock 03-station: 22–24vp; board uses 24 at cell 48, then cs/48. */
+    public static let stationNumber: Int64 = 24
+    public static let stationNumberMin: Int64 = 22
     public static let pathStroke: Float64 = 8.0
     public static let primaryH: Int64 = 52
     public static let undoH: Int64 = 56
     public static let iconVp: Int64 = 24
     public static let hairline: Float64 = 1.0
 
-    /* docs_cangjie Text.fontFamily takes a family string (e.g. "serif",
-       "HarmonyOS Sans"). Noto Serif/Sans SC is not a verified resource API. */
+    /* Text chrome still uses system generic families (docs_cangjie
+       Text.fontFamily). Board waypoint digits use Canvas prop font +
+       bundled Noto Serif SC Bold (see README API table). */
     public static let serif: String = "serif"
     public static let sans: String = "sans-serif"
+    public static let stationSerif: String = "Noto Serif SC"
 }

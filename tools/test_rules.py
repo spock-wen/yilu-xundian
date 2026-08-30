@@ -412,7 +412,7 @@ def _play_bottom_bar(ui: str) -> str:
 
 
 def _func_body(src: str, name: str) -> str:
-    start = src.index(f"func {name}()")
+    start = src.index(f"func {name}(")
     brace = src.index("{", start)
     depth = 0
     i = brace
@@ -494,6 +494,98 @@ class BottomBarIconTests(unittest.TestCase):
             self.assertIn(token, undo, f"missing undo token {token}")
         for token in REDRAW.cj_tokens():
             self.assertIn(token, redraw, f"missing redraw token {token}")
+
+
+def station_number_vp(cell_size: float) -> int:
+    """Designer mock: tutorial cell 48 → 24vp; scale cs/48; floor is 22vp."""
+    vp = int(24.0 * cell_size / 48.0 + 0.5)
+    return max(22, vp)
+
+
+def station_diameter(cell_size: float) -> float:
+    """Designer mock: tutorial cell 48 → diameter 40; scale with cs/48."""
+    return 40.0 * cell_size / 48.0
+
+
+class StationNumberSkinTests(unittest.TestCase):
+    """Board waypoint digits: Noto Serif SC Bold, vp unit, scale with cell.
+
+    Source: designer mock 03-station.png (22–24vp Noto Serif SC, circle ~40
+    on the 6×8 tutorial). Later boards share the 288-wide board so cells
+    grow; both circle and number scale with cs/48.
+    Canvas font 'px' is physical pixels (px = vp × density); use the
+    documented 'vp' unit so 24vp lands at 24vp.
+    """
+
+    def test_spec_tutorial_is_24vp_in_40_circle(self) -> None:
+        self.assertEqual(station_number_vp(48), 24)
+        self.assertEqual(station_diameter(48), 40.0)
+
+    def test_spec_later_boards_scale_with_cell(self) -> None:
+        self.assertEqual(station_number_vp(96), 48)
+        self.assertEqual(station_diameter(96), 80.0)
+        self.assertEqual(station_number_vp(72), 36)
+        self.assertEqual(station_diameter(72), 60.0)
+        self.assertEqual(station_number_vp(57.6), 29)
+        self.assertGreaterEqual(station_number_vp(20), 22)
+
+    def test_spec_five_by_five_is_readable(self) -> None:
+        cell = 288 / 5
+        self.assertGreaterEqual(station_number_vp(cell), 22)
+        self.assertAlmostEqual(station_number_vp(cell), 29)
+        self.assertGreater(station_diameter(cell), 40.0)
+
+    def test_index_drops_hardcoded_px_serif_for_waypoint_digits(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        board = _func_body(ui, "drawBoard")
+        self.assertNotIn("18px serif", board)
+        self.assertNotRegex(board, r"\d+px Noto Serif SC")
+        self.assertNotIn('"24px"', board)
+        self.assertNotIn('"22px"', board)
+        self.assertIn('fillText("${wp.n}", cx, cy)', board)
+        self.assertIn('textAlign = "center"', board)
+        self.assertIn('textBaseline = "middle"', board)
+
+    def test_index_uses_vp_unit_bold_noto_and_scales(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        theme = (ROOT / "entry/src/main/cangjie/theme.cj").read_text(encoding="utf-8")
+        board = _func_body(ui, "drawBoard")
+        self.assertIn("Noto Serif SC", board)
+        self.assertRegex(board, r"bold \$\{numVp\}vp Noto Serif SC")
+        self.assertRegex(board, r"cs\s*/\s*48")
+        self.assertIn("22", board)
+        self.assertIn("stationD", board)
+        self.assertIn("stationD: Float64 = 40.0", theme)
+        self.assertIn("tutorialCell: Int64 = 48", theme)
+        self.assertIn("iconVp: Int64 = 24", theme)
+        self.assertIn("stationNumber: Int64 = 24", theme)
+        self.assertIn("stationNumberMin: Int64 = 22", theme)
+
+    def test_index_contrast_ink_on_paper_and_paper_on_qing(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        theme = (ROOT / "entry/src/main/cangjie/theme.cj").read_text(encoding="utf-8")
+        board = _func_body(ui, "drawBoard")
+        self.assertIn("ink: Int64 = 0X2C2A26", theme)
+        self.assertIn("whitePaper: Int64 = 0XFBF6EC", theme)
+        self.assertIn("qing: Int64 = 0X6B7A78", theme)
+        self.assertIn("fillStyle = Theme.qing", board)
+        self.assertIn("fillStyle = Theme.whitePaper", board)
+        self.assertIn("fillStyle = Theme.ink", board)
+        wp = board[board.index("for (wp in this.game.level.waypoints)") :]
+        visited = wp[wp.index("if (st == 2)") : wp.index("} else {")]
+        self.assertIn("Theme.qing", visited)
+        self.assertIn("Theme.whitePaper", visited)
+        idle = wp[wp.index("} else {") :]
+        self.assertIn("Theme.ink", idle)
+
+    def test_bundled_noto_bold_subset_has_ofl(self) -> None:
+        fonts = list((ROOT / "entry/src/main/resources/rawfile").glob("**/*NotoSerifSC*"))
+        fonts += list((ROOT / "entry/src/main/resources/base/media").glob("**/*NotoSerifSC*"))
+        self.assertTrue(fonts, "Noto Serif SC Bold subset TTF/OTF must be bundled")
+        names = " ".join(p.name for p in fonts)
+        self.assertRegex(names, r"Bold|SemiBold", "thin Regular/ExtraLight is not enough contrast")
+        ofl = list(ROOT.rglob("OFL.txt")) + list(ROOT.rglob("**/OFL-NotoSerifSC*"))
+        self.assertTrue(ofl, "SIL Open Font License file must be in the repo")
 
 
 if __name__ == "__main__":
