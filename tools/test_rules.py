@@ -507,37 +507,26 @@ def station_diameter(cell_size: float) -> float:
     return 40.0 * cell_size / 48.0
 
 
-def normalize_density(raw: float) -> float:
-    """vp→px scale. Display.densityDpi is documented as that scale (1.0 on
-    low-res). If a binding returns PPI (~160–640) instead, dpi/160."""
-    if raw > 16.0:
-        return raw / 160.0
-    if raw < 0.5:
-        return 1.0
-    return raw
-
-
-def station_number_px(cell_size: float, density: float) -> int:
-    """Canvas font px = numVp × density (physical pixels)."""
-    return int(station_number_vp(cell_size) * normalize_density(density) + 0.5)
+def station_glyph_height(cell_size: float) -> float:
+    """Path2D glyph height in vp: 0.60 of diameter (24 in a 40 circle)."""
+    h = station_diameter(cell_size) * 0.60
+    return max(22.0, h)
 
 
 class StationNumberSkinTests(unittest.TestCase):
-    """Board waypoint digits: Noto Serif SC Bold, density-scaled px, scale with cell.
+    """Board waypoint digits: Path2D in vp, same unit as the station circle.
 
-    Source: designer mock 03-station.png (22–24vp Noto Serif SC, circle ~40
-    on the 6×8 tutorial). Later boards share the 288-wide board so cells
-    grow; both circle and number scale with cs/48.
-    Canvas geometry is vp; font size in Cangjie examples is physical px
-    (cj-drawing-customization-on-canvas.md ``50px``). Do not put ``vp`` in
-    the font string — testers measured ``24vp`` as 24 physical px (~1.66×
-    ink vs 18px, not ~9× area for 24vp on a 3× screen).
-    numPx = numVp * density via kit.ArkUI getUIContext().vp2px / Display.
+    fillText / font px and vp2px already shipped twice; a 180×180 crop of
+    tutorial station-1 was pixel-identical to e90cacf (0 px diff). Digits
+    must be Path2D moveTo/lineTo/arc in vp, height 0.55–0.65 of diameter.
     """
 
     def test_spec_tutorial_is_24vp_in_40_circle(self) -> None:
         self.assertEqual(station_number_vp(48), 24)
         self.assertEqual(station_diameter(48), 40.0)
+        self.assertAlmostEqual(station_glyph_height(48), 24.0)
+        self.assertGreaterEqual(station_glyph_height(48) / 40.0, 0.55)
+        self.assertLessEqual(station_glyph_height(48) / 40.0, 0.65)
 
     def test_spec_later_boards_scale_with_cell(self) -> None:
         self.assertEqual(station_number_vp(96), 48)
@@ -546,6 +535,7 @@ class StationNumberSkinTests(unittest.TestCase):
         self.assertEqual(station_diameter(72), 60.0)
         self.assertEqual(station_number_vp(57.6), 29)
         self.assertGreaterEqual(station_number_vp(20), 22)
+        self.assertAlmostEqual(station_glyph_height(96), 48.0)
 
     def test_spec_five_by_five_is_readable(self) -> None:
         cell = 288 / 5
@@ -553,77 +543,45 @@ class StationNumberSkinTests(unittest.TestCase):
         self.assertAlmostEqual(station_number_vp(cell), 29)
         self.assertGreater(station_diameter(cell), 40.0)
 
-    def test_spec_font_px_is_density_times_vp(self) -> None:
-        self.assertEqual(station_number_px(48, 3.0), 72)
-        self.assertEqual(station_number_px(48, 1.0), 24)
-        self.assertEqual(station_number_px(48, 480.0), 72)
-        self.assertEqual(normalize_density(3.0), 3.0)
-        self.assertEqual(normalize_density(480.0), 3.0)
-
     def test_index_drops_hardcoded_px_serif_for_waypoint_digits(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         board = _func_body(ui, "drawBoard")
         self.assertNotIn("18px serif", board)
-        self.assertNotRegex(board, r'(?<!\$\{numPx\})\d+px Noto Serif SC')
         self.assertNotIn('"24px"', board)
         self.assertNotIn('"22px"', board)
-        self.assertIn('fillText("${wp.n}", cx, cy)', board)
-        self.assertIn('textAlign = "center"', board)
-        self.assertIn('textBaseline = "middle"', board)
 
-    def test_index_font_string_is_density_scaled_px_not_vp(self) -> None:
+    def test_index_waypoint_digits_use_path2d_not_font(self) -> None:
+        """Digits are Path2D in vp. font/fillText must not paint wp.n."""
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         theme = (ROOT / "entry/src/main/cangjie/theme.cj").read_text(encoding="utf-8")
         board = _func_body(ui, "drawBoard")
-        self.assertNotIn("vp Noto", board)
+        self.assertIn("func drawStationDigit(", ui)
+        self.assertIn("func drawStationNumber(", ui)
+        digits = _func_body(ui, "drawStationDigit")
+        numbers = _func_body(ui, "drawStationNumber")
+        self.assertNotIn('fillText("${wp.n}", cx, cy)', board)
+        self.assertNotIn("${numPx}px", board)
         self.assertNotIn("${numVp}vp", board)
-        self.assertNotRegex(board, r"\$\{numVp\}vp")
-        self.assertIn("Noto Serif SC", board)
-        self.assertRegex(board, r"bold \$\{numPx\}px Noto Serif SC")
-        self.assertRegex(board, r"numPx.*=.*numVp.*\*.*density|Float64\(numVp\)\s*\*\s*density")
-        self.assertTrue(
-            "vp2px" in board or "vp2px" in ui,
-            "must call documented UIContext.vp2px",
-        )
-        self.assertTrue(
-            "densityDpi" in ui or "densityPixels" in ui or "vp2px" in ui,
-            "density must come from Display.densityDpi/densityPixels or vp2px",
-        )
-        self.assertIn("160.0", ui)
-        self.assertIn("try {", ui)
-        self.assertIn("getDefaultDisplaySync", ui)
+        self.assertNotIn("vp Noto", board)
+        self.assertNotIn("canvasDensity", board)
+        self.assertIn("drawStationNumber", board)
+        self.assertIn("Path2D()", digits)
+        self.assertIn("moveTo", digits)
+        self.assertIn("lineTo", digits)
+        self.assertIn(".arc(", digits)
+        self.assertIn("func strokeStationPath(", ui)
+        self.assertIn("stroke(path)", _func_body(ui, "strokeStationPath"))
+        self.assertIn("n >= 10", numbers)
+        for d in range(0, 10):
+            self.assertIn(f"d == {d}", digits)
         self.assertRegex(board, r"cs\s*/\s*48")
-        self.assertIn("22", board)
         self.assertIn("stationD", board)
         self.assertIn("stationD: Float64 = 40.0", theme)
         self.assertIn("tutorialCell: Int64 = 48", theme)
         self.assertIn("iconVp: Int64 = 24", theme)
         self.assertIn("stationNumber: Int64 = 24", theme)
         self.assertIn("stationNumberMin: Int64 = 22", theme)
-
-    def test_display_density_fallback_uses_explicit_float64(self) -> None:
-        """HarmonyOS 6.1.1 Display.densityDpi/densityPixels are Float32.
-
-        Cangjie will not implicit-convert Float32 → Float64. Assigning
-        them to var raw: Float64 failed assembleHap at index.cj:203/205
-        (b6be94c). Constructor Float64(...) is the same conversion this
-        file already uses for Int64 (Float64(this.cellVp()), etc.).
-        """
-        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
-        density = _func_body(ui, "canvasDensity")
-        self.assertIn("var raw: Float64", density)
-        self.assertIn("Float64(getDefaultDisplaySync().densityDpi)", density)
-        self.assertIn("Float64(getDefaultDisplaySync().densityPixels)", density)
-        self.assertNotRegex(
-            density,
-            r"raw\s*=\s*getDefaultDisplaySync\(\)\.densityDpi\b",
-        )
-        self.assertNotRegex(
-            density,
-            r"raw\s*=\s*getDefaultDisplaySync\(\)\.densityPixels\b",
-        )
-        self.assertIn("Float64(pxLen.value)", density)
-
+        self.assertIn("0.60", board + numbers + digits)
     def test_index_contrast_ink_on_paper_and_paper_on_qing(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         theme = (ROOT / "entry/src/main/cangjie/theme.cj").read_text(encoding="utf-8")

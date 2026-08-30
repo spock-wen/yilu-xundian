@@ -183,40 +183,74 @@ class EntryView {
         return 0
     }
 
-    /* Canvas font size is physical px (cj-drawing-customization-on-canvas.md
-       "normal bolder 50px"). Geometry (arc/fillRect) is vp.
-       density = px per vp: UIContext.vp2px(1.vp) from
-       cj-common-pixelunits.md / cj-apis-uicontext-uicontext.md.
-       Display.densityDpi is documented as that scale (1.0 on low-res);
-       densityPixels is documented as PPI. If a binding returns PPI
-       (~160–640), divide by 160. */
-    func canvasDensity(): Float64 {
-        var raw: Float64 = 0.0
-        match (getUIContext().vp2px(1.vp)) {
-            case Some(pxLen) => raw = Float64(pxLen.value)
-            case None => raw = 0.0
+    /* Waypoint digits 0–15 as Path2D in vp — same unit as arc / the
+       station circle (cj-canvas-drawing-path2d.md moveTo/lineTo/arc
+       「默认单位：vp」). fillText / font px and vp2px did not enlarge
+       ink on device. Glyph height 0.60 of diameter (tutorial 40 → 24vp). */
+    func strokeStationPath(path: Path2D, h: Float64): Unit {
+        this.context.lineWidth = h * 0.16
+        this.context.lineCap = "round"
+        this.context.lineJoin = "round"
+        this.context.stroke(path)
+    }
+
+    func drawStationNumber(n: Int64, cx: Float64, cy: Float64, h: Float64): Unit {
+        if (n >= 10) {
+            let pair = h * 0.90
+            this.drawStationDigit(1, cx - h * 0.34, cy, pair)
+            this.drawStationDigit(n - 10, cx + h * 0.30, cy, pair)
+            return
         }
-        if (raw <= 0.0) {
-            /* getDefaultDisplaySync throws BusinessException (1400001 /
-               1400003) in the official sample; keep the board drawable.
-               HarmonyOS 6.1.1 densityDpi/densityPixels are Float32;
-               Cangjie will not implicit-convert to Float64. */
-            try {
-                raw = Float64(getDefaultDisplaySync().densityDpi)
-                if (raw <= 0.0) {
-                    raw = Float64(getDefaultDisplaySync().densityPixels)
-                }
-            } catch (e: Exception) {
-                raw = 3.0
-            }
+        this.drawStationDigit(n, cx, cy, h)
+    }
+
+    func drawStationDigit(d: Int64, cx: Float64, cy: Float64, h: Float64): Unit {
+        let path = Path2D()
+        if (d == 0) {
+            path.arc(cx, cy, h * 0.22, 0.0, 6.28)
+        } else if (d == 1) {
+            path.moveTo(cx - h * 0.16, cy - h * 0.18)
+            path.lineTo(cx + h * 0.04, cy - h * 0.32)
+            path.lineTo(cx + h * 0.04, cy + h * 0.32)
+            path.moveTo(cx - h * 0.18, cy + h * 0.32)
+            path.lineTo(cx + h * 0.20, cy + h * 0.32)
+        } else if (d == 2) {
+            path.arc(cx, cy - h * 0.14, h * 0.18, 2.90, 0.35, counterclockwise: false)
+            path.lineTo(cx - h * 0.22, cy + h * 0.32)
+            path.lineTo(cx + h * 0.22, cy + h * 0.32)
+        } else if (d == 3) {
+            path.arc(cx, cy - h * 0.14, h * 0.16, 2.70, 0.70, counterclockwise: false)
+            path.moveTo(cx + h * 0.16, cy + h * 0.14)
+            path.arc(cx, cy + h * 0.14, h * 0.17, 5.60, 2.20, counterclockwise: false)
+        } else if (d == 4) {
+            path.moveTo(cx + h * 0.14, cy + h * 0.32)
+            path.lineTo(cx + h * 0.14, cy - h * 0.32)
+            path.lineTo(cx - h * 0.22, cy + h * 0.04)
+            path.lineTo(cx + h * 0.24, cy + h * 0.04)
+        } else if (d == 5) {
+            path.moveTo(cx + h * 0.20, cy - h * 0.32)
+            path.lineTo(cx - h * 0.18, cy - h * 0.32)
+            path.lineTo(cx - h * 0.18, cy - h * 0.02)
+            path.lineTo(cx + h * 0.06, cy - h * 0.02)
+            path.arc(cx, cy + h * 0.14, h * 0.18, 5.20, 2.40, counterclockwise: false)
+        } else if (d == 6) {
+            path.arc(cx, cy + h * 0.10, h * 0.18, 0.0, 6.28)
+            path.moveTo(cx - h * 0.18, cy + h * 0.10)
+            path.lineTo(cx - h * 0.10, cy - h * 0.32)
+        } else if (d == 7) {
+            path.moveTo(cx - h * 0.22, cy - h * 0.32)
+            path.lineTo(cx + h * 0.22, cy - h * 0.32)
+            path.lineTo(cx - h * 0.04, cy + h * 0.32)
+        } else if (d == 8) {
+            path.arc(cx, cy - h * 0.14, h * 0.14, 0.0, 6.28)
+            path.moveTo(cx + h * 0.16, cy + h * 0.16)
+            path.arc(cx, cy + h * 0.16, h * 0.16, 0.0, 6.28)
+        } else if (d == 9) {
+            path.arc(cx, cy - h * 0.10, h * 0.18, 0.0, 6.28)
+            path.moveTo(cx + h * 0.18, cy - h * 0.10)
+            path.lineTo(cx + h * 0.12, cy + h * 0.32)
         }
-        if (raw > 16.0) {
-            raw = raw / 160.0
-        }
-        if (raw < 0.5) {
-            raw = 1.0
-        }
-        return raw
+        this.strokeStationPath(path, h)
     }
 
     func drawHomeMark(): Unit {
@@ -349,18 +383,13 @@ class EntryView {
             this.context.stroke()
         }
 
-        /* Scale circle + digit with cell (cs / 48). Tutorial 48 → 40 / 24vp.
-           Font string uses physical px: numPx = numVp * density. */
+        /* Scale circle + digit with cell (cs / 48). Tutorial 48 →
+           diameter 40, Path2D glyph 0.60 * 40 = 24vp. */
         let r = Theme.stationD * cs / 48.0 / 2.0
-        var numVp: Int64 = Int64(Float64(Theme.stationNumber) * cs / 48.0 + 0.5)
-        if (numVp < Theme.stationNumberMin) {
-            numVp = 22
+        var glyphH: Float64 = Theme.stationD * cs / 48.0 * 0.60
+        if (glyphH < Float64(Theme.stationNumberMin)) {
+            glyphH = Float64(Theme.stationNumberMin)
         }
-        let density = this.canvasDensity()
-        var numPx: Int64 = Int64(Float64(numVp) * density + 0.5)
-        this.context.font = "normal bold ${numPx}px Noto Serif SC"
-        this.context.textAlign = "center"
-        this.context.textBaseline = "middle"
         for (wp in this.game.level.waypoints) {
             let cx = (Float64(wp.x) + 0.5) * cs
             let cy = (Float64(wp.y) + 0.5) * cs
@@ -371,7 +400,8 @@ class EntryView {
                 this.context.fillStyle = Theme.qing
                 this.context.fill()
                 this.context.fillStyle = Theme.whitePaper
-                this.context.fillText("${wp.n}", cx, cy)
+                this.context.strokeStyle = Theme.whitePaper
+                this.drawStationNumber(wp.n, cx, cy, glyphH)
             } else {
                 this.context.beginPath()
                 this.context.arc(cx, cy, r, 0.0, 6.28)
@@ -389,10 +419,10 @@ class EntryView {
                     this.context.fillStyle = Theme.gold
                     this.context.font = "normal 11px sans-serif"
                     this.context.fillText("下一驿", cx, cy + r + 12.0)
-                    this.context.font = "normal bold ${numPx}px Noto Serif SC"
                 }
                 this.context.fillStyle = Theme.ink
-                this.context.fillText("${wp.n}", cx, cy)
+                this.context.strokeStyle = Theme.ink
+                this.drawStationNumber(wp.n, cx, cy, glyphH)
             }
         }
     }

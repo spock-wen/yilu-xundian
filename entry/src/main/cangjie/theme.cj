@@ -34,8 +34,7 @@ public class Theme {
     public static let hairline: Float64 = 1.0
 
     /* Text chrome still uses system generic families (docs_cangjie
-       Text.fontFamily). Board waypoint digits use Canvas prop font +
-       bundled Noto Serif SC Bold (see README API table). */
+       Text.fontFamily). Board waypoint digits are Path2D in vp. */
     public static let serif: String = "serif"
     public static let sans: String = "sans-serif"
     public static let stationSerif: String = "Noto Serif SC"
