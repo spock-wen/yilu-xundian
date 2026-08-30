@@ -82,7 +82,7 @@ python3 tools/solve_levels.py
 python3 tools/test_rules.py
 ```
 
-`solve_levels.py` 与应用代码无关，用回溯证明每关至少一条解。未通过的关不得入库。设计师 6×8 教程格点多为 48，DFS 可能超时：关卡仍保留、驿站坐标不改，求解器打印 `TIMEOUT` 并在本 README 记录。
+`solve_levels.py` 与应用代码无关，用回溯证明每关至少一条解。未通过的关不得入库。本机已跑通 **13/13**（含设计师 6×8 教程）。若以后 DFS 超时：关卡仍保留、驿站坐标不改，求解器打印 `TIMEOUT`。
 
 `tools/build_levels.py` **只**把已验证的 `levels.json` 抄成仓颉字面量，不生成路径、不发明关卡。改关后必须先改 JSON，再：
 
