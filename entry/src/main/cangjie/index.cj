@@ -3,7 +3,7 @@ package ohos_app_cangjie_entry
 import kit.ArkUI.*
 import ohos.arkui.state_macro_manage.*
 import ohos_app_cangjie_entry.engine.{Cell, GridLayout, touchToCell}
-import ohos_app_cangjie_entry.game.{LevelDef, PatrolGame}
+import ohos_app_cangjie_entry.game.{KanheGame, LevelDef, PatrolGame}
 
 /*
  * Canvas + onTouch from official docs_cangjie (kit.ArkUI.*).
@@ -22,12 +22,18 @@ class EntryView {
     var undoContext: CanvasRenderingContext2D = CanvasRenderingContext2D(this.undoSettings)
     var redrawSettings: RenderingContextSettings = RenderingContextSettings(antialias: true)
     var redrawContext: CanvasRenderingContext2D = CanvasRenderingContext2D(this.redrawSettings)
+    var kanheSettings: RenderingContextSettings = RenderingContextSettings(antialias: true)
+    var kanheContext: CanvasRenderingContext2D = CanvasRenderingContext2D(this.kanheSettings)
     var game: PatrolGame = PatrolGame(LevelCatalog.byIndex(0))
+    var kanhe: KanheGame = KanheGame()
 
     @State var screen: Int64 = 0
     @State var levelIndex: Int64 = 0
     @State var tick: Int64 = 0
     @State var cleared: Int64 = 0
+    @State var kanhePhase: Int64 = 0
+    @State var kanheMiss: Int64 = 0
+    @State var kanheDone: Int64 = 0
 
     func cellVp(): Int64 {
         let cols = this.game.level.cols
@@ -86,6 +92,24 @@ class EntryView {
             return
         }
         this.openLevel(index)
+    }
+
+    func openKanhe(): Unit {
+        this.kanhe.reset()
+        this.kanhePhase = 0
+        this.kanheMiss = 0
+        this.screen = 4
+        this.refreshKanhe()
+    }
+
+    func finishKanhe(): Unit {
+        this.kanheDone = 1
+        this.kanhe.showReturn()
+        this.kanhePhase = 2
+    }
+
+    func leaveKanhe(): Unit {
+        this.screen = 3
     }
 
     func nextLevel(): Unit {
@@ -427,6 +451,93 @@ class EntryView {
         }
     }
 
+    func refreshKanhe(): Unit {
+        this.tick = this.tick + 1
+        this.kanhePhase = this.kanhe.phase
+        this.kanheMiss = this.kanhe.miss
+        this.drawKanhe()
+    }
+
+    func kanheTooth(i: Int64): Float64 {
+        if (i % 2 == 1) {
+            return 10.0
+        }
+        return 0.0
+    }
+
+    /* Jagged join so the burnt fire-ticket and camp 关防 can meet.
+       Fill/stroke only — no vermillion on this canvas. */
+    func drawKanheHalf(x: Float64, y: Float64, isLeft: Bool): Unit {
+        let w = KanheGame.halfW
+        let h = KanheGame.halfH
+        let n: Int64 = 8
+        let step = h / 8.0
+        this.kanheContext.beginPath()
+        if (isLeft) {
+            this.kanheContext.moveTo(x, y)
+            this.kanheContext.lineTo(x + w, y)
+            var i: Int64 = 1
+            while (i <= n) {
+                this.kanheContext.lineTo(x + w + this.kanheTooth(i), y + Float64(i) * step)
+                i = i + 1
+            }
+            this.kanheContext.lineTo(x, y + h)
+            this.kanheContext.closePath()
+        } else {
+            this.kanheContext.moveTo(x + w, y)
+            this.kanheContext.lineTo(x + w, y + h)
+            this.kanheContext.lineTo(x, y + h)
+            var j: Int64 = n - 1
+            while (j >= 0) {
+                this.kanheContext.lineTo(x + this.kanheTooth(j), y + Float64(j) * step)
+                j = j - 1
+            }
+            this.kanheContext.closePath()
+        }
+        this.kanheContext.fill()
+        this.kanheContext.lineWidth = Theme.hairline
+        this.kanheContext.stroke()
+    }
+
+    func drawKanhe(): Unit {
+        this.kanheContext.clearRect(0.0, 0.0, KanheGame.canvasW, KanheGame.canvasH)
+        this.kanheContext.lineWidth = Theme.hairline
+        this.kanheContext.lineCap = "round"
+        this.kanheContext.lineJoin = "round"
+        this.kanheContext.fillStyle = Theme.paperShade
+        this.kanheContext.strokeStyle = Theme.ink
+        this.drawKanheHalf(this.kanhe.leftX, this.kanhe.leftY, true)
+        this.kanheContext.fillStyle = Theme.whitePaper
+        this.kanheContext.strokeStyle = Theme.ink
+        this.drawKanheHalf(this.kanhe.rightX, this.kanhe.rightY, false)
+        this.kanheContext.fillStyle = Theme.ink
+        this.kanheContext.font = "normal 14px sans-serif"
+        this.kanheContext.fillText("乌巢仓破。", this.kanhe.leftX + 16.0, this.kanhe.leftY + 56.0)
+        this.kanheContext.fillText("持此半票。", this.kanhe.leftX + 16.0, this.kanhe.leftY + 80.0)
+        this.kanheContext.fillText("南寻汝南。", this.kanhe.rightX + 16.0, this.kanhe.rightY + 56.0)
+        this.kanheContext.fillText("持此半票。", this.kanhe.rightX + 16.0, this.kanhe.rightY + 80.0)
+    }
+
+    func handleKanhe(event: TouchEvent): Unit {
+        match (event.eventType) {
+            case TouchType.Down =>
+                this.kanhe.down(event.touches[0].x, event.touches[0].y)
+                this.refreshKanhe()
+            case TouchType.Move =>
+                this.kanhe.move(event.touches[0].x, event.touches[0].y)
+                this.refreshKanhe()
+            case TouchType.Up =>
+                if (this.kanhe.up()) {
+                    this.kanheDone = 1
+                }
+                this.refreshKanhe()
+            case TouchType.Cancel =>
+                this.kanhe.cancel()
+                this.refreshKanhe()
+            case _ => ()
+        }
+    }
+
     func build() {
         Column {
             if (this.screen == 0) {
@@ -604,6 +715,57 @@ class EntryView {
                                 .onClick({event => this.openFromList(index)})
                             }
                         )
+                        Row {
+                            if (this.kanheDone == 1) {
+                                Text("合")
+                                    .fontSize(14)
+                                    .fontColor(Theme.success)
+                                    .fontFamily(Theme.serif)
+                                    .width(36)
+                                    .height(36)
+                                    .border(width: 1, color: Theme.success)
+                                    .borderRadius(18)
+                                    .textAlign(TextAlign.Center)
+                                Text("失散·半印勘合")
+                                    .fontSize(18)
+                                    .fontColor(Theme.ink)
+                                    .fontFamily(Theme.serif)
+                                    .margin(left: 12)
+                                Blank()
+                                Text("已通")
+                                    .fontSize(14)
+                                    .fontColor(Theme.success)
+                                    .fontFamily(Theme.sans)
+                            } else {
+                                Text("散")
+                                    .fontSize(16)
+                                    .fontColor(Theme.whitePaper)
+                                    .fontFamily(Theme.serif)
+                                    .width(36)
+                                    .height(36)
+                                    .backgroundColor(Theme.ink)
+                                    .borderRadius(18)
+                                    .textAlign(TextAlign.Center)
+                                Text("失散·半印勘合")
+                                    .fontSize(18)
+                                    .fontColor(Theme.ink)
+                                    .fontFamily(Theme.serif)
+                                    .fontWeight(FontWeight.Bold)
+                                    .margin(left: 12)
+                                Blank()
+                                Text("插章")
+                                    .fontSize(14)
+                                    .fontColor(Theme.ink)
+                                    .fontFamily(Theme.sans)
+                            }
+                        }
+                        .width(100.percent)
+                        .height(64)
+                        .padding(left: 14, right: 14)
+                        .backgroundColor(Theme.whitePaper)
+                        .borderRadius(10)
+                        .border(width: 1, color: Theme.ink)
+                        .onClick({event => this.openKanhe()})
                     }
                     .width(100.percent)
                 }
@@ -681,6 +843,135 @@ class EntryView {
                 .backgroundColor(Theme.whitePaper)
                 .borderRadius(12)
                 Blank()
+            } else if (this.screen == 4) {
+                Stack {
+                    Row {
+                        Text("〈")
+                            .fontSize(22)
+                            .fontColor(Theme.ink)
+                            .fontFamily(Theme.sans)
+                            .onClick({event => this.leaveKanhe()})
+                        Blank()
+                    }
+                    .width(100.percent)
+                    .height(Theme.topBar)
+                    Text("失散·半印勘合")
+                        .fontSize(20)
+                        .fontColor(Theme.ink)
+                        .fontFamily(Theme.serif)
+                }
+                .width(100.percent)
+                .height(Theme.topBar)
+                Divider()
+                    .strokeWidth(1)
+                    .color(Theme.paperLine)
+                    .width(100.percent)
+                if (this.kanhePhase == 0) {
+                    Scroll {
+                        Column(space: 8) {
+                            Text("滑齐两半")
+                                .fontSize(14)
+                                .fontColor(Theme.inkMuted)
+                                .fontFamily(Theme.sans)
+                                .margin(top: 12)
+                            Canvas(this.kanheContext)
+                                .width(320)
+                                .height(280)
+                                .backgroundColor(Theme.paper)
+                                .onReady({
+                                    =>
+                                    this.drawKanhe()
+                                })
+                                .onTouch({event =>
+                                    this.handleKanhe(event)
+                                })
+                            if (this.kanheMiss == 1) {
+                                Text("半印未合。再试。")
+                                    .fontSize(14)
+                                    .fontColor(Theme.ink)
+                                    .fontFamily(Theme.sans)
+                            }
+                        }
+                        .width(100.percent)
+                        .alignItems(HorizontalAlign.Center)
+                    }
+                    .width(100.percent)
+                    .layoutWeight(1)
+                } else if (this.kanhePhase == 1) {
+                    Blank()
+                    Column(space: 12) {
+                        Text(KanheGame.copyJoined)
+                            .fontSize(18)
+                            .fontColor(Theme.ink)
+                            .fontFamily(Theme.serif)
+                        Row {
+                            Blank()
+                            Column {
+                                Column {
+                                    Text("归")
+                                        .fontSize(13)
+                                        .fontColor(Theme.vermillion)
+                                        .fontFamily(Theme.serif)
+                                    Text("队")
+                                        .fontSize(13)
+                                        .fontColor(Theme.vermillion)
+                                        .fontFamily(Theme.serif)
+                                }
+                                .width(36)
+                                .height(36)
+                                .border(width: 1, color: Theme.vermillion)
+                                .justifyContent(FlexAlign.Center)
+                                .alignItems(HorizontalAlign.Center)
+                            }
+                            .width(48)
+                            .height(48)
+                            .border(width: 1, color: Theme.vermillion)
+                            .backgroundColor(Theme.whitePaper)
+                            .justifyContent(FlexAlign.Center)
+                            .alignItems(HorizontalAlign.Center)
+                            .rotate(angle: 12.0)
+                        }
+                        .width(100.percent)
+                        Button("领取回程票")
+                            .width(100.percent)
+                            .height(Theme.primaryH)
+                            .backgroundColor(Theme.qingDeep)
+                            .fontColor(Theme.whitePaper)
+                            .fontSize(18)
+                            .fontFamily(Theme.sans)
+                            .onClick({event => this.finishKanhe()})
+                    }
+                    .width(86.percent)
+                    .padding(20)
+                    .backgroundColor(Theme.whitePaper)
+                    .borderRadius(12)
+                    Blank()
+                } else {
+                    Blank()
+                    Column(space: 12) {
+                        Text("回程票")
+                            .fontSize(14)
+                            .fontColor(Theme.inkMuted)
+                            .fontFamily(Theme.sans)
+                        Text(KanheGame.copyReturn)
+                            .fontSize(18)
+                            .fontColor(Theme.ink)
+                            .fontFamily(Theme.serif)
+                        Button("回驿程")
+                            .width(100.percent)
+                            .height(Theme.primaryH)
+                            .backgroundColor(Theme.qingDeep)
+                            .fontColor(Theme.whitePaper)
+                            .fontSize(18)
+                            .fontFamily(Theme.sans)
+                            .onClick({event => this.leaveKanhe()})
+                    }
+                    .width(86.percent)
+                    .padding(20)
+                    .backgroundColor(Theme.whitePaper)
+                    .borderRadius(12)
+                    Blank()
+                }
             } else {
                 Stack {
                     Row {

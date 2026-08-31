@@ -23,7 +23,8 @@
 | 首页 | 标题「驿路巡点」，副题「传书过驿」，主按钮「开始传书」，次入口「驿程」，朱印「关防」 |
 | 棋盘 | 顶栏「{驿名}·第 N 驿」（N = 驿程 1-based 序号，不是盘上最高驿站号），底栏「撤销」「重绘驿道」 |
 | 通关 | 「通关」+ 同标题；「驿道已通」「文书递达本驿」；朱印「文书到」；「下一驿」 |
-| 驿程 | 顶栏「驿程」；行态：已通 / 当前 / 锁 |
+| 驿程 | 顶栏「驿程」；13 条 Zip 行（已通 / 当前 / 锁）+ 插章行「失散·半印勘合」（不是网格关） |
+| 半印勘合 | 左半烧残火票「乌巢仓破。持此半票。」；右半营关防「南寻汝南。持此半票。」；滑齐后整票「仓破人散。南寻汝南。」+ 双框朱印「归队」（不是「文书到」）；回程票「北不可回。南寻汝南。」 |
 
 视觉 token 只来自手稿，写在 `entry/src/main/cangjie/theme.cj`。禁止熊猫、红包、灯笼堆、龙兔贴图、宪法海报风。金只作发丝线，朱砂只作关防 / 文书到印。
 
@@ -69,8 +70,9 @@
 | 层 | 路径 | 职责 |
 | --- | --- | --- |
 | 可复用网格引擎 | `entry/src/main/cangjie/engine/` | 格子、墙、触摸落格、撤销栈、路径。无 Canvas、无本关规则。 |
-| 本游戏规则 | `entry/src/main/cangjie/game/` | 升序驿站 + 填满网格 + 终点最高号。 |
-| 关卡数据 | `levels.json` + `levels.cj` | 同一套已验证 12 关。 |
+| 本游戏规则 | `entry/src/main/cangjie/game/patrol.cj` | 升序驿站 + 填满网格 + 终点最高号。**未改** Zip 规则。 |
+| 失散插章 | `entry/src/main/cangjie/game/kanhe.cj` | 半印勘合：拖两半票直到对齐。不是第二套巡格。 |
+| 关卡数据 | `levels.json` + `levels.cj` | 同一套已验证 13 关（教程 + 12）。插章不入库。 |
 | 设计师皮肤 | `theme.cj` + Canvas 描线 | 手稿 token：纸底、已访底、墨环、青填已过、金发丝下一驿、朱印。 |
 
 引擎可以在没有 Canvas 的情况下被推理 / 用 Python 镜像单测（`tools/test_rules.py`）。仓颉侧目前没有在本机跑 `cjpm test`（无 `cjc`）。
@@ -111,7 +113,7 @@ entry/
         ├── theme.cj                   # 本仓库附加：皮肤
         ├── levels.cj                  # 本仓库附加：关卡字面量
         ├── engine/                    # 本仓库附加：无 UI 网格引擎
-        └── game/                      # 本仓库附加：Zip 规则薄层
+        └── game/                      # 本仓库附加：Zip 规则薄层 + 半印勘合（非巡格）
 ```
 
 `cjpm.toml` 的 `src-dir = "./src/main/cangjie"`，`cjc-version = "1.1.3"`。
@@ -177,6 +179,8 @@ entry/
 | 首次绘制在 `onReady`；`clearRect` / `fillRect` / `beginPath` / `moveTo` / `lineTo` / `stroke` / `fill` / `fillText` / `arc` | 上述两篇 Canvas 文档 |
 | 底栏「撤销」「重绘驿道」：可点击 `Row` + 24vp Canvas；弧用 `Path2D()` + `stroke(path)`，三角箭头用当前路径 `fill()`；`lineWidth` 是属性。不用 `Button("撤销")` | [cj-canvas-drawing-canvasrenderingcontext2d.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/reference/arkui-cj/cj-canvas-drawing-canvasrenderingcontext2d.md) 的 `func stroke(Path2D)`、`func fill()`。HarmonyOS 6.1.1 默认 Button 仍带 start icon，缺字形会变成方块。几何见 `tools/bar_icons.py`（手稿甲） |
 | `onTouch({ event => match (event.eventType) { case TouchType.Down => … } })`；点 `event.touches[0].x` / `.y` | [cj-common-events-touch-screen-event.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/arkui-cj/cj-common-events-touch-screen-event.md) 的**代码示例**。字段是 `event.eventType`（类型定义见 `cj-common-types.md` 的 `TouchEvent.eventType`），**不是** ArkTS 的 `event.type`（该页散文里的 `event.type` 与示例不一致，以代码与类型定义为准） |
+| 半印勘合松手判定：`TouchType.Up`（以及 `TouchType.Cancel` 取消拖） | 同上官方示例的 `case TouchType.Up` / `case TouchType.Cancel`。棋盘仍只处理 Down/Move；插章在 Up 时量两半是否对齐，对不齐只提示「半印未合。再试。」，没有额外生命 |
+| 合票朱印「归队」：嵌套 `Column` + `.border` 双框 + `.rotate(angle: 12.0)`，色只用 `Theme.vermillion` | 与首页「关防」同一套已引用的 `Divider` / `.rotate(angle:)` / `.border`；印文不是通关「文书到」。文案出处：[桑氏传粮 故事草稿 · 失散插章](https://app.notion.com/p/3cd04f19afd1812094dcc28d05d49eae)（2026-08-31 设计节） |
 | `ArrayList.add` / `remove(at:)` / `size` | [仓颉 1.1.3 ArrayList](https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/collections/collection_arraylist.html) |
 
 明确 **没有** 使用：
@@ -199,9 +203,10 @@ entry/
 ```bash
 python3 tools/solve_levels.py
 python3 tools/test_rules.py
+python3 tools/test_kanhe.py
 ```
 
-当前环境：`cjc` / DevEco **不存在**，因此没有声称编过 HAP，也无法在真机上对照六张手稿逐像素验收。
+当前环境：`cjc` / DevEco **不存在**，因此没有声称编过 HAP，也无法在真机上对照六张手稿或失散插章稿逐像素验收。半印勘合对齐规则由 `tools/test_kanhe.py` 对 `tools/kanhe.py`（仓颉 `game/kanhe.cj` 的镜像）做单测。
 
 ## 设计师 token（勿漂移）
 
