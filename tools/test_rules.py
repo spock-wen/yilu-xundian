@@ -9,15 +9,17 @@ behaviours, the Cangjie side is wrong unless this spec is updated first.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import math
 import sys
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from solve_levels import load_levels, solve, wall_key  # noqa: E402
+from solve_levels import load_levels, report_solve_exit, solve, wall_key  # noqa: E402
 
 
 class Cell:
@@ -114,7 +116,8 @@ class GridMap:
         return abs(a.x - b.x) + abs(a.y - b.y) == 1
 
     def blocked(self, a: Cell, b: Cell) -> bool:
-        return wall_key(a.x, a.y, b.x, b.y) in self.walls
+        """Mirrors Cangjie GridMap.blocked: non-orthogonal counts as blocked."""
+        return not self.orthogonal(a, b) or wall_key(a.x, a.y, b.x, b.y) in self.walls
 
 
 class PatrolGame:
@@ -147,8 +150,6 @@ class PatrolGame:
         last = self.path.last()
         if last is None:
             return self.number_at(cell.x, cell.y) == 1
-        if not self.grid.orthogonal(last, cell):
-            return False
         if self.grid.blocked(last, cell):
             return False
         num = self.number_at(cell.x, cell.y)
@@ -228,6 +229,12 @@ class PatrolRuleTests(unittest.TestCase):
         self.assertFalse(g.try_step(Cell(1, 1)))
         self.assertTrue(g.try_step(Cell(0, 0)))
 
+    def test_blocked_matches_cangjie_non_orthogonal(self) -> None:
+        grid = GridMap(3, 3, [])
+        self.assertTrue(grid.blocked(Cell(0, 0), Cell(1, 1)))
+        self.assertTrue(grid.blocked(Cell(0, 0), Cell(2, 0)))
+        self.assertFalse(grid.blocked(Cell(0, 0), Cell(1, 0)))
+
     def test_rejects_diagonal(self) -> None:
         g = PatrolGame(self.level())
         g.try_step(Cell(0, 0))
@@ -276,12 +283,23 @@ class PatrolRuleTests(unittest.TestCase):
         self.assertFalse(g.is_win())
 
 
+class SolverContractTests(unittest.TestCase):
+    def test_timeout_is_not_a_ship_failure(self) -> None:
+        """README: TIMEOUT keeps the board; only a proven no-solution fails."""
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(report_solve_exit(20, 0, 0), 0)
+            self.assertEqual(report_solve_exit(20, 0, 1), 0)
+            self.assertEqual(report_solve_exit(20, 1, 0), 1)
+            self.assertEqual(report_solve_exit(20, 1, 2), 1)
+
+
 class ShippedLevelPlaythroughTests(unittest.TestCase):
     def test_solver_path_wins_every_solvable_shipped_level(self) -> None:
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
         self.assertEqual(len(levels), 20)
         for level in levels:
             found = solve(level, timeout_s=8.0)
+            self.assertTrue(found, f"{level['name']} has no solution")
             path = found[0]
             game = PatrolGame(level)
             for x, y in path:
@@ -343,6 +361,23 @@ class VerifiedCatalogTests(unittest.TestCase):
         ):
             self.assertIn(phrase, ui)
         self.assertNotIn("文书达驿", ui)
+
+    def test_readme_tracks_locked_catalog(self) -> None:
+        """README must describe the 20-board 涿郡+平原 catalog, not the retired prototype."""
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("涿郡·涿", readme)
+        self.assertIn("平原·祝阿·第 2 驿", readme)
+        self.assertIn("20/20", readme)
+        self.assertIn("cleared >= 10", readme)
+        self.assertNotIn("12/12", readme)
+        self.assertNotIn("13/13", readme)
+        self.assertNotIn("{驿名}·第 N 驿", readme)
+        self.assertNotIn("| 0 | 长安（教程） |", readme)
+        self.assertNotIn("汽梁", readme)
+        from build_levels import EXPECTED_NAMES
+
+        for name in EXPECTED_NAMES:
+            self.assertIn(name, readme)
 
     def test_theme_tokens_match_handoff(self) -> None:
         theme = (ROOT / "entry/src/main/cangjie/theme.cj").read_text(encoding="utf-8")
@@ -1035,6 +1070,15 @@ class ChapterFlowV13Tests(unittest.TestCase):
         paper = _func_body(ui, "playPaper")
         self.assertIn("this.screen == 6", paper)
         self.assertIn("Theme.paperOf", paper)
+        self.assertIn("this.screen == 2", paper)
+        self.assertIn("this.levelIndex >= 10", paper)
+        self.assertIn("Theme.pingyuanPaper", paper)
+        self.assertEqual(
+            [play_paper(screen, 10, 1) for screen in (0, 1, 2, 3, 4, 5, 6)],
+            ["paper", "pingyuan", "pingyuan", "paper", "paper", "paper", "paperOf"],
+        )
+        self.assertEqual(play_paper(2, 9, 0), "paper")
+        self.assertEqual(play_paper(1, 9, 0), "paper")
 
     def test_board_chrome_uses_landscape_bands_and_keeps_path2d_bar(self) -> None:
         """screen==1: composite band above the grid, not bust/flag thumbs or skins."""
@@ -1085,6 +1129,17 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertEqual([board_band_name(i) for i in range(10, 20)], ["band_pingyuan_v91"] * 10)
         self.assertEqual(chapter_by_id(0)["band"], "band_zhuojun_v91")
         self.assertEqual(chapter_by_id(1)["band"], "band_pingyuan_v91")
+
+    def test_win_keeps_pingyuan_paper_and_ignores_trailing_drag(self) -> None:
+        """平原 通关 (screen==2) stays sage; trailing Move cannot undo."""
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        paper = _func_body(ui, "playPaper")
+        self.assertIn("this.screen == 1 || this.screen == 2", paper)
+        self.assertIn("this.levelIndex >= 10", paper)
+        drag = _func_body(ui, "handleDrag")
+        self.assertIn("this.screen != 1", drag)
+        self.assertLess(drag.index("this.screen != 1"), drag.index("event.touches"))
+        self.assertLess(drag.index("return"), drag.index("tryStep"))
 
     def test_progress_lock_intact_after_bands(self) -> None:
         """PR #15: 平原 locked while cleared<10; 徐州/吕布 stay closed."""
@@ -1195,6 +1250,15 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertNotIn("赤壁", blob)
         self.assertNotIn("白水关", blob)
         self.assertNotIn("五丈原", blob)
+
+
+def play_paper(screen: int, level_index: int, chapter_index: int) -> str:
+    """Mirrors EntryView.playPaper: 平原 sage on board + win only."""
+    if screen == 6:
+        return "paperOf"
+    if screen in (1, 2) and level_index >= 10:
+        return "pingyuan"
+    return "paper"
 
 
 def road_title(name: str, catalog_index: int) -> str:
