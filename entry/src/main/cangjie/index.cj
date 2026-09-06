@@ -99,8 +99,12 @@ class EntryView {
         this.openLevel(index)
     }
 
+    func chapterOpen(id: Int64): Bool {
+        return ChapterCatalog.isOpen(id, this.cleared)
+    }
+
     func openChapter(id: Int64): Unit {
-        if (!ChapterCatalog.selectable(id)) {
+        if (!ChapterCatalog.isOpen(id, this.cleared)) {
             return
         }
         this.chapterIndex = id
@@ -133,6 +137,9 @@ class EntryView {
 
     func chapterCurrentName(): String {
         let ch = this.currentChapter()
+        if (!ChapterCatalog.isOpen(ch.id, this.cleared)) {
+            return "未开"
+        }
         if (this.cleared >= ch.levelStart + ch.levelCount) {
             return "已通"
         }
@@ -145,6 +152,12 @@ class EntryView {
     func chapterListFooter(): String {
         let n = ChapterCatalog.clearedCount(this.chapterIndex, this.cleared)
         return "已通 ${n} · 当前${this.chapterCurrentName()} · 共10驿 · 全6×6"
+    }
+
+    func chapterOpenFooter(): String {
+        let opened = ChapterCatalog.openCount(this.cleared)
+        let locked = ChapterCatalog.count() - opened
+        return "已开 ${opened} · 未启 ${locked} · 点开章入驿程"
     }
 
     func leaveBoard(): Unit {
@@ -824,23 +837,23 @@ class EntryView {
                                     Column {
                                         Text(item.label)
                                             .fontSize(11)
-                                            .fontColor(this.cardMutedColor(item.open))
+                                            .fontColor(this.cardMutedColor(this.chapterOpen(item.id)))
                                             .fontFamily(Theme.sans)
                                         Text(item.title)
                                             .fontSize(17)
-                                            .fontColor(this.cardTitleColor(item.open))
+                                            .fontColor(this.cardTitleColor(this.chapterOpen(item.id)))
                                             .fontFamily(Theme.serif)
                                             .fontWeight(FontWeight.Bold)
                                             .margin(top: 2)
                                         Text(item.subtitle)
                                             .fontSize(11)
-                                            .fontColor(this.cardMutedColor(item.open))
+                                            .fontColor(this.cardMutedColor(this.chapterOpen(item.id)))
                                             .fontFamily(Theme.sans)
                                             .margin(top: 2)
                                     }
                                     .layoutWeight(1)
                                     .alignItems(HorizontalAlign.Start)
-                                    if (item.open) {
+                                    if (this.chapterOpen(item.id)) {
                                         Text("可入")
                                             .fontSize(13)
                                             .fontColor(this.enterInk(index))
@@ -865,7 +878,7 @@ class EntryView {
                                 .padding(left: 10, right: 10)
                                 .backgroundColor(Theme.whitePaper)
                                 .borderRadius(10)
-                                .border(width: 1, color: this.cardBorder(item.open))
+                                .border(width: 1, color: this.cardBorder(this.chapterOpen(item.id)))
                                 .clip(true)
                                 .onClick({event => this.openChapter(item.id)})
                             }
@@ -875,7 +888,7 @@ class EntryView {
                 }
                 .width(100.percent)
                 .layoutWeight(1)
-                Text("已开 2 · 未启 2 · 点开章入驿程")
+                Text(this.chapterOpenFooter())
                     .fontSize(12)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(Theme.sans)

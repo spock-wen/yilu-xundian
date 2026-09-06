@@ -1,7 +1,8 @@
 package ohos_app_cangjie_entry
 
 /* chapter-flow v1.3 SHIP cards over LevelCatalog.
-   OPEN: 涿郡 (0–9), 平原 (10–19). LOCKED cards only: 徐州, 吕布 — no boards.
+   Catalog.open = has boards (涿郡/平原), not current unlock.
+   Runtime: 涿郡 always; 平原 iff cleared >= 10. 徐州/吕布 levelCount 0.
    Official media (assets/chapter-v91-media): bust_p01..p07, flag_p01..p07,
    skin_01_zhuojun_v91, skin_02_pingyuan_v91. Skins are 1080×1920 full-screen
    mocks — keep on disk, do not drop into the 64vp chrome strip. */
@@ -132,8 +133,31 @@ public class ChapterCatalog {
         return ChapterCatalog.all().size
     }
 
-    public static func selectable(chapterId: Int64): Bool {
-        return ChapterCatalog.byIndex(chapterId).open
+    public static func isOpen(chapterId: Int64, cleared: Int64): Bool {
+        let ch = ChapterCatalog.byIndex(chapterId)
+        if (!ch.open) {
+            return false
+        }
+        if (ch.levelCount <= 0) {
+            return false
+        }
+        return cleared >= ch.levelStart
+    }
+
+    public static func selectable(chapterId: Int64, cleared: Int64): Bool {
+        return ChapterCatalog.isOpen(chapterId, cleared)
+    }
+
+    public static func openCount(cleared: Int64): Int64 {
+        var n: Int64 = 0
+        var i: Int64 = 0
+        while (i < ChapterCatalog.count()) {
+            if (ChapterCatalog.isOpen(i, cleared)) {
+                n = n + 1
+            }
+            i = i + 1
+        }
+        return n
     }
 
     public static func isDessert(levelId: Int64): Bool {
