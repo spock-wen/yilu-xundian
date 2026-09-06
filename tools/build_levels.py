@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Emit Cangjie LevelCatalog from levels.json.
 
-Does not invent levels. Tutorial (designer 6x8 长安) is first; the next 12
-are the solver-verified table shipped as-is.
+Does not invent levels. The locked SoT catalog is 涿郡 + 平原: exactly 20
+boards with ids 0..19. Names stay as written (chapter·station, sometimes
+already including ·第 2 驿).
 """
 from __future__ import annotations
 
@@ -13,35 +14,33 @@ ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "entry/src/main/resources/rawfile/levels.json"
 OUT_PATH = ROOT / "entry/src/main/cangjie/levels.cj"
 
-TUTORIAL = {
-    "id": 0,
-    "name": "长安",
-    "cols": 6,
-    "rows": 8,
-    "waypoints": [
-        {"n": 1, "x": 2, "y": 0},
-        {"n": 2, "x": 3, "y": 2},
-        {"n": 3, "x": 1, "y": 4},
-        {"n": 4, "x": 5, "y": 5},
-        {"n": 5, "x": 0, "y": 7},
-    ],
-    "walls": [],
-}
-
 EXPECTED_NAMES = (
-    "长安",
-    "洛阳",
-    "汴梁",
-    "扬州",
-    "杭州",
-    "苏州",
-    "凉州",
-    "敦煌",
-    "肃州",
-    "滑州",
-    "通州",
-    "济宁",
+    "涿郡·涿",
+    "涿郡·范阳",
+    "涿郡·故安",
+    "涿郡·遒",
+    "涿郡·中山",
+    "涿郡·中山·第 2 驿",
+    "涿郡·卢奴",
+    "涿郡·卢奴·第 2 驿",
+    "涿郡·安喜",
+    "涿郡·安喜·第 2 驿",
+    "平原·高唐",
+    "平原·高唐·第 2 驿",
+    "平原·郡治",
+    "平原·郡治·第 2 驿",
+    "平原·安德",
+    "平原·安德·第 2 驿",
+    "平原·鬲",
+    "平原·鬲·第 2 驿",
+    "平原·祝阿",
+    "平原·祝阿·第 2 驿",
 )
+
+ST02_WALLS = [
+    {"x1": 2, "y1": 4, "x2": 3, "y2": 4},
+    {"x1": 2, "y1": 3, "x2": 2, "y2": 4},
+]
 
 
 def emit(levels: list[dict]) -> str:
@@ -94,35 +93,47 @@ def _wp_key(w: dict) -> tuple[int, int, int]:
     return (int(w["n"]), int(w["x"]), int(w["y"]))
 
 
+def _wall_key(w: dict) -> tuple[int, int, int, int]:
+    return (int(w["x1"]), int(w["y1"]), int(w["x2"]), int(w["y2"]))
+
+
 def load_verified() -> list[dict]:
     levels = json.loads(JSON_PATH.read_text(encoding="utf-8"))
     if not isinstance(levels, list):
         raise SystemExit("levels.json must be a JSON array")
-    if len(levels) < 13:
-        raise SystemExit("need tutorial + 12 verified levels")
-    tut = levels[0]
-    if (
-        int(tut["id"]) != TUTORIAL["id"]
-        or tut["name"] != TUTORIAL["name"]
-        or int(tut["cols"]) != TUTORIAL["cols"]
-        or int(tut["rows"]) != TUTORIAL["rows"]
-        or [_wp_key(w) for w in tut["waypoints"]] != [_wp_key(w) for w in TUTORIAL["waypoints"]]
-        or (tut.get("walls") or []) != []
-    ):
-        raise SystemExit("refusing to emit: tutorial 长安 6x8 waypoints were changed")
-    rest = levels[1:]
-    names = [lv["name"] for lv in rest]
+    if len(levels) != 20:
+        raise SystemExit(f"need exactly 20 locked 涿郡+平原 levels, found {len(levels)}")
+    ids = [int(lv["id"]) for lv in levels]
+    if ids != list(range(20)):
+        raise SystemExit(f"refusing to emit: ids {ids} are not 0..19 consecutive")
+    names = [lv["name"] for lv in levels]
     if names != list(EXPECTED_NAMES):
-        raise SystemExit(f"refusing to emit: verified names {names} != {list(EXPECTED_NAMES)}")
+        raise SystemExit(f"refusing to emit: locked names {names} != {list(EXPECTED_NAMES)}")
+    if any("_src" in lv for lv in levels):
+        raise SystemExit("refusing to emit: levels.json must not contain _src fields")
     if any(lv["name"] == "汽梁" for lv in levels):
         raise SystemExit("refusing to emit: 汽梁 is a typo; use 汴梁")
+    st01 = levels[0]
+    if (
+        st01["name"] != "涿郡·涿"
+        or int(st01["cols"]) != 6
+        or int(st01["rows"]) != 6
+        or len(st01["waypoints"]) != 6
+        or [_wall_key(w) for w in (st01.get("walls") or [])] != []
+    ):
+        raise SystemExit("refusing to emit: ST01 涿郡·涿 must be 6x6 with 6 waypoints and no walls")
+    st02 = levels[1]
+    if st02["name"] != "涿郡·范阳" or [_wall_key(w) for w in (st02.get("walls") or [])] != [
+        _wall_key(w) for w in ST02_WALLS
+    ]:
+        raise SystemExit("refusing to emit: ST02 涿郡·范阳 walls were changed")
     return levels
 
 
 def main() -> None:
     levels = load_verified()
     OUT_PATH.write_text(emit(levels), encoding="utf-8")
-    print(f"wrote {OUT_PATH} ({len(levels)} levels: tutorial + 12 verified)")
+    print(f"wrote {OUT_PATH} ({len(levels)} locked 涿郡+平原 levels)")
 
 
 if __name__ == "__main__":

@@ -98,7 +98,7 @@ def neighbors(x: int, y: int, cols: int, rows: int, walls: set[tuple[int, int]])
 
 
 class SolverTimeout(Exception):
-    """Large grids (designer 6x8 tutorial) may exceed a practical DFS budget."""
+    """Large grids may exceed a practical DFS budget."""
 
 
 def solve(
@@ -176,7 +176,7 @@ def main() -> int:
         "--timeout",
         type=float,
         default=8.0,
-        help="Seconds per level; designer 6x8 may timeout without changing waypoints",
+        help="Seconds per level; do not invent or alter boards on timeout",
     )
     args = parser.parse_args()
 
@@ -189,8 +189,8 @@ def main() -> int:
         return 2
 
     levels = load_levels(json_path)
-    if len(levels) < 13:
-        print(f"FAIL: need tutorial + ≥12 levels, found {len(levels)}", file=sys.stderr)
+    if len(levels) != 20:
+        print(f"FAIL: need exactly 20 locked 涿郡+平原 levels, found {len(levels)}", file=sys.stderr)
         return 2
 
     failed = 0
@@ -202,16 +202,12 @@ def main() -> int:
         tag = f"#{level['id']} {level['name']} {level['cols']}x{level['rows']}"
         walls = len(level.get("walls") or [])
         wps = len(level["waypoints"])
-        is_tutorial = int(level["id"]) == 0 and int(level["cols"]) * int(level["rows"]) >= 40
         try:
             solutions = solve(level, find_all=False, limit=args.limit, timeout_s=args.timeout)
         except SolverTimeout:
             timed_out += 1
+            failed += 1
             print(f"TIMEOUT {tag}  waypoints={wps} walls={walls}")
-            if is_tutorial:
-                print("     designer 6x8 kept as-is; waypoints were not changed.")
-            else:
-                failed += 1
             continue
         if solutions:
             print(f"OK   {tag}  waypoints={wps} walls={walls}")
@@ -224,7 +220,7 @@ def main() -> int:
         print(f"RESULT: {failed} unsolvable level(s). Do not ship.")
         return 1
     if timed_out:
-        print(f"RESULT: {len(levels) - timed_out} solved, {timed_out} timed out (tutorial waypoints unchanged).")
+        print(f"RESULT: {len(levels) - timed_out} solved, {timed_out} timed out.")
         return 0
     print(f"RESULT: all {len(levels)} levels have ≥1 solution.")
     return 0
