@@ -26,10 +26,13 @@ public class Theme {
     public static let inset: Int64 = 20
     public static let topBar: Int64 = 56
     public static let bottomBar: Int64 = 72
-    /* Chapter cards / board chrome — fixed vp so thumbs stay sharp, no overlap. */
+    /* Chapter cards / board chrome — fixed vp so thumbs stay sharp, no overlap.
+       Official flags are 512×640 (公孙 560×640) ≈ 4:5 with pole; 24×30 keeps
+       汉/黄/袁 readable. Busts are 600×800 = 3:4 → 36×48. */
     public static let chapterCardH: Int64 = 104
-    public static let flagThumbW: Int64 = 14
-    public static let flagThumbH: Int64 = 36
+    public static let chapterThumbRowW: Int64 = 128
+    public static let flagThumbW: Int64 = 24
+    public static let flagThumbH: Int64 = 30
     public static let bustThumbW: Int64 = 36
     public static let bustThumbH: Int64 = 48
     public static let chromeStripH: Int64 = 64

@@ -1,7 +1,10 @@
 package ohos_app_cangjie_entry
 
 /* chapter-flow v1.3 SHIP cards over LevelCatalog.
-   OPEN: 涿郡 (0–9), 平原 (10–19). LOCKED cards only: 徐州, 吕布 — no boards. */
+   OPEN: 涿郡 (0–9), 平原 (10–19). LOCKED cards only: 徐州, 吕布 — no boards.
+   Official media (assets/chapter-v91-media): bust_p01..p07, flag_p01..p07,
+   skin_01_zhuojun_v91, skin_02_pingyuan_v91. Skins are 1080×1920 full-screen
+   mocks — keep on disk, do not drop into the 64vp chrome strip. */
 import std.collection.ArrayList
 import ohos_app_cangjie_entry.game.LevelDef
 

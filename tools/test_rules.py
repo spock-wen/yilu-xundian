@@ -364,8 +364,9 @@ class VerifiedCatalogTests(unittest.TestCase):
         self.assertIn("0XE7EBD8", theme)
         self.assertIn("0XB33C32", theme)
         self.assertIn("chapterCardH: Int64 = 104", theme)
-        self.assertIn("flagThumbW: Int64 = 14", theme)
-        self.assertIn("flagThumbH: Int64 = 36", theme)
+        self.assertIn("chapterThumbRowW: Int64 = 128", theme)
+        self.assertIn("flagThumbW: Int64 = 24", theme)
+        self.assertIn("flagThumbH: Int64 = 30", theme)
         self.assertIn("bustThumbW: Int64 = 36", theme)
         self.assertIn("bustThumbH: Int64 = 48", theme)
         self.assertIn("chromeStripH: Int64 = 64", theme)
@@ -651,6 +652,7 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertIn("未开", cards)
         self.assertIn("已开 2 · 未启 2 · 点开章入驿程", cards)
         self.assertIn("Theme.chapterCardH", cards)
+        self.assertIn("Theme.chapterThumbRowW", cards)
         self.assertIn("Theme.flagThumbW", cards)
         self.assertIn("Theme.bustThumbW", cards)
         self.assertIn("@r(app.media.bust_p01_cangguan)", cards)
@@ -676,11 +678,21 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertNotIn("5×5", stations)
         self.assertNotIn("5x5", stations)
 
-    def test_board_chrome_uses_skins_and_keeps_path2d_bar(self) -> None:
+    def test_board_chrome_uses_official_busts_flags_and_keeps_path2d_bar(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
-        self.assertIn("@r(app.media.bust_p01_cangguan)", ui)
-        self.assertIn("@r(app.media.skin_01_zhuojun_v91)", ui)
-        self.assertIn("@r(app.media.skin_02_pingyuan_v91)", ui)
+        board = _screen_branch(ui, 1)
+        self.assertIn("@r(app.media.bust_p01_cangguan)", board)
+        self.assertIn("@r(app.media.flag_p01_han)", board)
+        self.assertIn("@r(app.media.bust_p02_huangjin)", board)
+        self.assertIn("@r(app.media.flag_p02_huang)", board)
+        self.assertIn("@r(app.media.bust_p03_gongsun)", board)
+        self.assertIn("@r(app.media.flag_p03_gongsun)", board)
+        self.assertIn("@r(app.media.bust_p04_yuanshao)", board)
+        self.assertIn("@r(app.media.flag_p04_yuan)", board)
+        # Official skins are 1080×1920 full-screen mocks. Putting them in the
+        # 64vp chrome strip recreates the overflow/blur reject of PR #12.
+        self.assertNotIn("@r(app.media.skin_01_zhuojun_v91)", ui)
+        self.assertNotIn("@r(app.media.skin_02_pingyuan_v91)", ui)
         self.assertIn("友：", ui)
         self.assertIn("张力：", ui)
         self.assertIn("城：", ui)
@@ -700,12 +712,24 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertIn("this.screen = 5", body)
 
     def test_media_files_exist_under_base_media(self) -> None:
+        from PIL import Image
+
         media = ROOT / "entry/src/main/resources/base/media"
         for name in SHIP_MEDIA:
             matches = list(media.glob(f"{name}.*"))
             self.assertTrue(matches, f"missing media {name}")
             path = matches[0]
-            self.assertGreater(path.stat().st_size, 200, f"{name} looks empty")
+            self.assertGreater(path.stat().st_size, 8000, f"{name} looks like a placeholder")
+            with Image.open(path) as im:
+                if name.startswith("bust_"):
+                    self.assertEqual(im.size, (600, 800), name)
+                    self.assertEqual(im.mode, "RGBA", name)
+                elif name.startswith("flag_"):
+                    self.assertEqual(im.size[1], 640, name)
+                    self.assertIn(im.size[0], (512, 560), name)
+                    self.assertEqual(im.mode, "RGBA", name)
+                elif name.startswith("skin_"):
+                    self.assertEqual(im.size, (1080, 1920), name)
 
     def test_levels_json_unchanged_twenty_boards(self) -> None:
         from build_levels import EXPECTED_NAMES, load_verified

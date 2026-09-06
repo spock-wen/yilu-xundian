@@ -818,7 +818,7 @@ class EntryView {
                                                 .height(Theme.bustThumbH)
                                         }
                                     }
-                                    .width(108)
+                                    .width(Theme.chapterThumbRowW)
                                     .height(Theme.bustThumbH)
                                     .alignItems(VerticalAlign.Center)
                                     Column {
@@ -1116,7 +1116,7 @@ class EntryView {
                 .backgroundColor(Theme.whitePaper)
                 .borderRadius(12)
                 Blank()
-            } else {
+            } else if (this.screen == 1) {
                 Stack {
                     Row {
                         Text("〈")
@@ -1148,9 +1148,7 @@ class EntryView {
                         Image(@r(app.media.flag_p01_han))
                             .width(Theme.flagThumbW)
                             .height(Theme.flagThumbH)
-                        Image(@r(app.media.skin_01_zhuojun_v91))
-                            .layoutWeight(1)
-                            .height(56)
+                        Blank()
                         Image(@r(app.media.flag_p02_huang))
                             .width(Theme.flagThumbW)
                             .height(Theme.flagThumbH)
@@ -1164,9 +1162,7 @@ class EntryView {
                         Image(@r(app.media.flag_p03_gongsun))
                             .width(Theme.flagThumbW)
                             .height(Theme.flagThumbH)
-                        Image(@r(app.media.skin_02_pingyuan_v91))
-                            .layoutWeight(1)
-                            .height(56)
+                        Blank()
                         Image(@r(app.media.flag_p04_yuan))
                             .width(Theme.flagThumbW)
                             .height(Theme.flagThumbH)
