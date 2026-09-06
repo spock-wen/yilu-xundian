@@ -62,6 +62,8 @@ public class Theme {
        Official flags are 512×640 (公孙 560×640) ≈ 4:5 with pole; 24×30 keeps
        汉/黄/袁 readable. Busts are 600×800 = 3:4 → 36×48. */
     public static let chapterCardH: Int64 = 104
+    /* Grey-lock card_05..10 are 888×528; 320vp content ≈ 190, use 176. */
+    public static let chapterSkinCardH: Int64 = 176
     public static let chapterThumbRowW: Int64 = 128
     public static let flagThumbW: Int64 = 24
     public static let flagThumbH: Int64 = 30

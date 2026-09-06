@@ -791,6 +791,38 @@ class EntryView {
                         ForEach(
                             ChapterCatalog.all(),
                             itemGeneratorFunc: {item: ChapterDef, index: Int64 =>
+                                Column {
+                                if (item.id == 4) {
+                                    Image(@r(app.media.card_05_touyuan_v91))
+                                        .width(100.percent)
+                                        .height(Theme.chapterSkinCardH)
+                                        .objectFit(ImageFit.Contain)
+                                } else if (item.id == 5) {
+                                    Image(@r(app.media.card_06_jingzhou_v91))
+                                        .width(100.percent)
+                                        .height(Theme.chapterSkinCardH)
+                                        .objectFit(ImageFit.Contain)
+                                } else if (item.id == 6) {
+                                    Image(@r(app.media.card_07_chibi_v91))
+                                        .width(100.percent)
+                                        .height(Theme.chapterSkinCardH)
+                                        .objectFit(ImageFit.Contain)
+                                } else if (item.id == 7) {
+                                    Image(@r(app.media.card_08_rushu_v91))
+                                        .width(100.percent)
+                                        .height(Theme.chapterSkinCardH)
+                                        .objectFit(ImageFit.Contain)
+                                } else if (item.id == 8) {
+                                    Image(@r(app.media.card_09_hanzhong_v91))
+                                        .width(100.percent)
+                                        .height(Theme.chapterSkinCardH)
+                                        .objectFit(ImageFit.Contain)
+                                } else if (item.id == 9) {
+                                    Image(@r(app.media.card_10_beifa_v91))
+                                        .width(100.percent)
+                                        .height(Theme.chapterSkinCardH)
+                                        .objectFit(ImageFit.Contain)
+                                }
                                 Row(space: 8) {
                                     Row(space: 2) {
                                         if (item.id == 0) {
@@ -970,6 +1002,8 @@ class EntryView {
                                 .width(100.percent)
                                 .height(Theme.chapterCardH)
                                 .padding(left: 10, right: 10)
+                                }
+                                .width(100.percent)
                                 .backgroundColor(Theme.whitePaper)
                                 .borderRadius(10)
                                 .border(width: 1, color: this.cardBorder(this.chapterOpen(item.id)))
