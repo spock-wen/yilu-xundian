@@ -331,6 +331,7 @@ class VerifiedCatalogTests(unittest.TestCase):
         for phrase in (
             "传书过驿",
             "开始传书",
+            "章节",
             "驿程",
             "关防",
             "重绘驿道",
@@ -360,6 +361,361 @@ class VerifiedCatalogTests(unittest.TestCase):
             "0XFBF6EC",
         ):
             self.assertIn(token, theme)
+        self.assertIn("0XE7EBD8", theme)
+        self.assertIn("0XB33C32", theme)
+        self.assertIn("chapterCardH: Int64 = 104", theme)
+        self.assertIn("flagThumbW: Int64 = 14", theme)
+        self.assertIn("flagThumbH: Int64 = 36", theme)
+        self.assertIn("bustThumbW: Int64 = 36", theme)
+        self.assertIn("bustThumbH: Int64 = 48", theme)
+        self.assertIn("chromeStripH: Int64 = 64", theme)
+
+
+# chapter-flow v1.3 SHIP cards. Locked 徐州/吕布 are cards only — no boards.
+SHIP_CHAPTERS = (
+    {
+        "id": 0,
+        "name": "涿郡",
+        "label": "第1章 涿郡",
+        "title": "涿郡·安喜",
+        "subtitle": "仓官×渠帅 · 汉×黄 · 黄巾乱世出粮",
+        "listSubtitle": "仓官×渠帅 · 汉×黄 · 安喜",
+        "boardSubtitle": "仓官×渠帅 · 汉×黄 · 安喜",
+        "friend": "汉廷官仓",
+        "tension": "黄巾乱世出粮",
+        "city": "涿·安喜",
+        "open": True,
+        "levelStart": 0,
+        "levelCount": 10,
+        "leftBust": "bust_p01_cangguan",
+        "leftFlag": "flag_p01_han",
+        "rightBust": "bust_p02_huangjin",
+        "rightFlag": "flag_p02_huang",
+        "skin": "skin_01_zhuojun_v91",
+    },
+    {
+        "id": 1,
+        "name": "平原",
+        "label": "第2章 平原",
+        "title": "平原·郡治",
+        "subtitle": "公孙×袁绍 · 袁绍为敌",
+        "listSubtitle": "公孙×袁绍 · 公孙×袁 · 郡治",
+        "boardSubtitle": "公孙×袁绍 · 公孙×袁 · 郡治",
+        "friend": "公孙瓒",
+        "tension": "袁绍为敌",
+        "city": "高唐·郡治",
+        "open": True,
+        "levelStart": 10,
+        "levelCount": 10,
+        "leftBust": "bust_p03_gongsun",
+        "leftFlag": "flag_p03_gongsun",
+        "rightBust": "bust_p04_yuanshao",
+        "rightFlag": "flag_p04_yuan",
+        "skin": "skin_02_pingyuan_v91",
+    },
+    {
+        "id": 2,
+        "name": "徐州",
+        "label": "第3章 徐州",
+        "title": "徐州·下邳",
+        "subtitle": "刘×曹 · 淮泗争粮",
+        "listSubtitle": "刘×曹 · 淮泗争粮",
+        "boardSubtitle": "刘×曹 · 淮泗争粮",
+        "friend": "刘备",
+        "tension": "淮泗争粮",
+        "city": "徐州·下邳",
+        "open": False,
+        "levelStart": 20,
+        "levelCount": 0,
+        "leftBust": "bust_p05_liubei",
+        "leftFlag": "flag_p05_liu",
+        "rightBust": "bust_p06_caocao",
+        "rightFlag": "flag_p06_cao",
+        "skin": "",
+    },
+    {
+        "id": 3,
+        "name": "吕布",
+        "label": "第4章 吕布",
+        "title": "吕布章",
+        "subtitle": "吕×曹 · 下邳同仓",
+        "listSubtitle": "吕×曹 · 下邳同仓",
+        "boardSubtitle": "吕×曹 · 下邳同仓",
+        "friend": "吕布",
+        "tension": "下邳同仓",
+        "city": "下邳",
+        "open": False,
+        "levelStart": 20,
+        "levelCount": 0,
+        "leftBust": "bust_p07_lvbu",
+        "leftFlag": "flag_p07_lv",
+        "rightBust": "bust_p06_caocao",
+        "rightFlag": "flag_p06_cao",
+        "skin": "",
+    },
+)
+
+SHIP_MEDIA = (
+    "bust_p01_cangguan",
+    "bust_p02_huangjin",
+    "bust_p03_gongsun",
+    "bust_p04_yuanshao",
+    "bust_p05_liubei",
+    "bust_p06_caocao",
+    "bust_p07_lvbu",
+    "flag_p01_han",
+    "flag_p02_huang",
+    "flag_p03_gongsun",
+    "flag_p04_yuan",
+    "flag_p05_liu",
+    "flag_p06_cao",
+    "flag_p07_lv",
+    "skin_01_zhuojun_v91",
+    "skin_02_pingyuan_v91",
+)
+
+
+def chapter_by_id(chapter_id: int) -> dict:
+    return next(ch for ch in SHIP_CHAPTERS if ch["id"] == chapter_id)
+
+
+def chapter_selectable(chapter_id: int) -> bool:
+    return bool(chapter_by_id(chapter_id)["open"])
+
+
+def chapter_cleared_count(chapter_id: int, cleared: int) -> int:
+    ch = chapter_by_id(chapter_id)
+    if ch["levelCount"] <= 0:
+        return 0
+    if cleared <= ch["levelStart"]:
+        return 0
+    return min(cleared - ch["levelStart"], ch["levelCount"])
+
+
+def chapter_levels(levels: list[dict], chapter_id: int) -> list[dict]:
+    ch = chapter_by_id(chapter_id)
+    start = ch["levelStart"]
+    return [lv for lv in levels if start <= int(lv["id"]) < start + ch["levelCount"]]
+
+
+def continue_level_index(cleared: int, count: int) -> int:
+    if cleared >= count:
+        return count - 1
+    return cleared
+
+
+def is_dessert_level(level: dict) -> bool:
+    """SHIP 点心: 涿郡·中山. Mock 第5驿 = JSON id 4 (not 中山·第 2 驿 id 5)."""
+    return int(level["id"]) == 4 and level["name"] == "涿郡·中山"
+
+
+def chrome_line(chapter_id: int) -> str:
+    ch = chapter_by_id(chapter_id)
+    return f"友：{ch['friend']} · 张力：{ch['tension']} · 城：{ch['city']}"
+
+
+def _screen_branch(ui: str, screen: int) -> str:
+    token = f"this.screen == {screen}"
+    build = ui.index("func build()")
+    start = ui.index(token, build)
+    brace = ui.index("{", start)
+    depth = 0
+    i = brace
+    while i < len(ui):
+        if ui[i] == "{":
+            depth += 1
+        elif ui[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return ui[start : i + 1]
+        i += 1
+    raise AssertionError(f"screen {screen} branch not closed")
+
+
+class ChapterFlowV13Tests(unittest.TestCase):
+    """Locked chapter-flow v1.3: 4 cards, 2 open, skins on 涿/平原 boards."""
+
+    def test_ship_cards_match_locked_copy(self) -> None:
+        self.assertEqual([ch["title"] for ch in SHIP_CHAPTERS], [
+            "涿郡·安喜",
+            "平原·郡治",
+            "徐州·下邳",
+            "吕布章",
+        ])
+        self.assertEqual([ch["subtitle"] for ch in SHIP_CHAPTERS], [
+            "仓官×渠帅 · 汉×黄 · 黄巾乱世出粮",
+            "公孙×袁绍 · 袁绍为敌",
+            "刘×曹 · 淮泗争粮",
+            "吕×曹 · 下邳同仓",
+        ])
+        self.assertEqual([ch["open"] for ch in SHIP_CHAPTERS], [True, True, False, False])
+        self.assertTrue(chapter_selectable(0))
+        self.assertTrue(chapter_selectable(1))
+        self.assertFalse(chapter_selectable(2))
+        self.assertFalse(chapter_selectable(3))
+
+    def test_open_chapters_do_not_require_prior_clear(self) -> None:
+        """v1.3: 平原 is OPEN even when 涿郡 is unfinished."""
+        self.assertTrue(chapter_selectable(1))
+        self.assertEqual(chapter_cleared_count(1, 0), 0)
+        self.assertEqual(chapter_cleared_count(0, 3), 3)
+
+    def test_locked_chapters_have_no_boards(self) -> None:
+        levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
+        self.assertEqual(chapter_levels(levels, 2), [])
+        self.assertEqual(chapter_levels(levels, 3), [])
+        self.assertEqual(len(chapter_levels(levels, 0)), 10)
+        self.assertEqual(len(chapter_levels(levels, 1)), 10)
+        names = [lv["name"] for lv in levels]
+        self.assertFalse(any(n.startswith("徐州") or n.startswith("吕布") for n in names))
+
+    def test_station_names_and_sizes_come_from_json_only(self) -> None:
+        levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
+        zhuo = chapter_levels(levels, 0)
+        self.assertEqual([lv["name"] for lv in zhuo], [
+            "涿郡·涿",
+            "涿郡·范阳",
+            "涿郡·故安",
+            "涿郡·遒",
+            "涿郡·中山",
+            "涿郡·中山·第 2 驿",
+            "涿郡·卢奴",
+            "涿郡·卢奴·第 2 驿",
+            "涿郡·安喜",
+            "涿郡·安喜·第 2 驿",
+        ])
+        self.assertTrue(all((int(lv["cols"]), int(lv["rows"])) == (6, 6) for lv in levels))
+        self.assertTrue(all(is_dessert_level(lv) is (int(lv["id"]) == 4) for lv in zhuo))
+        self.assertTrue(is_dessert_level(zhuo[4]))
+        self.assertFalse(is_dessert_level(zhuo[5]))
+
+    def test_continue_opens_current_unlock(self) -> None:
+        self.assertEqual(continue_level_index(0, 20), 0)
+        self.assertEqual(continue_level_index(12, 20), 12)
+        self.assertEqual(continue_level_index(20, 20), 19)
+
+    def test_board_chrome_lines(self) -> None:
+        self.assertEqual(chrome_line(0), "友：汉廷官仓 · 张力：黄巾乱世出粮 · 城：涿·安喜")
+        self.assertEqual(chrome_line(1), "友：公孙瓒 · 张力：袁绍为敌 · 城：高唐·郡治")
+
+    def test_cangjie_catalog_ships_four_cards(self) -> None:
+        src = (ROOT / "entry/src/main/cangjie/chapter.cj").read_text(encoding="utf-8")
+        self.assertIn("class ChapterCatalog", src)
+        for phrase in (
+            "涿郡·安喜",
+            "平原·郡治",
+            "徐州·下邳",
+            "吕布章",
+            "仓官×渠帅 · 汉×黄 · 黄巾乱世出粮",
+            "公孙×袁绍 · 袁绍为敌",
+            "刘×曹 · 淮泗争粮",
+            "吕×曹 · 下邳同仓",
+            "汉廷官仓",
+            "公孙瓒",
+            "高唐·郡治",
+        ):
+            self.assertIn(phrase, src)
+        self.assertIn("func isDessert(", src)
+        dessert = _func_body(src, "isDessert")
+        self.assertIn("levelId == 4", dessert)
+        selectable = _func_body(src, "selectable")
+        self.assertIn("open", selectable)
+        self.assertNotIn("cleared >= prev.levelStart", selectable)
+
+    def test_home_keeps_yicheng_and_adds_chapters(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        home = _screen_branch(ui, 0)
+        self.assertIn("章节", home)
+        self.assertIn("驿程", home)
+        self.assertIn("开始传书", home)
+        self.assertIn("this.screen = 4", home)
+        self.assertIn("this.screen = 3", home)
+        self.assertIn("this.startPlay()", home)
+        start = _func_body(ui, "startPlay")
+        self.assertIn("this.cleared", start)
+        self.assertIn("this.openLevel", start)
+
+    def test_screen_3_stays_flat_yicheng(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        yicheng = _screen_branch(ui, 3)
+        self.assertIn("驿程", yicheng)
+        self.assertIn("LevelCatalog.all()", yicheng)
+        self.assertNotIn("ChapterCatalog.all()", yicheng)
+
+    def test_screen_4_is_four_chapter_cards(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        cards = _screen_branch(ui, 4)
+        self.assertIn("ChapterCatalog.all()", cards)
+        self.assertIn("选章入驿 · 开章可入 · 灰章未启", cards)
+        self.assertIn("可入", cards)
+        self.assertIn("未开", cards)
+        self.assertIn("已开 2 · 未启 2 · 点开章入驿程", cards)
+        self.assertIn("Theme.chapterCardH", cards)
+        self.assertIn("Theme.flagThumbW", cards)
+        self.assertIn("Theme.bustThumbW", cards)
+        self.assertIn("@r(app.media.bust_p01_cangguan)", cards)
+        self.assertIn("@r(app.media.flag_p01_han)", cards)
+        self.assertIn("@r(app.media.bust_p03_gongsun)", cards)
+        self.assertIn("@r(app.media.flag_p04_yuan)", cards)
+        self.assertIn("this.openChapter(item.id)", cards)
+        self.assertIn("this.screen = 0", cards)
+        self.assertNotIn("LevelCatalog.all()", cards)
+
+    def test_screen_5_lists_ten_json_stations(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        stations = _screen_branch(ui, 5)
+        self.assertIn("ChapterCatalog.levelsOf", stations)
+        self.assertIn("item.cols", stations)
+        self.assertIn("item.rows", stations)
+        self.assertIn("点心", stations)
+        self.assertIn("isDessert", stations)
+        self.assertIn("openFromList", stations)
+        self.assertIn("this.screen = 4", stations)
+        self.assertIn("共10驿", stations)
+        self.assertNotIn("LevelCatalog.all()", stations)
+        self.assertNotIn("5×5", stations)
+        self.assertNotIn("5x5", stations)
+
+    def test_board_chrome_uses_skins_and_keeps_path2d_bar(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        self.assertIn("@r(app.media.bust_p01_cangguan)", ui)
+        self.assertIn("@r(app.media.skin_01_zhuojun_v91)", ui)
+        self.assertIn("@r(app.media.skin_02_pingyuan_v91)", ui)
+        self.assertIn("友：", ui)
+        self.assertIn("张力：", ui)
+        self.assertIn("城：", ui)
+        self.assertIn("chromeLine", ui)
+        self.assertIn("boardSubtitle", ui)
+        self.assertIn("Theme.chromeStripH", ui)
+        bar = _play_bottom_bar(ui)
+        self.assertIn("撤销", bar)
+        self.assertIn("重绘驿道", bar)
+        self.assertIn("Path2D()", _func_body(ui, "drawUndoIcon"))
+        self.assertIn("Path2D()", _func_body(ui, "drawRedrawIcon"))
+
+    def test_open_chapter_refuses_locked_cards(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        body = _func_body(ui, "openChapter")
+        self.assertIn("selectable", body)
+        self.assertIn("this.screen = 5", body)
+
+    def test_media_files_exist_under_base_media(self) -> None:
+        media = ROOT / "entry/src/main/resources/base/media"
+        for name in SHIP_MEDIA:
+            matches = list(media.glob(f"{name}.*"))
+            self.assertTrue(matches, f"missing media {name}")
+            path = matches[0]
+            self.assertGreater(path.stat().st_size, 200, f"{name} looks empty")
+
+    def test_levels_json_unchanged_twenty_boards(self) -> None:
+        from build_levels import EXPECTED_NAMES, load_verified
+
+        levels = load_verified()
+        self.assertEqual([lv["name"] for lv in levels], list(EXPECTED_NAMES))
+        blob = (ROOT / "entry/src/main/resources/rawfile/levels.json").read_text(encoding="utf-8")
+        self.assertNotIn("dessert", blob)
+        self.assertNotIn("徐州", blob)
+        self.assertNotIn("吕布", blob)
 
 
 def road_title(name: str, catalog_index: int) -> str:

@@ -26,6 +26,8 @@ class EntryView {
 
     @State var screen: Int64 = 0
     @State var levelIndex: Int64 = 0
+    @State var chapterIndex: Int64 = 0
+    @State var boardBack: Int64 = 0
     @State var tick: Int64 = 0
     @State var cleared: Int64 = 0
 
@@ -68,12 +70,14 @@ class EntryView {
 
     func openLevel(index: Int64): Unit {
         this.levelIndex = index
+        this.chapterIndex = ChapterCatalog.chapterIdForLevel(index)
         this.game.reset(LevelCatalog.byIndex(index))
         this.screen = 1
         this.refresh()
     }
 
     func startPlay(): Unit {
+        this.boardBack = 0
         if (this.cleared >= LevelCatalog.count()) {
             this.openLevel(LevelCatalog.count() - 1)
             return
@@ -85,7 +89,101 @@ class EntryView {
         if (index > this.cleared) {
             return
         }
+        if (this.screen == 5) {
+            this.boardBack = 5
+        } else if (this.screen == 3) {
+            this.boardBack = 3
+        } else {
+            this.boardBack = 0
+        }
         this.openLevel(index)
+    }
+
+    func openChapter(id: Int64): Unit {
+        if (!ChapterCatalog.selectable(id)) {
+            return
+        }
+        this.chapterIndex = id
+        this.screen = 5
+    }
+
+    func currentChapter(): ChapterDef {
+        return ChapterCatalog.byIndex(this.chapterIndex)
+    }
+
+    func playPaper(): Int64 {
+        if (this.screen == 1 && this.levelIndex >= 10) {
+            return Theme.pingyuanPaper
+        }
+        return Theme.paper
+    }
+
+    func chromeLine(): String {
+        let ch = this.currentChapter()
+        return "友：${ch.friendLine} · 张力：${ch.tensionLine} · 城：${ch.cityLine}"
+    }
+
+    func boardSubtitle(): String {
+        return this.currentChapter().boardSubtitle
+    }
+
+    func chapterListTitle(): String {
+        return "${this.currentChapter().name}·驿程"
+    }
+
+    func chapterCurrentName(): String {
+        let ch = this.currentChapter()
+        if (this.cleared >= ch.levelStart + ch.levelCount) {
+            return "已通"
+        }
+        if (this.cleared < ch.levelStart) {
+            return LevelCatalog.byIndex(ch.levelStart).name
+        }
+        return LevelCatalog.byIndex(this.cleared).name
+    }
+
+    func chapterListFooter(): String {
+        let n = ChapterCatalog.clearedCount(this.chapterIndex, this.cleared)
+        return "已通 ${n} · 当前${this.chapterCurrentName()} · 共10驿 · 全6×6"
+    }
+
+    func leaveBoard(): Unit {
+        this.screen = this.boardBack
+    }
+
+    func cardTitleColor(open: Bool): Int64 {
+        if (open) {
+            return Theme.ink
+        }
+        return Theme.locked
+    }
+
+    func cardMutedColor(open: Bool): Int64 {
+        if (open) {
+            return Theme.inkMuted
+        }
+        return Theme.locked
+    }
+
+    func enterFill(index: Int64): Int64 {
+        if (index == 0) {
+            return Theme.qingDeep
+        }
+        return Theme.whitePaper
+    }
+
+    func enterInk(index: Int64): Int64 {
+        if (index == 0) {
+            return Theme.whitePaper
+        }
+        return Theme.ink
+    }
+
+    func cardBorder(open: Bool): Int64 {
+        if (open) {
+            return Theme.paperLine
+        }
+        return Theme.locked
     }
 
     func nextLevel(): Unit {
@@ -258,22 +356,22 @@ class EntryView {
     }
 
     func drawHomeMark(): Unit {
-        this.markContext.clearRect(0.0, 0.0, 400.0, 260.0)
+        this.markContext.clearRect(0.0, 0.0, 400.0, 140.0)
         this.markContext.globalAlpha = 0.18
         this.markContext.strokeStyle = Theme.paperLine
         this.markContext.lineWidth = Theme.hairline
         this.markContext.beginPath()
-        this.markContext.moveTo(48.0, 36.0)
-        this.markContext.lineTo(150.0, 88.0)
-        this.markContext.lineTo(86.0, 150.0)
-        this.markContext.lineTo(220.0, 176.0)
+        this.markContext.moveTo(40.0, 24.0)
+        this.markContext.lineTo(130.0, 56.0)
+        this.markContext.lineTo(78.0, 96.0)
+        this.markContext.lineTo(200.0, 118.0)
         this.markContext.stroke()
         this.markContext.fillStyle = Theme.inkMuted
         this.markContext.font = "normal 12px sans-serif"
-        this.markContext.fillText("长安", 36.0, 30.0)
-        this.markContext.fillText("洛阳", 146.0, 82.0)
-        this.markContext.fillText("凉州", 72.0, 168.0)
-        this.markContext.fillText("敦煌", 210.0, 190.0)
+        this.markContext.fillText("涿郡", 28.0, 20.0)
+        this.markContext.fillText("平原", 126.0, 52.0)
+        this.markContext.fillText("安喜", 64.0, 108.0)
+        this.markContext.fillText("郡治", 190.0, 124.0)
         this.markContext.globalAlpha = 1.0
     }
 
@@ -487,7 +585,7 @@ class EntryView {
                     .fontFamily(Theme.sans)
                 Canvas(this.markContext)
                     .width(100.percent)
-                    .height(200)
+                    .height(140)
                     .onReady({
                         =>
                         this.drawHomeMark()
@@ -501,6 +599,21 @@ class EntryView {
                     .fontSize(18)
                     .fontFamily(Theme.sans)
                     .onClick({event => this.startPlay()})
+                Row {
+                    Text("章节")
+                        .fontSize(18)
+                        .fontColor(Theme.ink)
+                        .fontFamily(Theme.sans)
+                }
+                .width(100.percent)
+                .height(44)
+                .margin(top: 12)
+                .justifyContent(FlexAlign.Center)
+                .alignItems(VerticalAlign.Center)
+                .backgroundColor(Theme.whitePaper)
+                .borderRadius(8)
+                .border(width: 1, color: Theme.ink)
+                .onClick({event => this.screen = 4})
                 Text("驿程")
                     .fontSize(16)
                     .fontColor(Theme.inkMuted)
@@ -619,6 +732,324 @@ class EntryView {
                     .fontFamily(Theme.sans)
                     .margin(top: 12, bottom: 8)
                     .width(100.percent)
+            } else if (this.screen == 4) {
+                Stack {
+                    Row {
+                        Text("〈")
+                            .fontSize(22)
+                            .fontColor(Theme.ink)
+                            .fontFamily(Theme.sans)
+                            .onClick({event => this.screen = 0})
+                        Blank()
+                    }
+                    .width(100.percent)
+                    .height(Theme.topBar)
+                    Text("章节")
+                        .fontSize(20)
+                        .fontColor(Theme.ink)
+                        .fontFamily(Theme.serif)
+                }
+                .width(100.percent)
+                .height(Theme.topBar)
+                Text("选章入驿 · 开章可入 · 灰章未启")
+                    .fontSize(12)
+                    .fontColor(Theme.inkMuted)
+                    .fontFamily(Theme.sans)
+                    .margin(top: 2, bottom: 8)
+                    .width(100.percent)
+                Scroll {
+                    Column(space: 8) {
+                        ForEach(
+                            ChapterCatalog.all(),
+                            itemGeneratorFunc: {item: ChapterDef, index: Int64 =>
+                                Row(space: 8) {
+                                    Row(space: 2) {
+                                        if (item.id == 0) {
+                                            Image(@r(app.media.bust_p01_cangguan))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                            Image(@r(app.media.flag_p01_han))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.flag_p02_huang))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.bust_p02_huangjin))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                        } else if (item.id == 1) {
+                                            Image(@r(app.media.bust_p03_gongsun))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                            Image(@r(app.media.flag_p03_gongsun))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.flag_p04_yuan))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.bust_p04_yuanshao))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                        } else if (item.id == 2) {
+                                            Image(@r(app.media.bust_p05_liubei))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                            Image(@r(app.media.flag_p05_liu))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.flag_p06_cao))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.bust_p06_caocao))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                        } else {
+                                            Image(@r(app.media.bust_p07_lvbu))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                            Image(@r(app.media.flag_p07_lv))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.flag_p06_cao))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.bust_p06_caocao))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                        }
+                                    }
+                                    .width(108)
+                                    .height(Theme.bustThumbH)
+                                    .alignItems(VerticalAlign.Center)
+                                    Column {
+                                        Text(item.label)
+                                            .fontSize(11)
+                                            .fontColor(this.cardMutedColor(item.open))
+                                            .fontFamily(Theme.sans)
+                                        Text(item.title)
+                                            .fontSize(17)
+                                            .fontColor(this.cardTitleColor(item.open))
+                                            .fontFamily(Theme.serif)
+                                            .fontWeight(FontWeight.Bold)
+                                            .margin(top: 2)
+                                        Text(item.subtitle)
+                                            .fontSize(11)
+                                            .fontColor(this.cardMutedColor(item.open))
+                                            .fontFamily(Theme.sans)
+                                            .margin(top: 2)
+                                    }
+                                    .layoutWeight(1)
+                                    .alignItems(HorizontalAlign.Start)
+                                    if (item.open) {
+                                        Text("可入")
+                                            .fontSize(13)
+                                            .fontColor(this.enterInk(index))
+                                            .fontFamily(Theme.sans)
+                                            .width(48)
+                                            .height(28)
+                                            .textAlign(TextAlign.Center)
+                                            .backgroundColor(this.enterFill(index))
+                                            .borderRadius(6)
+                                            .border(width: 1, color: Theme.ink)
+                                    } else {
+                                        Text("未开")
+                                            .fontSize(13)
+                                            .fontColor(Theme.locked)
+                                            .fontFamily(Theme.sans)
+                                            .width(48)
+                                            .textAlign(TextAlign.Center)
+                                    }
+                                }
+                                .width(100.percent)
+                                .height(Theme.chapterCardH)
+                                .padding(left: 10, right: 10)
+                                .backgroundColor(Theme.whitePaper)
+                                .borderRadius(10)
+                                .border(width: 1, color: this.cardBorder(item.open))
+                                .clip(true)
+                                .onClick({event => this.openChapter(item.id)})
+                            }
+                        )
+                    }
+                    .width(100.percent)
+                }
+                .width(100.percent)
+                .layoutWeight(1)
+                Text("已开 2 · 未启 2 · 点开章入驿程")
+                    .fontSize(12)
+                    .fontColor(Theme.inkMuted)
+                    .fontFamily(Theme.sans)
+                    .margin(top: 8, bottom: 8)
+                    .width(100.percent)
+            } else if (this.screen == 5) {
+                Stack {
+                    Row {
+                        Text("〈")
+                            .fontSize(22)
+                            .fontColor(Theme.ink)
+                            .fontFamily(Theme.sans)
+                            .onClick({event => this.screen = 4})
+                        Blank()
+                    }
+                    .width(100.percent)
+                    .height(Theme.topBar)
+                    Text(this.chapterListTitle())
+                        .fontSize(20)
+                        .fontColor(Theme.ink)
+                        .fontFamily(Theme.serif)
+                }
+                .width(100.percent)
+                .height(Theme.topBar)
+                Text(this.currentChapter().listSubtitle)
+                    .fontSize(12)
+                    .fontColor(Theme.inkMuted)
+                    .fontFamily(Theme.sans)
+                    .margin(bottom: 8)
+                    .width(100.percent)
+                Scroll {
+                    Column(space: 8) {
+                        ForEach(
+                            ChapterCatalog.levelsOf(this.chapterIndex),
+                            itemGeneratorFunc: {item: LevelDef, index: Int64 =>
+                                Row {
+                                    if (item.id < this.cleared) {
+                                        Text("通")
+                                            .fontSize(14)
+                                            .fontColor(Theme.success)
+                                            .fontFamily(Theme.serif)
+                                            .width(32)
+                                            .height(32)
+                                            .border(width: 1, color: Theme.success)
+                                            .borderRadius(16)
+                                            .textAlign(TextAlign.Center)
+                                        Column {
+                                            Row(space: 6) {
+                                                Text(item.name)
+                                                    .fontSize(16)
+                                                    .fontColor(Theme.ink)
+                                                    .fontFamily(Theme.serif)
+                                                if (ChapterCatalog.isDessert(item.id)) {
+                                                    Text("点心")
+                                                        .fontSize(10)
+                                                        .fontColor(Theme.inkMuted)
+                                                        .fontFamily(Theme.sans)
+                                                        .padding(left: 4, right: 4)
+                                                        .border(width: 1, color: Theme.paperLine)
+                                                        .borderRadius(4)
+                                                }
+                                            }
+                                            Text("${item.cols}×${item.rows}")
+                                                .fontSize(12)
+                                                .fontColor(Theme.inkMuted)
+                                                .fontFamily(Theme.sans)
+                                        }
+                                        .margin(left: 10)
+                                        .alignItems(HorizontalAlign.Start)
+                                        Blank()
+                                        Text("已通")
+                                            .fontSize(13)
+                                            .fontColor(Theme.success)
+                                            .fontFamily(Theme.sans)
+                                    } else if (item.id == this.cleared) {
+                                        Text("${index + 1}")
+                                            .fontSize(14)
+                                            .fontColor(Theme.whitePaper)
+                                            .fontFamily(Theme.serif)
+                                            .width(32)
+                                            .height(32)
+                                            .backgroundColor(Theme.ink)
+                                            .borderRadius(16)
+                                            .textAlign(TextAlign.Center)
+                                        Column {
+                                            Row(space: 6) {
+                                                Text(item.name)
+                                                    .fontSize(16)
+                                                    .fontColor(Theme.ink)
+                                                    .fontFamily(Theme.serif)
+                                                    .fontWeight(FontWeight.Bold)
+                                                if (ChapterCatalog.isDessert(item.id)) {
+                                                    Text("点心")
+                                                        .fontSize(10)
+                                                        .fontColor(Theme.ink)
+                                                        .fontFamily(Theme.sans)
+                                                        .padding(left: 4, right: 4)
+                                                        .border(width: 1, color: Theme.ink)
+                                                        .borderRadius(4)
+                                                }
+                                            }
+                                            Text("${item.cols}×${item.rows}")
+                                                .fontSize(12)
+                                                .fontColor(Theme.inkMuted)
+                                                .fontFamily(Theme.sans)
+                                        }
+                                        .margin(left: 10)
+                                        .alignItems(HorizontalAlign.Start)
+                                        Blank()
+                                        Text("当前")
+                                            .fontSize(13)
+                                            .fontColor(Theme.ink)
+                                            .fontFamily(Theme.sans)
+                                    } else {
+                                        Text("${index + 1}")
+                                            .fontSize(14)
+                                            .fontColor(Theme.locked)
+                                            .fontFamily(Theme.serif)
+                                            .width(32)
+                                            .height(32)
+                                            .border(width: 1, color: Theme.locked)
+                                            .borderRadius(16)
+                                            .textAlign(TextAlign.Center)
+                                        Column {
+                                            Row(space: 6) {
+                                                Text(item.name)
+                                                    .fontSize(16)
+                                                    .fontColor(Theme.locked)
+                                                    .fontFamily(Theme.serif)
+                                                if (ChapterCatalog.isDessert(item.id)) {
+                                                    Text("点心")
+                                                        .fontSize(10)
+                                                        .fontColor(Theme.locked)
+                                                        .fontFamily(Theme.sans)
+                                                        .padding(left: 4, right: 4)
+                                                        .border(width: 1, color: Theme.locked)
+                                                        .borderRadius(4)
+                                                }
+                                            }
+                                            Text("${item.cols}×${item.rows}")
+                                                .fontSize(12)
+                                                .fontColor(Theme.locked)
+                                                .fontFamily(Theme.sans)
+                                        }
+                                        .margin(left: 10)
+                                        .alignItems(HorizontalAlign.Start)
+                                        Blank()
+                                        Text("锁")
+                                            .fontSize(13)
+                                            .fontColor(Theme.locked)
+                                            .fontFamily(Theme.sans)
+                                    }
+                                }
+                                .width(100.percent)
+                                .height(56)
+                                .padding(left: 12, right: 12)
+                                .backgroundColor(Theme.whitePaper)
+                                .borderRadius(10)
+                                .border(width: 1, color: this.rowBorder(item.id))
+                                .onClick({event => this.openFromList(item.id)})
+                            }
+                        )
+                    }
+                    .width(100.percent)
+                }
+                .width(100.percent)
+                .layoutWeight(1)
+                /* 共10驿 — sizes stay ${item.cols}×${item.rows} from levels.json */
+                Text(this.chapterListFooter())
+                    .fontSize(12)
+                    .fontColor(Theme.inkMuted)
+                    .fontFamily(Theme.sans)
+                    .margin(top: 8, bottom: 8)
+                    .width(100.percent)
             } else if (this.screen == 2) {
                 Blank()
                 Column {
@@ -692,22 +1123,62 @@ class EntryView {
                             .fontSize(22)
                             .fontColor(Theme.ink)
                             .fontFamily(Theme.sans)
-                            .onClick({event => this.screen = 0})
+                            .onClick({event => this.leaveBoard()})
                         Blank()
                     }
                     .width(100.percent)
-                    .height(Theme.topBar)
+                    .height(40)
                     Text(this.roadTitle())
-                        .fontSize(20)
+                        .fontSize(18)
                         .fontColor(Theme.ink)
                         .fontFamily(Theme.serif)
                 }
                 .width(100.percent)
-                .height(Theme.topBar)
-                Divider()
-                    .strokeWidth(1)
-                    .color(Theme.paperLine)
-                    .width(100.percent)
+                .height(40)
+                Text(this.boardSubtitle())
+                    .fontSize(12)
+                    .fontColor(Theme.inkMuted)
+                    .fontFamily(Theme.sans)
+                    .margin(bottom: 4)
+                Row(space: 6) {
+                    if (this.levelIndex < 10) {
+                        Image(@r(app.media.bust_p01_cangguan))
+                            .width(Theme.bustThumbW)
+                            .height(Theme.bustThumbH)
+                        Image(@r(app.media.flag_p01_han))
+                            .width(Theme.flagThumbW)
+                            .height(Theme.flagThumbH)
+                        Image(@r(app.media.skin_01_zhuojun_v91))
+                            .layoutWeight(1)
+                            .height(56)
+                        Image(@r(app.media.flag_p02_huang))
+                            .width(Theme.flagThumbW)
+                            .height(Theme.flagThumbH)
+                        Image(@r(app.media.bust_p02_huangjin))
+                            .width(Theme.bustThumbW)
+                            .height(Theme.bustThumbH)
+                    } else {
+                        Image(@r(app.media.bust_p03_gongsun))
+                            .width(Theme.bustThumbW)
+                            .height(Theme.bustThumbH)
+                        Image(@r(app.media.flag_p03_gongsun))
+                            .width(Theme.flagThumbW)
+                            .height(Theme.flagThumbH)
+                        Image(@r(app.media.skin_02_pingyuan_v91))
+                            .layoutWeight(1)
+                            .height(56)
+                        Image(@r(app.media.flag_p04_yuan))
+                            .width(Theme.flagThumbW)
+                            .height(Theme.flagThumbH)
+                        Image(@r(app.media.bust_p04_yuanshao))
+                            .width(Theme.bustThumbW)
+                            .height(Theme.bustThumbH)
+                    }
+                }
+                .width(100.percent)
+                .height(Theme.chromeStripH)
+                .alignItems(VerticalAlign.Center)
+                .clip(true)
                 Scroll {
                     Column {
                         Canvas(this.context)
@@ -731,6 +1202,12 @@ class EntryView {
                 }
                 .width(100.percent)
                 .layoutWeight(1)
+                Text(this.chromeLine())
+                    .fontSize(11)
+                    .fontColor(Theme.inkMuted)
+                    .fontFamily(Theme.sans)
+                    .margin(top: 4, bottom: 4)
+                    .width(100.percent)
                 Divider()
                     .strokeWidth(1)
                     .color(Theme.paperLine)
@@ -787,7 +1264,7 @@ class EntryView {
         .width(100.percent)
         .height(100.percent)
         .padding(left: Theme.inset, right: Theme.inset)
-        .backgroundColor(Theme.paper)
+        .backgroundColor(this.playPaper())
         .alignItems(HorizontalAlign.Center)
     }
 }
