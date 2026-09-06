@@ -362,6 +362,23 @@ class VerifiedCatalogTests(unittest.TestCase):
             self.assertIn(phrase, ui)
         self.assertNotIn("文书达驿", ui)
 
+    def test_readme_tracks_locked_catalog(self) -> None:
+        """README must describe the 20-board 涿郡+平原 catalog, not the retired prototype."""
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("涿郡·涿", readme)
+        self.assertIn("平原·祝阿·第 2 驿", readme)
+        self.assertIn("20/20", readme)
+        self.assertIn("cleared >= 10", readme)
+        self.assertNotIn("12/12", readme)
+        self.assertNotIn("13/13", readme)
+        self.assertNotIn("{驿名}·第 N 驿", readme)
+        self.assertNotIn("| 0 | 长安（教程） |", readme)
+        self.assertNotIn("汽梁", readme)
+        from build_levels import EXPECTED_NAMES
+
+        for name in EXPECTED_NAMES:
+            self.assertIn(name, readme)
+
     def test_theme_tokens_match_handoff(self) -> None:
         theme = (ROOT / "entry/src/main/cangjie/theme.cj").read_text(encoding="utf-8")
         for token in (
