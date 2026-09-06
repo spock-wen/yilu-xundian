@@ -480,8 +480,38 @@ def chapter_by_id(chapter_id: int) -> dict:
     return next(ch for ch in SHIP_CHAPTERS if ch["id"] == chapter_id)
 
 
-def chapter_selectable(chapter_id: int) -> bool:
-    return bool(chapter_by_id(chapter_id)["open"])
+def chapter_is_open(chapter_id: int, cleared: int) -> bool:
+    """Runtime unlock: catalog.open is 'has boards', not 'currently unlocked'."""
+    ch = chapter_by_id(chapter_id)
+    if not ch["open"] or ch["levelCount"] <= 0:
+        return False
+    return cleared >= ch["levelStart"]
+
+
+def chapter_selectable(chapter_id: int, cleared: int) -> bool:
+    return chapter_is_open(chapter_id, cleared)
+
+
+def chapter_open_count(cleared: int) -> int:
+    return sum(1 for ch in SHIP_CHAPTERS if chapter_is_open(ch["id"], cleared))
+
+
+def chapter_open_footer(cleared: int) -> str:
+    opened = chapter_open_count(cleared)
+    locked = len(SHIP_CHAPTERS) - opened
+    return f"已开 {opened} · 未启 {locked} · 点开章入驿程"
+
+
+def chapter_current_label(chapter_id: int, cleared: int, levels: list[dict]) -> str:
+    """驿程 footer / 当前章: locked 平原 must not be presented as current."""
+    if not chapter_is_open(chapter_id, cleared):
+        return "未开"
+    ch = chapter_by_id(chapter_id)
+    end = ch["levelStart"] + ch["levelCount"]
+    if cleared >= end:
+        return "已通"
+    idx = cleared if cleared >= ch["levelStart"] else ch["levelStart"]
+    return next(lv["name"] for lv in levels if int(lv["id"]) == idx)
 
 
 def chapter_cleared_count(chapter_id: int, cleared: int) -> int:
@@ -534,7 +564,7 @@ def _screen_branch(ui: str, screen: int) -> str:
 
 
 class ChapterFlowV13Tests(unittest.TestCase):
-    """Locked chapter-flow v1.3: 4 cards, 2 open, skins on 涿/平原 boards."""
+    """Locked chapter-flow v1.3: 4 cards; 平原 unlocks after 涿郡 10 stations."""
 
     def test_ship_cards_match_locked_copy(self) -> None:
         self.assertEqual([ch["title"] for ch in SHIP_CHAPTERS], [
@@ -549,17 +579,35 @@ class ChapterFlowV13Tests(unittest.TestCase):
             "刘×曹 · 淮泗争粮",
             "吕×曹 · 下邳同仓",
         ])
+        # Catalog.open = has boards / designed as openable, not current unlock.
         self.assertEqual([ch["open"] for ch in SHIP_CHAPTERS], [True, True, False, False])
-        self.assertTrue(chapter_selectable(0))
-        self.assertTrue(chapter_selectable(1))
-        self.assertFalse(chapter_selectable(2))
-        self.assertFalse(chapter_selectable(3))
+        self.assertTrue(chapter_selectable(0, 0))
+        self.assertFalse(chapter_selectable(1, 0))
+        self.assertFalse(chapter_selectable(2, 0))
+        self.assertFalse(chapter_selectable(3, 0))
 
-    def test_open_chapters_do_not_require_prior_clear(self) -> None:
-        """v1.3: 平原 is OPEN even when 涿郡 is unfinished."""
-        self.assertTrue(chapter_selectable(1))
+    def test_pingyuan_opens_only_after_zhuojun_cleared(self) -> None:
+        """平原 可入 iff 涿郡 10 驿 cleared; 徐州/吕布 stay locked."""
+        for cleared in (0, 3, 9):
+            self.assertTrue(chapter_is_open(0, cleared), cleared)
+            self.assertFalse(chapter_is_open(1, cleared), cleared)
+            self.assertFalse(chapter_selectable(1, cleared), cleared)
+            self.assertEqual(chapter_open_count(cleared), 1)
+            self.assertEqual(chapter_open_footer(cleared), "已开 1 · 未启 3 · 点开章入驿程")
+        self.assertTrue(chapter_is_open(1, 10))
+        self.assertTrue(chapter_selectable(1, 10))
+        self.assertEqual(chapter_open_count(10), 2)
+        self.assertEqual(chapter_open_footer(10), "已开 2 · 未启 2 · 点开章入驿程")
+        self.assertFalse(chapter_is_open(2, 10))
+        self.assertFalse(chapter_is_open(2, 20))
+        self.assertFalse(chapter_is_open(3, 20))
         self.assertEqual(chapter_cleared_count(1, 0), 0)
         self.assertEqual(chapter_cleared_count(0, 3), 3)
+        levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
+        self.assertEqual(chapter_current_label(1, 0, levels), "未开")
+        self.assertEqual(chapter_current_label(1, 9, levels), "未开")
+        self.assertNotIn("平原", chapter_current_label(0, 0, levels))
+        self.assertEqual(chapter_current_label(1, 10, levels), levels[10]["name"])
 
     def test_locked_chapters_have_no_boards(self) -> None:
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
@@ -619,9 +667,12 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertIn("func isDessert(", src)
         dessert = _func_body(src, "isDessert")
         self.assertIn("levelId == 4", dessert)
+        is_open = _func_body(src, "isOpen")
+        self.assertIn("cleared", is_open)
+        self.assertIn("levelStart", is_open)
         selectable = _func_body(src, "selectable")
-        self.assertIn("open", selectable)
-        self.assertNotIn("cleared >= prev.levelStart", selectable)
+        self.assertIn("cleared", selectable)
+        self.assertIn("isOpen", selectable)
 
     def test_home_keeps_yicheng_and_adds_chapters(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
@@ -650,7 +701,10 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertIn("选章入驿 · 开章可入 · 灰章未启", cards)
         self.assertIn("可入", cards)
         self.assertIn("未开", cards)
-        self.assertIn("已开 2 · 未启 2 · 点开章入驿程", cards)
+        self.assertNotIn("已开 2 · 未启 2 · 点开章入驿程", cards)
+        self.assertIn("chapterOpenFooter", cards)
+        self.assertIn("chapterOpen(", cards)
+        self.assertNotIn("item.open", cards)
         self.assertIn("Theme.chapterCardH", cards)
         self.assertIn("Theme.chapterThumbRowW", cards)
         self.assertIn("Theme.flagThumbW", cards)
@@ -708,8 +762,17 @@ class ChapterFlowV13Tests(unittest.TestCase):
     def test_open_chapter_refuses_locked_cards(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         body = _func_body(ui, "openChapter")
-        self.assertIn("selectable", body)
+        self.assertIn("this.cleared", body)
+        self.assertTrue("isOpen" in body or "selectable" in body)
         self.assertIn("this.screen = 5", body)
+        current = _func_body(ui, "chapterCurrentName")
+        self.assertIn("isOpen", current)
+        footer = _func_body(ui, "chapterOpenFooter")
+        self.assertIn("openCount", footer)
+        self.assertIn("已开", footer)
+        self.assertIn("未启", footer)
+        helper = (ROOT / "entry/src/main/cangjie/resource_helper.cj").read_text(encoding="utf-8")
+        self.assertIn("__GenerateResource__", helper)
 
     def test_media_files_exist_under_base_media(self) -> None:
         from PIL import Image
