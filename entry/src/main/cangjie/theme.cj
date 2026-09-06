@@ -18,6 +18,38 @@ public class Theme {
     public static let whitePaper: Int64 = 0XFBF6EC
     /* 平原 board paper from chapter-flow v1.3 mock (sage). */
     public static let pingyuanPaper: Int64 = 0XE7EBD8
+    /* ch05-10-SHIP.md paper tokens — preview screen only. */
+    public static let touyuanPaper: Int64 = 0XE8E4DC
+    public static let jingzhouPaper: Int64 = 0XE8EDE8
+    public static let chibiPaper: Int64 = 0XE2E4EA
+    public static let rushuPaper: Int64 = 0XE6E8E2
+    public static let hanzhongPaper: Int64 = 0XE4E8E6
+    public static let beifaPaper: Int64 = 0XEDE6D8
+
+    public static func paperOf(chapterId: Int64): Int64 {
+        if (chapterId == 4) {
+            return Theme.touyuanPaper
+        }
+        if (chapterId == 5) {
+            return Theme.jingzhouPaper
+        }
+        if (chapterId == 6) {
+            return Theme.chibiPaper
+        }
+        if (chapterId == 7) {
+            return Theme.rushuPaper
+        }
+        if (chapterId == 8) {
+            return Theme.hanzhongPaper
+        }
+        if (chapterId == 9) {
+            return Theme.beifaPaper
+        }
+        if (chapterId == 1) {
+            return Theme.pingyuanPaper
+        }
+        return Theme.paper
+    }
     public static let flagHan: Int64 = 0XB33C32
     public static let flagHuang: Int64 = 0XE4C35A
     public static let flagGongsun: Int64 = 0X9AA7B0

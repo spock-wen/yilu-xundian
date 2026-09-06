@@ -105,6 +105,10 @@ class EntryView {
 
     func openChapter(id: Int64): Unit {
         if (!ChapterCatalog.isOpen(id, this.cleared)) {
+            if (ChapterCatalog.hasSkinPreview(id)) {
+                this.chapterIndex = id
+                this.screen = 6
+            }
             return
         }
         this.chapterIndex = id
@@ -116,15 +120,19 @@ class EntryView {
     }
 
     func playPaper(): Int64 {
+        if (this.screen == 6) {
+            return Theme.paperOf(this.chapterIndex)
+        }
         if (this.screen == 1 && this.levelIndex >= 10) {
             return Theme.pingyuanPaper
         }
         return Theme.paper
     }
 
-    /* BANDS.md: band is full-bleed at x=0. Other screens keep Theme.inset. */
+    /* BANDS.md: band is full-bleed at x=0. Skin preview is also full-bleed.
+       Other screens keep Theme.inset. */
     func playInset(): Int64 {
-        if (this.screen == 1) {
+        if (this.screen == 1 || this.screen == 6) {
             return 0
         }
         return Theme.inset
@@ -824,7 +832,7 @@ class EntryView {
                                             Image(@r(app.media.bust_p06_caocao))
                                                 .width(Theme.bustThumbW)
                                                 .height(Theme.bustThumbH)
-                                        } else {
+                                        } else if (item.id == 3) {
                                             Image(@r(app.media.bust_p07_lvbu))
                                                 .width(Theme.bustThumbW)
                                                 .height(Theme.bustThumbH)
@@ -835,6 +843,84 @@ class EntryView {
                                                 .width(Theme.flagThumbW)
                                                 .height(Theme.flagThumbH)
                                             Image(@r(app.media.bust_p06_caocao))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                        } else if (item.id == 4) {
+                                            Image(@r(app.media.bust_p04_yuanshao))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                            Image(@r(app.media.flag_p04_yuan))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.flag_p06_cao))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.bust_p06_caocao))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                        } else if (item.id == 5) {
+                                            Image(@r(app.media.bust_p05_liubei))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                            Image(@r(app.media.flag_p05_liu))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.flag_p06_cao))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.bust_p06_caocao))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                        } else if (item.id == 6) {
+                                            Image(@r(app.media.bust_p08_sunquan))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                            Image(@r(app.media.flag_p08_sun))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.flag_p06_cao))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.bust_p06_caocao))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                        } else if (item.id == 7) {
+                                            Image(@r(app.media.bust_p05_liubei))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                            Image(@r(app.media.flag_p05_liu))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.flag_gate_pattern))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.bust_s01_guanai))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                        } else if (item.id == 8) {
+                                            Image(@r(app.media.bust_p09_zhugeliang))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                            Image(@r(app.media.flag_p09_zhuge))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.flag_p06_cao))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.bust_p06_caocao))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                        } else {
+                                            Image(@r(app.media.bust_p09_zhugeliang))
+                                                .width(Theme.bustThumbW)
+                                                .height(Theme.bustThumbH)
+                                            Image(@r(app.media.flag_p09_zhuge))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.flag_p10_sima))
+                                                .width(Theme.flagThumbW)
+                                                .height(Theme.flagThumbH)
+                                            Image(@r(app.media.bust_p10_simayi))
                                                 .width(Theme.bustThumbW)
                                                 .height(Theme.bustThumbH)
                                         }
@@ -1071,6 +1157,65 @@ class EntryView {
                     .fontFamily(Theme.sans)
                     .margin(top: 8, bottom: 8)
                     .width(100.percent)
+            } else if (this.screen == 6) {
+                /* Skin-only preview for locked 05–10. No boards, no gameplay. */
+                Stack {
+                    Row {
+                        Text("〈")
+                            .fontSize(22)
+                            .fontColor(Theme.ink)
+                            .fontFamily(Theme.sans)
+                            .onClick({event => this.screen = 4})
+                        Blank()
+                    }
+                    .width(100.percent)
+                    .height(Theme.topBar)
+                    .padding(left: Theme.inset, right: Theme.inset)
+                    Text(this.currentChapter().title)
+                        .fontSize(20)
+                        .fontColor(Theme.ink)
+                        .fontFamily(Theme.serif)
+                }
+                .width(100.percent)
+                .height(Theme.topBar)
+                Text(this.currentChapter().listSubtitle)
+                    .fontSize(12)
+                    .fontColor(Theme.inkMuted)
+                    .fontFamily(Theme.sans)
+                    .padding(left: Theme.inset, right: Theme.inset)
+                    .margin(bottom: 4)
+                    .width(100.percent)
+                if (this.chapterIndex == 4) {
+                    Image(@r(app.media.skin_05_touyuan_v91))
+                        .width(100.percent)
+                        .layoutWeight(1)
+                        .objectFit(ImageFit.Contain)
+                } else if (this.chapterIndex == 5) {
+                    Image(@r(app.media.skin_06_jingzhou_v91))
+                        .width(100.percent)
+                        .layoutWeight(1)
+                        .objectFit(ImageFit.Contain)
+                } else if (this.chapterIndex == 6) {
+                    Image(@r(app.media.skin_07_chibi_v91))
+                        .width(100.percent)
+                        .layoutWeight(1)
+                        .objectFit(ImageFit.Contain)
+                } else if (this.chapterIndex == 7) {
+                    Image(@r(app.media.skin_08_rushu_v91))
+                        .width(100.percent)
+                        .layoutWeight(1)
+                        .objectFit(ImageFit.Contain)
+                } else if (this.chapterIndex == 8) {
+                    Image(@r(app.media.skin_09_hanzhong_v91))
+                        .width(100.percent)
+                        .layoutWeight(1)
+                        .objectFit(ImageFit.Contain)
+                } else {
+                    Image(@r(app.media.skin_10_beifa_v91))
+                        .width(100.percent)
+                        .layoutWeight(1)
+                        .objectFit(ImageFit.Contain)
+                }
             } else if (this.screen == 2) {
                 Blank()
                 Column {
