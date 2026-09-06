@@ -123,7 +123,9 @@ class EntryView {
         if (this.screen == 6) {
             return Theme.paperOf(this.chapterIndex)
         }
-        if (this.screen == 1 && this.levelIndex >= 10) {
+        /* 平原 board + 通关 share sage paper. screen==2 used to fall
+           through to 涿郡 Theme.paper and flash the win sheet. */
+        if ((this.screen == 1 || this.screen == 2) && this.levelIndex >= 10) {
             return Theme.pingyuanPaper
         }
         return Theme.paper
@@ -278,6 +280,11 @@ class EntryView {
     }
 
     func handleDrag(event: TouchEvent): Unit {
+        /* Win sets screen=2 then refresh(); a trailing Move can still
+           hit the Canvas and drag-back-undo the last cell. */
+        if (this.screen != 1) {
+            return
+        }
         let px = event.touches[0].x
         let py = event.touches[0].y
         let hit = touchToCell(px, py, this.currentLayout())

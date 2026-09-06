@@ -1035,6 +1035,15 @@ class ChapterFlowV13Tests(unittest.TestCase):
         paper = _func_body(ui, "playPaper")
         self.assertIn("this.screen == 6", paper)
         self.assertIn("Theme.paperOf", paper)
+        self.assertIn("this.screen == 2", paper)
+        self.assertIn("this.levelIndex >= 10", paper)
+        self.assertIn("Theme.pingyuanPaper", paper)
+        self.assertEqual(
+            [play_paper(screen, 10, 1) for screen in (0, 1, 2, 3, 4, 5, 6)],
+            ["paper", "pingyuan", "pingyuan", "paper", "paper", "paper", "paperOf"],
+        )
+        self.assertEqual(play_paper(2, 9, 0), "paper")
+        self.assertEqual(play_paper(1, 9, 0), "paper")
 
     def test_board_chrome_uses_landscape_bands_and_keeps_path2d_bar(self) -> None:
         """screen==1: composite band above the grid, not bust/flag thumbs or skins."""
@@ -1085,6 +1094,17 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertEqual([board_band_name(i) for i in range(10, 20)], ["band_pingyuan_v91"] * 10)
         self.assertEqual(chapter_by_id(0)["band"], "band_zhuojun_v91")
         self.assertEqual(chapter_by_id(1)["band"], "band_pingyuan_v91")
+
+    def test_win_keeps_pingyuan_paper_and_ignores_trailing_drag(self) -> None:
+        """平原 通关 (screen==2) stays sage; trailing Move cannot undo."""
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        paper = _func_body(ui, "playPaper")
+        self.assertIn("this.screen == 1 || this.screen == 2", paper)
+        self.assertIn("this.levelIndex >= 10", paper)
+        drag = _func_body(ui, "handleDrag")
+        self.assertIn("this.screen != 1", drag)
+        self.assertLess(drag.index("this.screen != 1"), drag.index("event.touches"))
+        self.assertLess(drag.index("return"), drag.index("tryStep"))
 
     def test_progress_lock_intact_after_bands(self) -> None:
         """PR #15: 平原 locked while cleared<10; 徐州/吕布 stay closed."""
@@ -1195,6 +1215,15 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertNotIn("赤壁", blob)
         self.assertNotIn("白水关", blob)
         self.assertNotIn("五丈原", blob)
+
+
+def play_paper(screen: int, level_index: int, chapter_index: int) -> str:
+    """Mirrors EntryView.playPaper: 平原 sage on board + win only."""
+    if screen == 6:
+        return "paperOf"
+    if screen in (1, 2) and level_index >= 10:
+        return "pingyuan"
+    return "paper"
 
 
 def road_title(name: str, catalog_index: int) -> str:
