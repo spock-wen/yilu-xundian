@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from solve_levels import SolverTimeout, load_levels, solve, wall_key  # noqa: E402
+from solve_levels import load_levels, solve, wall_key  # noqa: E402
 
 
 class Cell:
@@ -278,14 +278,9 @@ class PatrolRuleTests(unittest.TestCase):
 class ShippedLevelPlaythroughTests(unittest.TestCase):
     def test_solver_path_wins_every_solvable_shipped_level(self) -> None:
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
-        self.assertGreaterEqual(len(levels), 13)
+        self.assertEqual(len(levels), 20)
         for level in levels:
-            try:
-                found = solve(level, timeout_s=8.0)
-            except SolverTimeout:
-                self.assertEqual(int(level["id"]), 0)
-                self.assertEqual((int(level["cols"]), int(level["rows"])), (6, 8))
-                continue
+            found = solve(level, timeout_s=8.0)
             path = found[0]
             game = PatrolGame(level)
             for x, y in path:
@@ -295,25 +290,38 @@ class ShippedLevelPlaythroughTests(unittest.TestCase):
                 )
             self.assertTrue(game.is_win(), f"{level['name']} did not win after solver path")
 
+    def test_first_two_have_unique_solutions(self) -> None:
+        levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
+        for level in levels[:2]:
+            found = solve(level, find_all=True, limit=2, timeout_s=8.0)
+            self.assertEqual(len(found), 1, f"{level['name']} should have a unique solution")
+
 
 class VerifiedCatalogTests(unittest.TestCase):
-    """Lock designer tutorial + the 12 solver-verified levels."""
+    """Lock the 20-board 涿郡+平原 catalog (ids 0..19)."""
 
     def test_json_is_the_verified_table(self) -> None:
-        from build_levels import EXPECTED_NAMES, TUTORIAL, emit, load_verified
+        from build_levels import EXPECTED_NAMES, ST02_WALLS, emit, load_verified
 
         levels = load_verified()
-        self.assertEqual(levels[0]["name"], "长安")
-        self.assertEqual((levels[0]["cols"], levels[0]["rows"]), (6, 8))
-        self.assertEqual(
-            [(w["n"], w["x"], w["y"]) for w in levels[0]["waypoints"]],
-            [(w["n"], w["x"], w["y"]) for w in TUTORIAL["waypoints"]],
-        )
-        self.assertEqual([lv["name"] for lv in levels[1:]], list(EXPECTED_NAMES))
+        self.assertEqual(len(levels), 20)
+        self.assertEqual([int(lv["id"]) for lv in levels], list(range(20)))
+        self.assertEqual([lv["name"] for lv in levels], list(EXPECTED_NAMES))
+        self.assertNotIn("长安", [lv["name"] for lv in levels])
+        self.assertNotIn("洛阳", [lv["name"] for lv in levels])
         self.assertNotIn("汽梁", [lv["name"] for lv in levels])
-        self.assertEqual(levels[3]["name"], "汴梁")
-        self.assertEqual((levels[3]["cols"], levels[3]["rows"]), (3, 3))
-        self.assertEqual(levels[4]["waypoints"][-1], {"n": 3, "x": 1, "y": 2})
+        self.assertTrue(all("_src" not in lv for lv in levels))
+
+        st01 = levels[0]
+        self.assertEqual(st01["name"], "涿郡·涿")
+        self.assertEqual((st01["cols"], st01["rows"]), (6, 6))
+        self.assertEqual(len(st01["waypoints"]), 6)
+        self.assertEqual(st01.get("walls") or [], [])
+
+        st02 = levels[1]
+        self.assertEqual(st02["name"], "涿郡·范阳")
+        self.assertEqual(st02["walls"], ST02_WALLS)
+
         generated = emit(levels)
         shipped = (ROOT / "entry/src/main/cangjie/levels.cj").read_text(encoding="utf-8")
         self.assertEqual(shipped, generated, "levels.cj must be emitted from levels.json")
@@ -355,8 +363,8 @@ class VerifiedCatalogTests(unittest.TestCase):
 
 
 def road_title(name: str, catalog_index: int) -> str:
-    """Board / win header: 1-based 驿程 serial, not waypoint maxNumber()."""
-    return f"{name}·第 {catalog_index + 1} 驿"
+    """Board / win header: locked 盘名原文, already includes chapter·station."""
+    return name
 
 
 def _road_title_func_body(ui: str) -> str:
@@ -376,29 +384,35 @@ def _road_title_func_body(ui: str) -> str:
 
 
 class RoadTitleCopyTests(unittest.TestCase):
-    """Header number is 驿程 serial (1-based catalog index), not station count."""
+    """Header is the locked board name as-is (already chapter·station)."""
 
-    def test_tutorial_is_first_post_not_five_waypoints(self) -> None:
+    def test_first_board_title_is_raw_name(self) -> None:
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
-        tutorial = levels[0]
-        self.assertEqual(tutorial["name"], "长安")
-        self.assertEqual((int(tutorial["cols"]), int(tutorial["rows"])), (6, 8))
-        waypoint_max = max(int(w["n"]) for w in tutorial["waypoints"])
-        self.assertEqual(waypoint_max, 5)
-        self.assertEqual(road_title(tutorial["name"], 0), "长安·第 1 驿")
-        self.assertNotEqual(road_title(tutorial["name"], 0), f"长安·第 {waypoint_max} 驿")
+        first = levels[0]
+        self.assertEqual(first["name"], "涿郡·涿")
+        self.assertEqual((int(first["cols"]), int(first["rows"])), (6, 6))
+        self.assertEqual(len(first["waypoints"]), 6)
+        self.assertEqual(first.get("walls") or [], [])
+        self.assertEqual(road_title(first["name"], 0), "涿郡·涿")
+        self.assertNotIn("第 1 驿", road_title(first["name"], 0))
 
-    def test_second_changan_is_second_post(self) -> None:
+    def test_second_board_title_is_raw_name(self) -> None:
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
         second = levels[1]
-        self.assertEqual(second["name"], "长安")
-        self.assertEqual((int(second["cols"]), int(second["rows"])), (3, 3))
-        self.assertEqual(road_title(second["name"], 1), "长安·第 2 驿")
+        self.assertEqual(second["name"], "涿郡·范阳")
+        self.assertEqual(len(second.get("walls") or []), 2)
+        self.assertEqual(road_title(second["name"], 1), "涿郡·范阳")
 
-    def test_ui_road_title_uses_catalog_index_not_max_number(self) -> None:
+    def test_second_station_name_already_includes_ordinal(self) -> None:
+        levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
+        named = next(lv for lv in levels if lv["name"] == "平原·祝阿·第 2 驿")
+        self.assertEqual(road_title(named["name"], int(named["id"])), "平原·祝阿·第 2 驿")
+
+    def test_ui_road_title_uses_raw_board_name(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         body = _road_title_func_body(ui)
-        self.assertIn("this.levelIndex + 1", body)
+        self.assertIn("this.game.level.name", body)
+        self.assertNotIn("this.levelIndex + 1", body)
         self.assertNotIn("maxNumber()", body)
         self.assertEqual(ui.count("func roadTitle()"), 1)
         self.assertEqual(ui.count("this.roadTitle()"), 2)
