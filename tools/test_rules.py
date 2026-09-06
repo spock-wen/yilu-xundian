@@ -362,6 +362,48 @@ class VerifiedCatalogTests(unittest.TestCase):
             self.assertIn(token, theme)
 
 
+# Selectable chapters this round: 涿郡 + 平原 only (10 boards each).
+# 徐州 / 吕布 may exist as comments in Cangjie, never in the selectable list.
+CHAPTERS = (
+    {"id": 0, "name": "涿郡", "levelStart": 0, "levelCount": 10},
+    {"id": 1, "name": "平原", "levelStart": 10, "levelCount": 10},
+)
+
+
+def chapter_by_id(chapter_id: int) -> dict:
+    return next(ch for ch in CHAPTERS if ch["id"] == chapter_id)
+
+
+def chapter_unlocked(chapter_id: int, cleared: int) -> bool:
+    """Chapter 0 always unlocked; later chapters need the previous 10 cleared."""
+    if chapter_id <= 0:
+        return True
+    prev = chapter_by_id(chapter_id - 1)
+    return cleared >= prev["levelStart"] + prev["levelCount"]
+
+
+def chapter_cleared_count(chapter_id: int, cleared: int) -> int:
+    ch = chapter_by_id(chapter_id)
+    start = ch["levelStart"]
+    count = ch["levelCount"]
+    if cleared <= start:
+        return 0
+    return min(count, cleared - start)
+
+
+def chapter_levels(levels: list, chapter_id: int) -> list:
+    ch = chapter_by_id(chapter_id)
+    start = ch["levelStart"]
+    return levels[start : start + ch["levelCount"]]
+
+
+def continue_level_index(cleared: int, total: int) -> int:
+    """Home「开始传书」: current unlocked station, or last board if all cleared."""
+    if cleared >= total:
+        return total - 1
+    return cleared
+
+
 def road_title(name: str, catalog_index: int) -> str:
     """Board / win header: locked 盘名原文, already includes chapter·station."""
     return name
@@ -416,6 +458,135 @@ class RoadTitleCopyTests(unittest.TestCase):
         self.assertNotIn("maxNumber()", body)
         self.assertEqual(ui.count("func roadTitle()"), 1)
         self.assertEqual(ui.count("this.roadTitle()"), 2)
+
+
+class ChapterCatalogTests(unittest.TestCase):
+    """Selectable chapters are 涿郡 + 平原; LevelCatalog stays the board SoT."""
+
+    def test_selectable_chapters_are_zhuojun_and_pingyuan(self) -> None:
+        self.assertEqual([ch["name"] for ch in CHAPTERS], ["涿郡", "平原"])
+        self.assertEqual([ch["id"] for ch in CHAPTERS], [0, 1])
+        self.assertTrue(all(ch["levelCount"] == 10 for ch in CHAPTERS))
+        self.assertEqual(CHAPTERS[0]["levelStart"], 0)
+        self.assertEqual(CHAPTERS[1]["levelStart"], 10)
+        self.assertNotIn("徐州", [ch["name"] for ch in CHAPTERS])
+        self.assertNotIn("吕布", [ch["name"] for ch in CHAPTERS])
+
+    def test_zhuojun_always_unlocked_pingyuan_needs_ten_cleared(self) -> None:
+        self.assertTrue(chapter_unlocked(0, 0))
+        self.assertTrue(chapter_unlocked(0, 9))
+        self.assertFalse(chapter_unlocked(1, 0))
+        self.assertFalse(chapter_unlocked(1, 9))
+        self.assertTrue(chapter_unlocked(1, 10))
+        self.assertTrue(chapter_unlocked(1, 19))
+
+    def test_cleared_count_is_clamped_to_the_chapter_window(self) -> None:
+        self.assertEqual(chapter_cleared_count(0, 0), 0)
+        self.assertEqual(chapter_cleared_count(0, 3), 3)
+        self.assertEqual(chapter_cleared_count(0, 10), 10)
+        self.assertEqual(chapter_cleared_count(0, 15), 10)
+        self.assertEqual(chapter_cleared_count(1, 9), 0)
+        self.assertEqual(chapter_cleared_count(1, 10), 0)
+        self.assertEqual(chapter_cleared_count(1, 14), 4)
+        self.assertEqual(chapter_cleared_count(1, 20), 10)
+
+    def test_chapter_slices_ten_global_boards(self) -> None:
+        levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
+        zhuo = chapter_levels(levels, 0)
+        ping = chapter_levels(levels, 1)
+        self.assertEqual(len(zhuo), 10)
+        self.assertEqual(len(ping), 10)
+        self.assertEqual([int(lv["id"]) for lv in zhuo], list(range(0, 10)))
+        self.assertEqual([int(lv["id"]) for lv in ping], list(range(10, 20)))
+        self.assertTrue(all(lv["name"].startswith("涿郡") for lv in zhuo))
+        self.assertTrue(all(lv["name"].startswith("平原") for lv in ping))
+
+    def test_continue_opens_current_station(self) -> None:
+        self.assertEqual(continue_level_index(0, 20), 0)
+        self.assertEqual(continue_level_index(7, 20), 7)
+        self.assertEqual(continue_level_index(10, 20), 10)
+        self.assertEqual(continue_level_index(20, 20), 19)
+
+    def test_cangjie_catalog_matches_python_spec(self) -> None:
+        src = (ROOT / "entry/src/main/cangjie/chapter.cj").read_text(encoding="utf-8")
+        self.assertIn("class ChapterCatalog", src)
+        self.assertIn('ChapterDef(0, "涿郡", 0, 10)', src)
+        self.assertIn('ChapterDef(1, "平原", 10, 10)', src)
+        adds = [line for line in src.splitlines() if "ChapterDef(" in line and "chapters.add" in line]
+        self.assertEqual(len(adds), 2, "only 涿郡 + 平原 may be selectable")
+        all_fn = _func_body(src, "all")
+        self.assertNotIn("徐州", all_fn)
+        self.assertNotIn("吕布", all_fn)
+        self.assertIn("levelStart", src)
+        self.assertIn("levelCount", src)
+
+
+class ChapterNavUiTests(unittest.TestCase):
+    """Home → chapter list → chapter's 10 → board. Structural screens only."""
+
+    def test_home_browse_opens_chapter_list_not_flat_catalog(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        home = ui[ui.index("if (this.screen == 0)") : ui.index("} else if (this.screen ==")]
+        self.assertIn('this.screen = 3', home)
+        self.assertIn("开始传书", home)
+        self.assertIn("this.startPlay()", home)
+        self.assertIn("驿程", home)
+        self.assertNotIn("LevelCatalog.all()", home)
+
+    def test_screen_3_is_chapter_cards_only(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        chapter_list = _screen_branch(ui, 3)
+        self.assertIn("ChapterCatalog.all()", chapter_list)
+        self.assertIn("涿郡", (ROOT / "entry/src/main/cangjie/chapter.cj").read_text(encoding="utf-8"))
+        self.assertIn("平原", (ROOT / "entry/src/main/cangjie/chapter.cj").read_text(encoding="utf-8"))
+        self.assertNotIn("LevelCatalog.all()", chapter_list)
+        self.assertNotIn("Image(", chapter_list)
+        self.assertNotIn(".png", chapter_list)
+        self.assertNotIn("徐州", chapter_list)
+        self.assertNotIn("吕布", chapter_list)
+        self.assertIn("this.screen = 0", chapter_list)
+        self.assertIn("Theme.whitePaper", chapter_list)
+        self.assertIn("Theme.ink", chapter_list)
+
+    def test_screen_4_lists_one_chapter_ten_and_returns_to_chapters(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        level_list = _screen_branch(ui, 4)
+        self.assertIn("ChapterCatalog", level_list)
+        self.assertNotIn("LevelCatalog.all()", level_list)
+        self.assertIn("this.screen = 3", level_list)
+        self.assertIn("openFromList", level_list)
+        self.assertIn("item.id", level_list)
+
+    def test_start_play_continues_cleared_station(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        body = _func_body(ui, "startPlay")
+        self.assertIn("this.cleared", body)
+        self.assertIn("this.openLevel", body)
+        self.assertNotIn("this.screen = 3", body)
+
+    def test_no_chapter_skin_assets_shipped(self) -> None:
+        media = ROOT / "entry/src/main/resources"
+        skins = []
+        for pattern in ("**/*chapter*", "**/*zhuojun*", "**/*pingyuan*", "**/*涿郡*", "**/*平原*"):
+            skins.extend(p for p in media.glob(pattern) if p.suffix.lower() in {".png", ".jpg", ".webp"})
+        self.assertEqual(skins, [], "do not ship placeholder chapter skins")
+
+
+def _screen_branch(ui: str, screen: int) -> str:
+    token = f"this.screen == {screen}"
+    start = ui.index(token)
+    brace = ui.index("{", start)
+    depth = 0
+    i = brace
+    while i < len(ui):
+        if ui[i] == "{":
+            depth += 1
+        elif ui[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return ui[start : i + 1]
+        i += 1
+    raise AssertionError(f"screen {screen} branch not closed")
 
 
 def _play_bottom_bar(ui: str) -> str:

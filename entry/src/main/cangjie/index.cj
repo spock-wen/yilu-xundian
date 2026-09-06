@@ -26,6 +26,7 @@ class EntryView {
 
     @State var screen: Int64 = 0
     @State var levelIndex: Int64 = 0
+    @State var chapterIndex: Int64 = 0
     @State var tick: Int64 = 0
     @State var cleared: Int64 = 0
 
@@ -68,6 +69,7 @@ class EntryView {
 
     func openLevel(index: Int64): Unit {
         this.levelIndex = index
+        this.chapterIndex = ChapterCatalog.chapterIdForLevel(index)
         this.game.reset(LevelCatalog.byIndex(index))
         this.screen = 1
         this.refresh()
@@ -86,6 +88,43 @@ class EntryView {
             return
         }
         this.openLevel(index)
+    }
+
+    func openChapter(id: Int64): Unit {
+        if (!ChapterCatalog.unlocked(id, this.cleared)) {
+            return
+        }
+        this.chapterIndex = id
+        this.screen = 4
+    }
+
+    func chapterTitle(): String {
+        return ChapterCatalog.byIndex(this.chapterIndex).name
+    }
+
+    func chapterProgressLabel(id: Int64): String {
+        let n = ChapterCatalog.clearedCount(id, this.cleared)
+        let total = ChapterCatalog.byIndex(id).levelCount
+        return "${n}/${total}"
+    }
+
+    func chapterStatus(id: Int64): Int64 {
+        if (!ChapterCatalog.unlocked(id, this.cleared)) {
+            return 0
+        }
+        let n = ChapterCatalog.clearedCount(id, this.cleared)
+        let total = ChapterCatalog.byIndex(id).levelCount
+        if (n >= total) {
+            return 2
+        }
+        return 1
+    }
+
+    func chapterRowBorder(id: Int64): Int64 {
+        if (this.chapterStatus(id) == 1) {
+            return Theme.ink
+        }
+        return Theme.whitePaper
     }
 
     func nextLevel(): Unit {
@@ -533,10 +572,137 @@ class EntryView {
                 Scroll {
                     Column(space: 10) {
                         ForEach(
-                            LevelCatalog.all(),
+                            ChapterCatalog.all(),
+                            itemGeneratorFunc: {item: ChapterDef, index: Int64 =>
+                                Row {
+                                    if (this.chapterStatus(item.id) == 2) {
+                                        Text("通")
+                                            .fontSize(14)
+                                            .fontColor(Theme.success)
+                                            .fontFamily(Theme.serif)
+                                            .width(36)
+                                            .height(36)
+                                            .border(width: 1, color: Theme.success)
+                                            .borderRadius(18)
+                                            .textAlign(TextAlign.Center)
+                                        Text(item.name)
+                                            .fontSize(20)
+                                            .fontColor(Theme.ink)
+                                            .fontFamily(Theme.serif)
+                                            .margin(left: 12)
+                                        Blank()
+                                        Text(this.chapterProgressLabel(item.id))
+                                            .fontSize(14)
+                                            .fontColor(Theme.success)
+                                            .fontFamily(Theme.sans)
+                                        Text("已通")
+                                            .fontSize(14)
+                                            .fontColor(Theme.success)
+                                            .fontFamily(Theme.sans)
+                                            .margin(left: 8)
+                                    } else if (this.chapterStatus(item.id) == 1) {
+                                        Text("${item.id + 1}")
+                                            .fontSize(16)
+                                            .fontColor(Theme.whitePaper)
+                                            .fontFamily(Theme.serif)
+                                            .width(36)
+                                            .height(36)
+                                            .backgroundColor(Theme.ink)
+                                            .borderRadius(18)
+                                            .textAlign(TextAlign.Center)
+                                        Text(item.name)
+                                            .fontSize(20)
+                                            .fontColor(Theme.ink)
+                                            .fontFamily(Theme.serif)
+                                            .fontWeight(FontWeight.Bold)
+                                            .margin(left: 12)
+                                        Blank()
+                                        Text(this.chapterProgressLabel(item.id))
+                                            .fontSize(14)
+                                            .fontColor(Theme.ink)
+                                            .fontFamily(Theme.sans)
+                                        Text("当前")
+                                            .fontSize(14)
+                                            .fontColor(Theme.ink)
+                                            .fontFamily(Theme.sans)
+                                            .margin(left: 8)
+                                    } else {
+                                        Text("${item.id + 1}")
+                                            .fontSize(16)
+                                            .fontColor(Theme.locked)
+                                            .fontFamily(Theme.serif)
+                                            .width(36)
+                                            .height(36)
+                                            .border(width: 1, color: Theme.locked)
+                                            .borderRadius(18)
+                                            .textAlign(TextAlign.Center)
+                                        Text(item.name)
+                                            .fontSize(20)
+                                            .fontColor(Theme.locked)
+                                            .fontFamily(Theme.serif)
+                                            .margin(left: 12)
+                                        Blank()
+                                        Text(this.chapterProgressLabel(item.id))
+                                            .fontSize(14)
+                                            .fontColor(Theme.locked)
+                                            .fontFamily(Theme.sans)
+                                        Text("锁")
+                                            .fontSize(14)
+                                            .fontColor(Theme.locked)
+                                            .fontFamily(Theme.sans)
+                                            .margin(left: 8)
+                                    }
+                                }
+                                .width(100.percent)
+                                .height(72)
+                                .padding(left: 14, right: 14)
+                                .backgroundColor(Theme.whitePaper)
+                                .borderRadius(10)
+                                .border(width: 1, color: this.chapterRowBorder(item.id))
+                                .onClick({event => this.openChapter(item.id)})
+                            }
+                        )
+                    }
+                    .width(100.percent)
+                }
+                .width(100.percent)
+                .layoutWeight(1)
+                Text("已通 ${this.cleared} · 当前 ${this.currentName()}")
+                    .fontSize(13)
+                    .fontColor(Theme.inkMuted)
+                    .fontFamily(Theme.sans)
+                    .margin(top: 12, bottom: 8)
+                    .width(100.percent)
+            } else if (this.screen == 4) {
+                Stack {
+                    Row {
+                        Text("〈")
+                            .fontSize(22)
+                            .fontColor(Theme.ink)
+                            .fontFamily(Theme.sans)
+                            .onClick({event => this.screen = 3})
+                        Blank()
+                    }
+                    .width(100.percent)
+                    .height(Theme.topBar)
+                    Text(this.chapterTitle())
+                        .fontSize(20)
+                        .fontColor(Theme.ink)
+                        .fontFamily(Theme.serif)
+                }
+                .width(100.percent)
+                .height(Theme.topBar)
+                Divider()
+                    .strokeWidth(1)
+                    .color(Theme.paperLine)
+                    .width(100.percent)
+                Scroll {
+                    Column(space: 10) {
+                        ForEach(
+                            ChapterCatalog.levelsOf(this.chapterIndex),
                             itemGeneratorFunc: {item: LevelDef, index: Int64 =>
                                 Row {
-                                    if (index < this.cleared) {
+                                    if (item.id < this.cleared) {
                                         Text("通")
                                             .fontSize(14)
                                             .fontColor(Theme.success)
@@ -556,7 +722,7 @@ class EntryView {
                                             .fontSize(14)
                                             .fontColor(Theme.success)
                                             .fontFamily(Theme.sans)
-                                    } else if (index == this.cleared) {
+                                    } else if (item.id == this.cleared) {
                                         Text("${index + 1}")
                                             .fontSize(16)
                                             .fontColor(Theme.whitePaper)
@@ -604,8 +770,8 @@ class EntryView {
                                 .padding(left: 14, right: 14)
                                 .backgroundColor(Theme.whitePaper)
                                 .borderRadius(10)
-                                .border(width: 1, color: this.rowBorder(index))
-                                .onClick({event => this.openFromList(index)})
+                                .border(width: 1, color: this.rowBorder(item.id))
+                                .onClick({event => this.openFromList(item.id)})
                             }
                         )
                     }
