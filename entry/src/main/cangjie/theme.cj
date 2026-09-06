@@ -18,6 +18,38 @@ public class Theme {
     public static let whitePaper: Int64 = 0XFBF6EC
     /* 平原 board paper from chapter-flow v1.3 mock (sage). */
     public static let pingyuanPaper: Int64 = 0XE7EBD8
+    /* ch05-10-SHIP.md paper tokens — preview screen only. */
+    public static let touyuanPaper: Int64 = 0XE8E4DC
+    public static let jingzhouPaper: Int64 = 0XE8EDE8
+    public static let chibiPaper: Int64 = 0XE2E4EA
+    public static let rushuPaper: Int64 = 0XE6E8E2
+    public static let hanzhongPaper: Int64 = 0XE4E8E6
+    public static let beifaPaper: Int64 = 0XEDE6D8
+
+    public static func paperOf(chapterId: Int64): Int64 {
+        if (chapterId == 4) {
+            return Theme.touyuanPaper
+        }
+        if (chapterId == 5) {
+            return Theme.jingzhouPaper
+        }
+        if (chapterId == 6) {
+            return Theme.chibiPaper
+        }
+        if (chapterId == 7) {
+            return Theme.rushuPaper
+        }
+        if (chapterId == 8) {
+            return Theme.hanzhongPaper
+        }
+        if (chapterId == 9) {
+            return Theme.beifaPaper
+        }
+        if (chapterId == 1) {
+            return Theme.pingyuanPaper
+        }
+        return Theme.paper
+    }
     public static let flagHan: Int64 = 0XB33C32
     public static let flagHuang: Int64 = 0XE4C35A
     public static let flagGongsun: Int64 = 0X9AA7B0
@@ -30,6 +62,8 @@ public class Theme {
        Official flags are 512×640 (公孙 560×640) ≈ 4:5 with pole; 24×30 keeps
        汉/黄/袁 readable. Busts are 600×800 = 3:4 → 36×48. */
     public static let chapterCardH: Int64 = 104
+    /* Grey-lock card_05..10 are 888×528; 320vp content ≈ 190, use 176. */
+    public static let chapterSkinCardH: Int64 = 176
     public static let chapterThumbRowW: Int64 = 128
     public static let flagThumbW: Int64 = 24
     public static let flagThumbH: Int64 = 30

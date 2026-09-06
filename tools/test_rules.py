@@ -8,6 +8,7 @@ behaviours, the Cangjie side is wrong unless this spec is updated first.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import sys
@@ -362,8 +363,15 @@ class VerifiedCatalogTests(unittest.TestCase):
         ):
             self.assertIn(token, theme)
         self.assertIn("0XE7EBD8", theme)
+        self.assertIn("0XE8E4DC", theme)
+        self.assertIn("0XE8EDE8", theme)
+        self.assertIn("0XE2E4EA", theme)
+        self.assertIn("0XE6E8E2", theme)
+        self.assertIn("0XE4E8E6", theme)
+        self.assertIn("0XEDE6D8", theme)
         self.assertIn("0XB33C32", theme)
         self.assertIn("chapterCardH: Int64 = 104", theme)
+        self.assertIn("chapterSkinCardH: Int64 = 176", theme)
         self.assertIn("chapterThumbRowW: Int64 = 128", theme)
         self.assertIn("flagThumbW: Int64 = 24", theme)
         self.assertIn("flagThumbH: Int64 = 30", theme)
@@ -376,7 +384,7 @@ class VerifiedCatalogTests(unittest.TestCase):
         self.assertIn("bandClear: Int64 = 10", theme)
 
 
-# chapter-flow v1.3 SHIP cards. Locked 徐州/吕布 are cards only — no boards.
+# chapter-flow v1.3 + ch05-10-SHIP. Locked cards (徐州…北伐) are skin-only — no boards.
 SHIP_CHAPTERS = (
     {
         "id": 0,
@@ -398,6 +406,7 @@ SHIP_CHAPTERS = (
         "rightFlag": "flag_p02_huang",
         "skin": "skin_01_zhuojun_v91",
         "band": "band_zhuojun_v91",
+        "preview": False,
     },
     {
         "id": 1,
@@ -419,6 +428,7 @@ SHIP_CHAPTERS = (
         "rightFlag": "flag_p04_yuan",
         "skin": "skin_02_pingyuan_v91",
         "band": "band_pingyuan_v91",
+        "preview": False,
     },
     {
         "id": 2,
@@ -439,6 +449,7 @@ SHIP_CHAPTERS = (
         "rightBust": "bust_p06_caocao",
         "rightFlag": "flag_p06_cao",
         "skin": "",
+        "preview": False,
     },
     {
         "id": 3,
@@ -459,6 +470,145 @@ SHIP_CHAPTERS = (
         "rightBust": "bust_p06_caocao",
         "rightFlag": "flag_p06_cao",
         "skin": "",
+        "preview": False,
+    },
+    {
+        "id": 4,
+        "name": "投袁",
+        "label": "第5章 投袁",
+        "title": "投袁·邺",
+        "subtitle": "乌巢仓破、半印失散；北不可回",
+        "listSubtitle": "袁绍×曹操 · 袁×曹 · 邺",
+        "boardSubtitle": "袁绍×曹操 · 袁×曹 · 邺",
+        "friend": "袁→备",
+        "tension": "乌巢仓破、半印失散；北不可回",
+        "city": "邺（乌巢仓影可辅）",
+        "open": False,
+        "levelStart": 20,
+        "levelCount": 0,
+        "leftBust": "bust_p04_yuanshao",
+        "leftFlag": "flag_p04_yuan",
+        "rightBust": "bust_p06_caocao",
+        "rightFlag": "flag_p06_cao",
+        "skin": "skin_05_touyuan_v91",
+        "card": "card_05_touyuan_v91",
+        "paper": "0XE8E4DC",
+        "preview": True,
+    },
+    {
+        "id": 5,
+        "name": "荆州",
+        "label": "第6章 荆州",
+        "title": "荆州·襄阳",
+        "subtitle": "刘表辖下友道；不给曹营送",
+        "listSubtitle": "刘备×曹操 · 刘×曹 · 襄阳",
+        "boardSubtitle": "刘备×曹操 · 刘×曹 · 襄阳",
+        "friend": "刘表",
+        "tension": "刘表辖下友道；不给曹营送",
+        "city": "襄阳",
+        "open": False,
+        "levelStart": 20,
+        "levelCount": 0,
+        "leftBust": "bust_p05_liubei",
+        "leftFlag": "flag_p05_liu",
+        "rightBust": "bust_p06_caocao",
+        "rightFlag": "flag_p06_cao",
+        "skin": "skin_06_jingzhou_v91",
+        "card": "card_06_jingzhou_v91",
+        "paper": "0XE8EDE8",
+        "preview": True,
+    },
+    {
+        "id": 6,
+        "name": "赤壁",
+        "label": "第7章 赤壁",
+        "title": "赤壁·柴桑",
+        "subtitle": "孙刘联军岸；不往乌林送曹营",
+        "listSubtitle": "孙权×曹操 · 孙×曹 · 柴桑",
+        "boardSubtitle": "孙权×曹操 · 孙×曹 · 柴桑",
+        "friend": "孙刘",
+        "tension": "孙刘联军岸；不往乌林送曹营",
+        "city": "柴桑",
+        "open": False,
+        "levelStart": 20,
+        "levelCount": 0,
+        "leftBust": "bust_p08_sunquan",
+        "leftFlag": "flag_p08_sun",
+        "rightBust": "bust_p06_caocao",
+        "rightFlag": "flag_p06_cao",
+        "skin": "skin_07_chibi_v91",
+        "card": "card_07_chibi_v91",
+        "paper": "0XE2E4EA",
+        "preview": True,
+    },
+    {
+        "id": 7,
+        "name": "入蜀",
+        "label": "第8章 入蜀",
+        "title": "入蜀·白水关",
+        "subtitle": "峡江入川关隘递进；非曹粮道，勿挂曹脸",
+        "listSubtitle": "刘备×关隘影 · 刘×纹样 · 白水关",
+        "boardSubtitle": "刘备×关隘影 · 刘×纹样 · 白水关",
+        "friend": "蜀",
+        "tension": "峡江入川关隘递进；非曹粮道，勿挂曹脸",
+        "city": "白水关（辅成都）",
+        "open": False,
+        "levelStart": 20,
+        "levelCount": 0,
+        "leftBust": "bust_p05_liubei",
+        "leftFlag": "flag_p05_liu",
+        "rightBust": "bust_s01_guanai",
+        "rightFlag": "flag_gate_pattern",
+        "skin": "skin_08_rushu_v91",
+        "card": "card_08_rushu_v91",
+        "paper": "0XE6E8E2",
+        "preview": True,
+    },
+    {
+        "id": 8,
+        "name": "汉中南中",
+        "label": "第9章 汉中南中",
+        "title": "汉中南中·阳平关",
+        "subtitle": "两道分运：汉中关城 vs 南中北运",
+        "listSubtitle": "诸葛×曹操 · 诸葛×曹 · 阳平关",
+        "boardSubtitle": "诸葛×曹操 · 诸葛×曹 · 阳平关",
+        "friend": "诸葛",
+        "tension": "两道分运：汉中关城 vs 南中北运",
+        "city": "阳平关",
+        "open": False,
+        "levelStart": 20,
+        "levelCount": 0,
+        "leftBust": "bust_p09_zhugeliang",
+        "leftFlag": "flag_p09_zhuge",
+        "rightBust": "bust_p06_caocao",
+        "rightFlag": "flag_p06_cao",
+        "skin": "skin_09_hanzhong_v91",
+        "card": "card_09_hanzhong_v91",
+        "paper": "0XE4E8E6",
+        "preview": True,
+    },
+    {
+        "id": 9,
+        "name": "北伐",
+        "label": "第10章 北伐",
+        "title": "北伐·五丈原",
+        "subtitle": "对魏远征；街亭/空仓余韵",
+        "listSubtitle": "诸葛×司马 · 诸葛×司马 · 五丈原",
+        "boardSubtitle": "诸葛×司马 · 诸葛×司马 · 五丈原",
+        "friend": "诸葛",
+        "tension": "对魏远征；街亭/空仓余韵",
+        "city": "五丈原",
+        "open": False,
+        "levelStart": 20,
+        "levelCount": 0,
+        "leftBust": "bust_p09_zhugeliang",
+        "leftFlag": "flag_p09_zhuge",
+        "rightBust": "bust_p10_simayi",
+        "rightFlag": "flag_p10_sima",
+        "skin": "skin_10_beifa_v91",
+        "card": "card_10_beifa_v91",
+        "paper": "0XEDE6D8",
+        "preview": True,
     },
 )
 
@@ -470,6 +620,10 @@ SHIP_MEDIA = (
     "bust_p05_liubei",
     "bust_p06_caocao",
     "bust_p07_lvbu",
+    "bust_p08_sunquan",
+    "bust_p09_zhugeliang",
+    "bust_p10_simayi",
+    "bust_s01_guanai",
     "flag_p01_han",
     "flag_p02_huang",
     "flag_p03_gongsun",
@@ -477,11 +631,31 @@ SHIP_MEDIA = (
     "flag_p05_liu",
     "flag_p06_cao",
     "flag_p07_lv",
+    "flag_p08_sun",
+    "flag_p09_zhuge",
+    "flag_p10_sima",
+    "flag_gate_pattern",
     "skin_01_zhuojun_v91",
     "skin_02_pingyuan_v91",
+    "skin_05_touyuan_v91",
+    "skin_06_jingzhou_v91",
+    "skin_07_chibi_v91",
+    "skin_08_rushu_v91",
+    "skin_09_hanzhong_v91",
+    "skin_10_beifa_v91",
+    "card_05_touyuan_v91",
+    "card_06_jingzhou_v91",
+    "card_07_chibi_v91",
+    "card_08_rushu_v91",
+    "card_09_hanzhong_v91",
+    "card_10_beifa_v91",
     "band_zhuojun_v91",
     "band_pingyuan_v91",
 )
+
+
+def chapter_has_skin_preview(chapter_id: int) -> bool:
+    return bool(chapter_by_id(chapter_id).get("preview"))
 
 # BANDS.md locked geometry on the 1080×1920 / SCALE 3 design canvas.
 BAND_SCALE = 3
@@ -596,7 +770,7 @@ def _screen_branch(ui: str, screen: int) -> str:
 
 
 class ChapterFlowV13Tests(unittest.TestCase):
-    """Locked chapter-flow v1.3: 4 cards; 平原 unlocks after 涿郡 10 stations."""
+    """Locked chapter-flow: 10 cards; 平原 unlocks after 涿郡 10 stations."""
 
     def test_ship_cards_match_locked_copy(self) -> None:
         self.assertEqual([ch["title"] for ch in SHIP_CHAPTERS], [
@@ -604,35 +778,71 @@ class ChapterFlowV13Tests(unittest.TestCase):
             "平原·郡治",
             "徐州·下邳",
             "吕布章",
+            "投袁·邺",
+            "荆州·襄阳",
+            "赤壁·柴桑",
+            "入蜀·白水关",
+            "汉中南中·阳平关",
+            "北伐·五丈原",
         ])
         self.assertEqual([ch["subtitle"] for ch in SHIP_CHAPTERS], [
             "仓官×渠帅 · 汉×黄 · 黄巾乱世出粮",
             "公孙×袁绍 · 袁绍为敌",
             "刘×曹 · 淮泗争粮",
             "吕×曹 · 下邳同仓",
+            "乌巢仓破、半印失散；北不可回",
+            "刘表辖下友道；不给曹营送",
+            "孙刘联军岸；不往乌林送曹营",
+            "峡江入川关隘递进；非曹粮道，勿挂曹脸",
+            "两道分运：汉中关城 vs 南中北运",
+            "对魏远征；街亭/空仓余韵",
+        ])
+        self.assertEqual([ch["label"] for ch in SHIP_CHAPTERS][4:], [
+            "第5章 投袁",
+            "第6章 荆州",
+            "第7章 赤壁",
+            "第8章 入蜀",
+            "第9章 汉中南中",
+            "第10章 北伐",
         ])
         # Catalog.open = has boards / designed as openable, not current unlock.
-        self.assertEqual([ch["open"] for ch in SHIP_CHAPTERS], [True, True, False, False])
+        self.assertEqual(
+            [ch["open"] for ch in SHIP_CHAPTERS],
+            [True, True, False, False, False, False, False, False, False, False],
+        )
         self.assertTrue(chapter_selectable(0, 0))
         self.assertFalse(chapter_selectable(1, 0))
         self.assertFalse(chapter_selectable(2, 0))
         self.assertFalse(chapter_selectable(3, 0))
+        self.assertFalse(chapter_selectable(4, 20))
+        self.assertFalse(chapter_selectable(9, 20))
+        self.assertEqual(chapter_by_id(7)["rightFlag"], "flag_gate_pattern")
+        self.assertNotEqual(chapter_by_id(7)["rightFlag"], "flag_s01_guan")
+        self.assertEqual(chapter_by_id(8)["leftFlag"], "flag_p09_zhuge")
+        self.assertEqual(chapter_by_id(9)["rightFlag"], "flag_p10_sima")
+        self.assertIn("诸葛", chapter_by_id(8)["listSubtitle"])
+        self.assertIn("司马", chapter_by_id(9)["listSubtitle"])
 
     def test_pingyuan_opens_only_after_zhuojun_cleared(self) -> None:
-        """平原 可入 iff 涿郡 10 驿 cleared; 徐州/吕布 stay locked."""
+        """平原 可入 iff 涿郡 10 驿 cleared; later chapters stay locked."""
         for cleared in (0, 3, 9):
             self.assertTrue(chapter_is_open(0, cleared), cleared)
             self.assertFalse(chapter_is_open(1, cleared), cleared)
             self.assertFalse(chapter_selectable(1, cleared), cleared)
             self.assertEqual(chapter_open_count(cleared), 1)
-            self.assertEqual(chapter_open_footer(cleared), "已开 1 · 未启 3 · 点开章入驿程")
+            self.assertEqual(chapter_open_footer(cleared), "已开 1 · 未启 9 · 点开章入驿程")
         self.assertTrue(chapter_is_open(1, 10))
         self.assertTrue(chapter_selectable(1, 10))
         self.assertEqual(chapter_open_count(10), 2)
-        self.assertEqual(chapter_open_footer(10), "已开 2 · 未启 2 · 点开章入驿程")
+        self.assertEqual(chapter_open_footer(10), "已开 2 · 未启 8 · 点开章入驿程")
         self.assertFalse(chapter_is_open(2, 10))
         self.assertFalse(chapter_is_open(2, 20))
         self.assertFalse(chapter_is_open(3, 20))
+        for chapter_id in range(4, 10):
+            self.assertFalse(chapter_is_open(chapter_id, 20), chapter_id)
+            self.assertTrue(chapter_has_skin_preview(chapter_id), chapter_id)
+        self.assertFalse(chapter_has_skin_preview(2))
+        self.assertFalse(chapter_has_skin_preview(3))
         self.assertEqual(chapter_cleared_count(1, 0), 0)
         self.assertEqual(chapter_cleared_count(0, 3), 3)
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
@@ -643,12 +853,13 @@ class ChapterFlowV13Tests(unittest.TestCase):
 
     def test_locked_chapters_have_no_boards(self) -> None:
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
-        self.assertEqual(chapter_levels(levels, 2), [])
-        self.assertEqual(chapter_levels(levels, 3), [])
+        for chapter_id in range(2, 10):
+            self.assertEqual(chapter_levels(levels, chapter_id), [])
         self.assertEqual(len(chapter_levels(levels, 0)), 10)
         self.assertEqual(len(chapter_levels(levels, 1)), 10)
         names = [lv["name"] for lv in levels]
-        self.assertFalse(any(n.startswith("徐州") or n.startswith("吕布") for n in names))
+        prefixes = ("徐州", "吕布", "投袁", "荆州", "赤壁", "入蜀", "汉中", "北伐", "五丈原")
+        self.assertFalse(any(n.startswith(prefix) for n in names for prefix in prefixes))
 
     def test_station_names_and_sizes_come_from_json_only(self) -> None:
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
@@ -679,7 +890,7 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertEqual(chrome_line(0), "友：汉廷官仓 · 张力：黄巾乱世出粮 · 城：涿·安喜")
         self.assertEqual(chrome_line(1), "友：公孙瓒 · 张力：袁绍为敌 · 城：高唐·郡治")
 
-    def test_cangjie_catalog_ships_four_cards(self) -> None:
+    def test_cangjie_catalog_ships_ten_cards(self) -> None:
         src = (ROOT / "entry/src/main/cangjie/chapter.cj").read_text(encoding="utf-8")
         self.assertIn("class ChapterCatalog", src)
         for phrase in (
@@ -687,15 +898,29 @@ class ChapterFlowV13Tests(unittest.TestCase):
             "平原·郡治",
             "徐州·下邳",
             "吕布章",
+            "投袁·邺",
+            "荆州·襄阳",
+            "赤壁·柴桑",
+            "入蜀·白水关",
+            "汉中南中·阳平关",
+            "北伐·五丈原",
+            "第5章 投袁",
+            "第10章 北伐",
             "仓官×渠帅 · 汉×黄 · 黄巾乱世出粮",
             "公孙×袁绍 · 袁绍为敌",
             "刘×曹 · 淮泗争粮",
             "吕×曹 · 下邳同仓",
+            "乌巢仓破、半印失散；北不可回",
+            "诸葛×司马",
             "汉廷官仓",
             "公孙瓒",
             "高唐·郡治",
         ):
             self.assertIn(phrase, src)
+        self.assertIn("诸葛", src)
+        self.assertIn("司马", src)
+        self.assertNotIn("flag-s01-guan", src)
+        self.assertNotIn("flag_s01_guan", src)
         self.assertIn("func isDessert(", src)
         dessert = _func_body(src, "isDessert")
         self.assertIn("levelId == 4", dessert)
@@ -705,6 +930,9 @@ class ChapterFlowV13Tests(unittest.TestCase):
         selectable = _func_body(src, "selectable")
         self.assertIn("cleared", selectable)
         self.assertIn("isOpen", selectable)
+        preview = _func_body(src, "hasSkinPreview")
+        self.assertIn("chapterId >= 4", preview)
+        self.assertIn("chapterId <= 9", preview)
 
     def test_home_keeps_yicheng_and_adds_chapters(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
@@ -726,7 +954,7 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertIn("LevelCatalog.all()", yicheng)
         self.assertNotIn("ChapterCatalog.all()", yicheng)
 
-    def test_screen_4_is_four_chapter_cards(self) -> None:
+    def test_screen_4_is_ten_chapter_cards(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         cards = _screen_branch(ui, 4)
         self.assertIn("ChapterCatalog.all()", cards)
@@ -745,6 +973,23 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertIn("@r(app.media.flag_p01_han)", cards)
         self.assertIn("@r(app.media.bust_p03_gongsun)", cards)
         self.assertIn("@r(app.media.flag_p04_yuan)", cards)
+        self.assertIn("@r(app.media.bust_p08_sunquan)", cards)
+        self.assertIn("@r(app.media.flag_p08_sun)", cards)
+        self.assertIn("@r(app.media.bust_p09_zhugeliang)", cards)
+        self.assertIn("@r(app.media.flag_p09_zhuge)", cards)
+        self.assertIn("@r(app.media.bust_p10_simayi)", cards)
+        self.assertIn("@r(app.media.flag_p10_sima)", cards)
+        self.assertIn("@r(app.media.bust_s01_guanai)", cards)
+        self.assertIn("@r(app.media.flag_gate_pattern)", cards)
+        self.assertIn("@r(app.media.card_05_touyuan_v91)", cards)
+        self.assertIn("@r(app.media.card_06_jingzhou_v91)", cards)
+        self.assertIn("@r(app.media.card_07_chibi_v91)", cards)
+        self.assertIn("@r(app.media.card_08_rushu_v91)", cards)
+        self.assertIn("@r(app.media.card_09_hanzhong_v91)", cards)
+        self.assertIn("@r(app.media.card_10_beifa_v91)", cards)
+        self.assertIn("Theme.chapterSkinCardH", cards)
+        self.assertNotIn("flag-s01-guan", cards)
+        self.assertNotIn("flag_s01_guan", cards)
         self.assertIn("this.openChapter(item.id)", cards)
         self.assertIn("this.screen = 0", cards)
         self.assertNotIn("LevelCatalog.all()", cards)
@@ -763,6 +1008,33 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertNotIn("LevelCatalog.all()", stations)
         self.assertNotIn("5×5", stations)
         self.assertNotIn("5x5", stations)
+
+    def test_screen_6_is_fullscreen_skin_preview(self) -> None:
+        """Locked 05–10 open a preview screen; no boards, no 涿/平原 skins."""
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        preview = _screen_branch(ui, 6)
+        self.assertIn("@r(app.media.skin_05_touyuan_v91)", preview)
+        self.assertIn("@r(app.media.skin_06_jingzhou_v91)", preview)
+        self.assertIn("@r(app.media.skin_07_chibi_v91)", preview)
+        self.assertIn("@r(app.media.skin_08_rushu_v91)", preview)
+        self.assertIn("@r(app.media.skin_09_hanzhong_v91)", preview)
+        self.assertIn("@r(app.media.skin_10_beifa_v91)", preview)
+        self.assertIn("ImageFit.Contain", preview)
+        self.assertIn("this.currentChapter().title", preview)
+        self.assertIn("this.screen = 4", preview)
+        self.assertNotIn("ChapterCatalog.levelsOf", preview)
+        self.assertNotIn("Canvas(this.context)", preview)
+        self.assertNotIn("@r(app.media.skin_01_zhuojun_v91)", preview)
+        self.assertNotIn("@r(app.media.skin_02_pingyuan_v91)", preview)
+        self.assertNotIn("flag-s01-guan", ui)
+        self.assertNotIn("flag_s01_guan", ui)
+        open_ch = _func_body(ui, "openChapter")
+        self.assertIn("hasSkinPreview", open_ch)
+        self.assertIn("this.screen = 6", open_ch)
+        self.assertLess(open_ch.index("return"), open_ch.index("this.screen = 5"))
+        paper = _func_body(ui, "playPaper")
+        self.assertIn("this.screen == 6", paper)
+        self.assertIn("Theme.paperOf", paper)
 
     def test_board_chrome_uses_landscape_bands_and_keeps_path2d_bar(self) -> None:
         """screen==1: composite band above the grid, not bust/flag thumbs or skins."""
@@ -823,11 +1095,46 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertTrue(chapter_is_open(1, 10))
         self.assertFalse(chapter_is_open(2, 20))
         self.assertFalse(chapter_is_open(3, 20))
+        for chapter_id in range(4, 10):
+            self.assertFalse(chapter_is_open(chapter_id, 9), chapter_id)
+            self.assertFalse(chapter_is_open(chapter_id, 20), chapter_id)
         src = (ROOT / "entry/src/main/cangjie/chapter.cj").read_text(encoding="utf-8")
         self.assertIn("func isOpen(", src)
         self.assertIn("cleared >= ch.levelStart", _func_body(src, "isOpen"))
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         self.assertIn("ChapterCatalog.isOpen(id, this.cleared)", _func_body(ui, "openChapter"))
+
+    def test_p1_skins_do_not_move_layout_or_lock(self) -> None:
+        """P1 (ab3c9c9): 09 dual-tone + mock 6×6 only. BOARD_OY / isOpen frozen."""
+        ship = (ROOT / "mockups/chapter-skins-v9/ch05-10-SHIP.md").read_text(encoding="utf-8")
+        self.assertIn("示意盘 **6×6**", ship)
+        self.assertIn("09 双调加力", ship)
+        self.assertIn("BOARD_OY_VP=**202**", ship)
+        self.assertIn("改为 lock **6×6**", ship)
+        theme = (ROOT / "entry/src/main/cangjie/theme.cj").read_text(encoding="utf-8")
+        self.assertIn("bandH: Int64 = 100", theme)
+        self.assertIn("bandClear: Int64 = 10", theme)
+        self.assertIn("designW: Int64 = 360", theme)
+        is_open = _func_body(
+            (ROOT / "entry/src/main/cangjie/chapter.cj").read_text(encoding="utf-8"),
+            "isOpen",
+        )
+        self.assertIn("cleared >= ch.levelStart", is_open)
+        self.assertIn("!ch.open", is_open)
+        self.assertIn("ch.levelCount <= 0", is_open)
+        # Exact P1 tip blobs (assets/chapter-skins-05-10-v91 @ ab3c9c9).
+        p1_skins = {
+            "skin_05_touyuan_v91.png": "db204dc88f59757a151d0d387b6b975bd672ccb969a09e55c23fd4a1c57b93cf",
+            "skin_06_jingzhou_v91.png": "b18b18528a4a1a524647a08f5d34a0d12b747dc46049aebe6c1515843233182b",
+            "skin_07_chibi_v91.png": "ee0b4558b3e8fa18398aee9b673558cec00df2324f46ccbecc3107a727a3f5ec",
+            "skin_08_rushu_v91.png": "2a795d5f606223f48ef2af07c02fe42df90306b5fb82727658dee3113f55cda6",
+            "skin_09_hanzhong_v91.png": "340d748a0e1f0bca58a1e3c8071ab90444071e84cb252f23bc2a8761d2109682",
+            "skin_10_beifa_v91.png": "002469587684464c2e51239a720255cb604e75cd6cfbdf2b3ae0030fa961b9b6",
+        }
+        media = ROOT / "entry/src/main/resources/base/media"
+        for name, digest in p1_skins.items():
+            blob = (media / name).read_bytes()
+            self.assertEqual(hashlib.sha256(blob).hexdigest(), digest, name)
 
     def test_open_chapter_refuses_locked_cards(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
@@ -854,7 +1161,8 @@ class ChapterFlowV13Tests(unittest.TestCase):
             matches = list(media.glob(f"{name}.*"))
             self.assertTrue(matches, f"missing media {name}")
             path = matches[0]
-            self.assertGreater(path.stat().st_size, 8000, f"{name} looks like a placeholder")
+            min_bytes = 4000 if name == "bust_s01_guanai" else 8000
+            self.assertGreater(path.stat().st_size, min_bytes, f"{name} looks like a placeholder")
             with Image.open(path) as im:
                 if name.startswith("bust_"):
                     self.assertEqual(im.size, (600, 800), name)
@@ -865,8 +1173,13 @@ class ChapterFlowV13Tests(unittest.TestCase):
                     self.assertEqual(im.mode, "RGBA", name)
                 elif name.startswith("skin_"):
                     self.assertEqual(im.size, (1080, 1920), name)
+                elif name.startswith("card_"):
+                    self.assertEqual(im.size, (888, 528), name)
                 elif name.startswith("band_"):
                     self.assertEqual(im.size, (1080, 300), name)
+        media_names = {p.name for p in media.iterdir()}
+        self.assertNotIn("flag-s01-guan.png", media_names)
+        self.assertNotIn("flag_s01_guan.png", media_names)
 
     def test_levels_json_unchanged_twenty_boards(self) -> None:
         from build_levels import EXPECTED_NAMES, load_verified
@@ -877,6 +1190,11 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertNotIn("dessert", blob)
         self.assertNotIn("徐州", blob)
         self.assertNotIn("吕布", blob)
+        self.assertNotIn("投袁", blob)
+        self.assertNotIn("襄阳", blob)
+        self.assertNotIn("赤壁", blob)
+        self.assertNotIn("白水关", blob)
+        self.assertNotIn("五丈原", blob)
 
 
 def road_title(name: str, catalog_index: int) -> str:

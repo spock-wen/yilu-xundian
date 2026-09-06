@@ -2,10 +2,11 @@ package ohos_app_cangjie_entry
 
 /* chapter-flow v1.3 SHIP cards over LevelCatalog.
    Catalog.open = has boards (涿郡/平原), not current unlock.
-   Runtime: 涿郡 always; 平原 iff cleared >= 10. 徐州/吕布 levelCount 0.
-   Official media (assets/chapter-v91-media): bust_p01..p07, flag_p01..p07,
-   skin_01_zhuojun_v91, skin_02_pingyuan_v91. Skins are 1080×1920 full-screen
-   mocks — keep on disk, do not drop into the 64vp chrome strip.
+   Runtime: 涿郡 always; 平原 iff cleared >= 10.
+   Locked cards only (levelCount 0, no boards): 徐州, 吕布, 投袁…北伐.
+   05–10 skins (assets/chapter-skins-05-10-v91) are fullscreen preview only.
+   Official media: bust_p01..p10 + bust_s01, flag_p01..p10 + flag_gate_pattern,
+   skin_01/02 + skin_05..10, card_05..10. Gate flag is pattern-only (no 关).
    Board landscape bands (assets/chapter-bands-v91): band_zhuojun_v91 /
    band_pingyuan_v91, 1080×300 composite (bust+flag+terrain). */
 import std.collection.ArrayList
@@ -124,6 +125,96 @@ public class ChapterCatalog {
             0,
             false
         ))
+        chapters.add(ChapterDef(
+            4,
+            "投袁",
+            "第5章 投袁",
+            "投袁·邺",
+            "乌巢仓破、半印失散；北不可回",
+            "袁绍×曹操 · 袁×曹 · 邺",
+            "袁绍×曹操 · 袁×曹 · 邺",
+            "袁→备",
+            "乌巢仓破、半印失散；北不可回",
+            "邺（乌巢仓影可辅）",
+            20,
+            0,
+            false
+        ))
+        chapters.add(ChapterDef(
+            5,
+            "荆州",
+            "第6章 荆州",
+            "荆州·襄阳",
+            "刘表辖下友道；不给曹营送",
+            "刘备×曹操 · 刘×曹 · 襄阳",
+            "刘备×曹操 · 刘×曹 · 襄阳",
+            "刘表",
+            "刘表辖下友道；不给曹营送",
+            "襄阳",
+            20,
+            0,
+            false
+        ))
+        chapters.add(ChapterDef(
+            6,
+            "赤壁",
+            "第7章 赤壁",
+            "赤壁·柴桑",
+            "孙刘联军岸；不往乌林送曹营",
+            "孙权×曹操 · 孙×曹 · 柴桑",
+            "孙权×曹操 · 孙×曹 · 柴桑",
+            "孙刘",
+            "孙刘联军岸；不往乌林送曹营",
+            "柴桑",
+            20,
+            0,
+            false
+        ))
+        chapters.add(ChapterDef(
+            7,
+            "入蜀",
+            "第8章 入蜀",
+            "入蜀·白水关",
+            "峡江入川关隘递进；非曹粮道，勿挂曹脸",
+            "刘备×关隘影 · 刘×纹样 · 白水关",
+            "刘备×关隘影 · 刘×纹样 · 白水关",
+            "蜀",
+            "峡江入川关隘递进；非曹粮道，勿挂曹脸",
+            "白水关（辅成都）",
+            20,
+            0,
+            false
+        ))
+        chapters.add(ChapterDef(
+            8,
+            "汉中南中",
+            "第9章 汉中南中",
+            "汉中南中·阳平关",
+            "两道分运：汉中关城 vs 南中北运",
+            "诸葛×曹操 · 诸葛×曹 · 阳平关",
+            "诸葛×曹操 · 诸葛×曹 · 阳平关",
+            "诸葛",
+            "两道分运：汉中关城 vs 南中北运",
+            "阳平关",
+            20,
+            0,
+            false
+        ))
+        chapters.add(ChapterDef(
+            9,
+            "北伐",
+            "第10章 北伐",
+            "北伐·五丈原",
+            "对魏远征；街亭/空仓余韵",
+            "诸葛×司马 · 诸葛×司马 · 五丈原",
+            "诸葛×司马 · 诸葛×司马 · 五丈原",
+            "诸葛",
+            "对魏远征；街亭/空仓余韵",
+            "五丈原",
+            20,
+            0,
+            false
+        ))
         return chapters
     }
 
@@ -148,6 +239,11 @@ public class ChapterCatalog {
 
     public static func selectable(chapterId: Int64, cleared: Int64): Bool {
         return ChapterCatalog.isOpen(chapterId, cleared)
+    }
+
+    /* 05–10: skin-only. Tap opens fullscreen preview, never gameplay. */
+    public static func hasSkinPreview(chapterId: Int64): Bool {
+        return chapterId >= 4 && chapterId <= 9
     }
 
     public static func openCount(cleared: Int64): Int64 {
