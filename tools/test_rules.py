@@ -9,15 +9,17 @@ behaviours, the Cangjie side is wrong unless this spec is updated first.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import math
 import sys
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from solve_levels import load_levels, solve, wall_key  # noqa: E402
+from solve_levels import load_levels, report_solve_exit, solve, wall_key  # noqa: E402
 
 
 class Cell:
@@ -114,7 +116,8 @@ class GridMap:
         return abs(a.x - b.x) + abs(a.y - b.y) == 1
 
     def blocked(self, a: Cell, b: Cell) -> bool:
-        return wall_key(a.x, a.y, b.x, b.y) in self.walls
+        """Mirrors Cangjie GridMap.blocked: non-orthogonal counts as blocked."""
+        return not self.orthogonal(a, b) or wall_key(a.x, a.y, b.x, b.y) in self.walls
 
 
 class PatrolGame:
@@ -147,8 +150,6 @@ class PatrolGame:
         last = self.path.last()
         if last is None:
             return self.number_at(cell.x, cell.y) == 1
-        if not self.grid.orthogonal(last, cell):
-            return False
         if self.grid.blocked(last, cell):
             return False
         num = self.number_at(cell.x, cell.y)
@@ -228,6 +229,12 @@ class PatrolRuleTests(unittest.TestCase):
         self.assertFalse(g.try_step(Cell(1, 1)))
         self.assertTrue(g.try_step(Cell(0, 0)))
 
+    def test_blocked_matches_cangjie_non_orthogonal(self) -> None:
+        grid = GridMap(3, 3, [])
+        self.assertTrue(grid.blocked(Cell(0, 0), Cell(1, 1)))
+        self.assertTrue(grid.blocked(Cell(0, 0), Cell(2, 0)))
+        self.assertFalse(grid.blocked(Cell(0, 0), Cell(1, 0)))
+
     def test_rejects_diagonal(self) -> None:
         g = PatrolGame(self.level())
         g.try_step(Cell(0, 0))
@@ -276,12 +283,23 @@ class PatrolRuleTests(unittest.TestCase):
         self.assertFalse(g.is_win())
 
 
+class SolverContractTests(unittest.TestCase):
+    def test_timeout_is_not_a_ship_failure(self) -> None:
+        """README: TIMEOUT keeps the board; only a proven no-solution fails."""
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(report_solve_exit(20, 0, 0), 0)
+            self.assertEqual(report_solve_exit(20, 0, 1), 0)
+            self.assertEqual(report_solve_exit(20, 1, 0), 1)
+            self.assertEqual(report_solve_exit(20, 1, 2), 1)
+
+
 class ShippedLevelPlaythroughTests(unittest.TestCase):
     def test_solver_path_wins_every_solvable_shipped_level(self) -> None:
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
         self.assertEqual(len(levels), 20)
         for level in levels:
             found = solve(level, timeout_s=8.0)
+            self.assertTrue(found, f"{level['name']} has no solution")
             path = found[0]
             game = PatrolGame(level)
             for x, y in path:

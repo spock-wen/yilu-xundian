@@ -164,6 +164,18 @@ def format_path(path: list[tuple[int, int]]) -> str:
     return " -> ".join(f"({x},{y})" for x, y in path)
 
 
+def report_solve_exit(total: int, unsolvable: int, timed_out: int) -> int:
+    """TIMEOUT keeps the board (README contract). Only a proven no-solution fails."""
+    if unsolvable:
+        print(f"RESULT: {unsolvable} unsolvable level(s). Do not ship.")
+        return 1
+    if timed_out:
+        print(f"RESULT: {total - timed_out} solved, {timed_out} timed out.")
+        return 0
+    print(f"RESULT: all {total} levels have ≥1 solution.")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Prove every shipped level has ≥1 solution.")
     parser.add_argument(
@@ -206,7 +218,6 @@ def main() -> int:
             solutions = solve(level, find_all=False, limit=args.limit, timeout_s=args.timeout)
         except SolverTimeout:
             timed_out += 1
-            failed += 1
             print(f"TIMEOUT {tag}  waypoints={wps} walls={walls}")
             continue
         if solutions:
@@ -216,14 +227,7 @@ def main() -> int:
             failed += 1
             print(f"FAIL {tag}  waypoints={wps} walls={walls}  (no solution)")
     print("-" * 60)
-    if failed:
-        print(f"RESULT: {failed} unsolvable level(s). Do not ship.")
-        return 1
-    if timed_out:
-        print(f"RESULT: {len(levels) - timed_out} solved, {timed_out} timed out.")
-        return 0
-    print(f"RESULT: all {len(levels)} levels have ≥1 solution.")
-    return 0
+    return report_solve_exit(len(levels), failed, timed_out)
 
 
 if __name__ == "__main__":
