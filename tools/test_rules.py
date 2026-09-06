@@ -8,6 +8,7 @@ behaviours, the Cangjie side is wrong unless this spec is updated first.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import sys
@@ -1121,6 +1122,19 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertIn("cleared >= ch.levelStart", is_open)
         self.assertIn("!ch.open", is_open)
         self.assertIn("ch.levelCount <= 0", is_open)
+        # Exact P1 tip blobs (assets/chapter-skins-05-10-v91 @ ab3c9c9).
+        p1_skins = {
+            "skin_05_touyuan_v91.png": "db204dc88f59757a151d0d387b6b975bd672ccb969a09e55c23fd4a1c57b93cf",
+            "skin_06_jingzhou_v91.png": "b18b18528a4a1a524647a08f5d34a0d12b747dc46049aebe6c1515843233182b",
+            "skin_07_chibi_v91.png": "ee0b4558b3e8fa18398aee9b673558cec00df2324f46ccbecc3107a727a3f5ec",
+            "skin_08_rushu_v91.png": "2a795d5f606223f48ef2af07c02fe42df90306b5fb82727658dee3113f55cda6",
+            "skin_09_hanzhong_v91.png": "340d748a0e1f0bca58a1e3c8071ab90444071e84cb252f23bc2a8761d2109682",
+            "skin_10_beifa_v91.png": "002469587684464c2e51239a720255cb604e75cd6cfbdf2b3ae0030fa961b9b6",
+        }
+        media = ROOT / "entry/src/main/resources/base/media"
+        for name, digest in p1_skins.items():
+            blob = (media / name).read_bytes()
+            self.assertEqual(hashlib.sha256(blob).hexdigest(), digest, name)
 
     def test_open_chapter_refuses_locked_cards(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
