@@ -122,6 +122,14 @@ class EntryView {
         return Theme.paper
     }
 
+    /* BANDS.md: band is full-bleed at x=0. Other screens keep Theme.inset. */
+    func playInset(): Int64 {
+        if (this.screen == 1) {
+            return 0
+        }
+        return Theme.inset
+    }
+
     func chromeLine(): String {
         let ch = this.currentChapter()
         return "友：${ch.friendLine} · 张力：${ch.tensionLine} · 城：${ch.cityLine}"
@@ -1148,46 +1156,31 @@ class EntryView {
                 }
                 .width(100.percent)
                 .height(40)
+                .padding(left: Theme.inset, right: Theme.inset)
                 Text(this.boardSubtitle())
                     .fontSize(12)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(Theme.sans)
+                    .padding(left: Theme.inset, right: Theme.inset)
                     .margin(bottom: 4)
-                Row(space: 6) {
+                    .width(100.percent)
+                /* BANDS.md composite: 涿郡 0–9 / 平原 10–19.
+                   Full-width 360×100 vp; Theme.bandClear keeps bust/flags
+                   out of the Canvas grid (band.bottom ≤ board.top − 30px). */
+                Column {
                     if (this.levelIndex < 10) {
-                        Image(@r(app.media.bust_p01_cangguan))
-                            .width(Theme.bustThumbW)
-                            .height(Theme.bustThumbH)
-                        Image(@r(app.media.flag_p01_han))
-                            .width(Theme.flagThumbW)
-                            .height(Theme.flagThumbH)
-                        Blank()
-                        Image(@r(app.media.flag_p02_huang))
-                            .width(Theme.flagThumbW)
-                            .height(Theme.flagThumbH)
-                        Image(@r(app.media.bust_p02_huangjin))
-                            .width(Theme.bustThumbW)
-                            .height(Theme.bustThumbH)
+                        Image(@r(app.media.band_zhuojun_v91))
+                            .width(100.percent)
+                            .height(Theme.bandH)
                     } else {
-                        Image(@r(app.media.bust_p03_gongsun))
-                            .width(Theme.bustThumbW)
-                            .height(Theme.bustThumbH)
-                        Image(@r(app.media.flag_p03_gongsun))
-                            .width(Theme.flagThumbW)
-                            .height(Theme.flagThumbH)
-                        Blank()
-                        Image(@r(app.media.flag_p04_yuan))
-                            .width(Theme.flagThumbW)
-                            .height(Theme.flagThumbH)
-                        Image(@r(app.media.bust_p04_yuanshao))
-                            .width(Theme.bustThumbW)
-                            .height(Theme.bustThumbH)
+                        Image(@r(app.media.band_pingyuan_v91))
+                            .width(100.percent)
+                            .height(Theme.bandH)
                     }
                 }
                 .width(100.percent)
-                .height(Theme.chromeStripH)
-                .alignItems(VerticalAlign.Center)
-                .clip(true)
+                .height(Theme.bandH)
+                .margin(bottom: Theme.bandClear)
                 Scroll {
                     Column {
                         Canvas(this.context)
@@ -1215,6 +1208,7 @@ class EntryView {
                     .fontSize(11)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(Theme.sans)
+                    .padding(left: Theme.inset, right: Theme.inset)
                     .margin(top: 4, bottom: 4)
                     .width(100.percent)
                 Divider()
@@ -1268,11 +1262,12 @@ class EntryView {
                 .width(100.percent)
                 .height(Theme.bottomBar)
                 .alignItems(VerticalAlign.Center)
+                .padding(left: Theme.inset, right: Theme.inset)
             }
         }
         .width(100.percent)
         .height(100.percent)
-        .padding(left: Theme.inset, right: Theme.inset)
+        .padding(left: this.playInset(), right: this.playInset())
         .backgroundColor(this.playPaper())
         .alignItems(HorizontalAlign.Center)
     }
