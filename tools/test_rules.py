@@ -519,6 +519,12 @@ class ChapterCatalogTests(unittest.TestCase):
         self.assertNotIn("吕布", all_fn)
         self.assertIn("levelStart", src)
         self.assertIn("levelCount", src)
+        unlocked = _func_body(src, "unlocked")
+        self.assertIn("chapterId <= 0", unlocked)
+        self.assertIn("cleared >= prev.levelStart + prev.levelCount", unlocked)
+        cleared_fn = _func_body(src, "clearedCount")
+        self.assertIn("cleared <= ch.levelStart", cleared_fn)
+        self.assertIn("cleared - ch.levelStart", cleared_fn)
 
 
 class ChapterNavUiTests(unittest.TestCase):
@@ -553,6 +559,7 @@ class ChapterNavUiTests(unittest.TestCase):
         level_list = _screen_branch(ui, 4)
         self.assertIn("ChapterCatalog", level_list)
         self.assertNotIn("LevelCatalog.all()", level_list)
+        self.assertIn("this.chapterTitle()", level_list)
         self.assertIn("this.screen = 3", level_list)
         self.assertIn("openFromList", level_list)
         self.assertIn("item.id", level_list)
