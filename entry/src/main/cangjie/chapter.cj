@@ -6,7 +6,7 @@ package ohos_app_cangjie_entry
    Locked cards only (levelCount 0, no boards): 徐州, 吕布, 投袁…北伐.
    05–10 skins (assets/chapter-skins-05-10-v91) are fullscreen preview only.
    Official media: bust_p01..p10 + bust_s01, flag_p01..p10 + flag_gate_pattern,
-   skin_01/02 + skin_05..10, card_05..10. Do not use flag-s01-guan.
+   skin_01/02 + skin_05..10, card_05..10. Gate flag is pattern-only (no 关).
    Board landscape bands (assets/chapter-bands-v91): band_zhuojun_v91 /
    band_pingyuan_v91, 1080×300 composite (bust+flag+terrain). */
 import std.collection.ArrayList
