@@ -764,6 +764,8 @@ class ChapterFlowV13Tests(unittest.TestCase):
         body = _func_body(ui, "openChapter")
         self.assertIn("this.cleared", body)
         self.assertTrue("isOpen" in body or "selectable" in body)
+        self.assertIn("return", body)
+        self.assertLess(body.index("return"), body.index("this.screen = 5"))
         self.assertIn("this.screen = 5", body)
         current = _func_body(ui, "chapterCurrentName")
         self.assertIn("isOpen", current)
