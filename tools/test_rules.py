@@ -370,6 +370,10 @@ class VerifiedCatalogTests(unittest.TestCase):
         self.assertIn("bustThumbW: Int64 = 36", theme)
         self.assertIn("bustThumbH: Int64 = 48", theme)
         self.assertIn("chromeStripH: Int64 = 64", theme)
+        # BANDS.md: 1080×300 px = 360×100 vp at SCALE 3; 30px clear = 10 vp.
+        self.assertIn("designW: Int64 = 360", theme)
+        self.assertIn("bandH: Int64 = 100", theme)
+        self.assertIn("bandClear: Int64 = 10", theme)
 
 
 # chapter-flow v1.3 SHIP cards. Locked 徐州/吕布 are cards only — no boards.
@@ -393,6 +397,7 @@ SHIP_CHAPTERS = (
         "rightBust": "bust_p02_huangjin",
         "rightFlag": "flag_p02_huang",
         "skin": "skin_01_zhuojun_v91",
+        "band": "band_zhuojun_v91",
     },
     {
         "id": 1,
@@ -413,6 +418,7 @@ SHIP_CHAPTERS = (
         "rightBust": "bust_p04_yuanshao",
         "rightFlag": "flag_p04_yuan",
         "skin": "skin_02_pingyuan_v91",
+        "band": "band_pingyuan_v91",
     },
     {
         "id": 2,
@@ -473,7 +479,33 @@ SHIP_MEDIA = (
     "flag_p07_lv",
     "skin_01_zhuojun_v91",
     "skin_02_pingyuan_v91",
+    "band_zhuojun_v91",
+    "band_pingyuan_v91",
 )
+
+# BANDS.md locked geometry on the 1080×1920 / SCALE 3 design canvas.
+BAND_SCALE = 3
+BAND_ORIGIN_PX = (0, 246)
+BAND_SIZE_PX = (1080, 300)
+BAND_SIZE_VP = (360, 100)
+BOARD_TOP_PX = 576
+BOARD_CLEAR_PX = 30
+
+
+def board_band_name(level_index: int) -> str:
+    """Composite landscape band: 涿郡 0–9, 平原 10–19."""
+    if level_index < 10:
+        return "band_zhuojun_v91"
+    return "band_pingyuan_v91"
+
+
+def band_bottom_px() -> int:
+    return BAND_ORIGIN_PX[1] + BAND_SIZE_PX[1]
+
+
+def band_clears_board() -> bool:
+    """Hard rule: band.bottom ≤ board.top − 30 so bust/flags never enter the grid."""
+    return band_bottom_px() <= BOARD_TOP_PX - BOARD_CLEAR_PX
 
 
 def chapter_by_id(chapter_id: int) -> dict:
@@ -732,17 +764,23 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertNotIn("5×5", stations)
         self.assertNotIn("5x5", stations)
 
-    def test_board_chrome_uses_official_busts_flags_and_keeps_path2d_bar(self) -> None:
+    def test_board_chrome_uses_landscape_bands_and_keeps_path2d_bar(self) -> None:
+        """screen==1: composite band above the grid, not bust/flag thumbs or skins."""
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         board = _screen_branch(ui, 1)
-        self.assertIn("@r(app.media.bust_p01_cangguan)", board)
-        self.assertIn("@r(app.media.flag_p01_han)", board)
-        self.assertIn("@r(app.media.bust_p02_huangjin)", board)
-        self.assertIn("@r(app.media.flag_p02_huang)", board)
-        self.assertIn("@r(app.media.bust_p03_gongsun)", board)
-        self.assertIn("@r(app.media.flag_p03_gongsun)", board)
-        self.assertIn("@r(app.media.bust_p04_yuanshao)", board)
-        self.assertIn("@r(app.media.flag_p04_yuan)", board)
+        self.assertIn("@r(app.media.band_zhuojun_v91)", board)
+        self.assertIn("@r(app.media.band_pingyuan_v91)", board)
+        self.assertIn("this.levelIndex < 10", board)
+        self.assertIn("100.percent", board)
+        self.assertIn("Theme.bandH", board)
+        self.assertIn("Theme.bandClear", board)
+        self.assertIn("this.roadTitle()", board)
+        self.assertIn("this.boardSubtitle()", board)
+        # Composite already has bust+flag+terrain — do not restack thumbs on the board.
+        self.assertNotIn("@r(app.media.bust_p01_cangguan)", board)
+        self.assertNotIn("@r(app.media.flag_p01_han)", board)
+        self.assertNotIn("@r(app.media.bust_p03_gongsun)", board)
+        self.assertNotIn("@r(app.media.flag_p04_yuan)", board)
         # Official skins are 1080×1920 full-screen mocks. Putting them in the
         # 64vp chrome strip recreates the overflow/blur reject of PR #12.
         self.assertNotIn("@r(app.media.skin_01_zhuojun_v91)", ui)
@@ -752,12 +790,44 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertIn("城：", ui)
         self.assertIn("chromeLine", ui)
         self.assertIn("boardSubtitle", ui)
-        self.assertIn("Theme.chromeStripH", ui)
         bar = _play_bottom_bar(ui)
         self.assertIn("撤销", bar)
         self.assertIn("重绘驿道", bar)
         self.assertIn("Path2D()", _func_body(ui, "drawUndoIcon"))
         self.assertIn("Path2D()", _func_body(ui, "drawRedrawIcon"))
+        self.assertGreater(board.index("@r(app.media.band_zhuojun_v91)"), board.index("this.roadTitle()"))
+        self.assertGreater(board.index("Canvas(this.context)"), board.index("Theme.bandH"))
+
+    def test_band_geometry_clears_the_grid(self) -> None:
+        """BANDS.md: origin (0,246) h=300; band.bottom ≤ board.top − 30."""
+        self.assertEqual(BAND_ORIGIN_PX, (0, 246))
+        self.assertEqual(BAND_SIZE_PX, (1080, 300))
+        self.assertEqual(BAND_SIZE_VP, (360, 100))
+        self.assertEqual(BAND_SIZE_PX[0] // BAND_SCALE, BAND_SIZE_VP[0])
+        self.assertEqual(BAND_SIZE_PX[1] // BAND_SCALE, BAND_SIZE_VP[1])
+        self.assertEqual(BOARD_CLEAR_PX // BAND_SCALE, 10)
+        self.assertEqual(band_bottom_px(), 546)
+        self.assertTrue(band_clears_board())
+        self.assertEqual(BOARD_TOP_PX - band_bottom_px(), BOARD_CLEAR_PX)
+        self.assertEqual([board_band_name(i) for i in range(10)], ["band_zhuojun_v91"] * 10)
+        self.assertEqual([board_band_name(i) for i in range(10, 20)], ["band_pingyuan_v91"] * 10)
+        self.assertEqual(chapter_by_id(0)["band"], "band_zhuojun_v91")
+        self.assertEqual(chapter_by_id(1)["band"], "band_pingyuan_v91")
+
+    def test_progress_lock_intact_after_bands(self) -> None:
+        """PR #15: 平原 locked while cleared<10; 徐州/吕布 stay closed."""
+        for cleared in (0, 3, 9):
+            self.assertTrue(chapter_is_open(0, cleared), cleared)
+            self.assertFalse(chapter_is_open(1, cleared), cleared)
+            self.assertFalse(chapter_selectable(1, cleared), cleared)
+        self.assertTrue(chapter_is_open(1, 10))
+        self.assertFalse(chapter_is_open(2, 20))
+        self.assertFalse(chapter_is_open(3, 20))
+        src = (ROOT / "entry/src/main/cangjie/chapter.cj").read_text(encoding="utf-8")
+        self.assertIn("func isOpen(", src)
+        self.assertIn("cleared >= ch.levelStart", _func_body(src, "isOpen"))
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        self.assertIn("ChapterCatalog.isOpen(id, this.cleared)", _func_body(ui, "openChapter"))
 
     def test_open_chapter_refuses_locked_cards(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
@@ -795,6 +865,8 @@ class ChapterFlowV13Tests(unittest.TestCase):
                     self.assertEqual(im.mode, "RGBA", name)
                 elif name.startswith("skin_"):
                     self.assertEqual(im.size, (1080, 1920), name)
+                elif name.startswith("band_"):
+                    self.assertEqual(im.size, (1080, 300), name)
 
     def test_levels_json_unchanged_twenty_boards(self) -> None:
         from build_levels import EXPECTED_NAMES, load_verified

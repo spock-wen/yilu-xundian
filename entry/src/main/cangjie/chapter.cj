@@ -5,7 +5,9 @@ package ohos_app_cangjie_entry
    Runtime: 涿郡 always; 平原 iff cleared >= 10. 徐州/吕布 levelCount 0.
    Official media (assets/chapter-v91-media): bust_p01..p07, flag_p01..p07,
    skin_01_zhuojun_v91, skin_02_pingyuan_v91. Skins are 1080×1920 full-screen
-   mocks — keep on disk, do not drop into the 64vp chrome strip. */
+   mocks — keep on disk, do not drop into the 64vp chrome strip.
+   Board landscape bands (assets/chapter-bands-v91): band_zhuojun_v91 /
+   band_pingyuan_v91, 1080×300 composite (bust+flag+terrain). */
 import std.collection.ArrayList
 import ohos_app_cangjie_entry.game.LevelDef
 

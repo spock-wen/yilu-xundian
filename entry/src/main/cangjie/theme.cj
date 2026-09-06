@@ -36,6 +36,11 @@ public class Theme {
     public static let bustThumbW: Int64 = 36
     public static let bustThumbH: Int64 = 48
     public static let chromeStripH: Int64 = 64
+    /* BANDS.md landscape strip: 1080×300 px = 360×100 vp at SCALE 3.
+       Origin (0, 246). Hard rule: band.bottom ≤ board.top − 30px (= 10 vp). */
+    public static let designW: Int64 = 360
+    public static let bandH: Int64 = 100
+    public static let bandClear: Int64 = 10
     public static let tutorialCell: Int64 = 48
     public static let boardInner: Int64 = 288
     /* Mock 03-station: ~40 circle on the 48vp tutorial cell. */
