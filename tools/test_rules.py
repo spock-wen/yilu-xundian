@@ -1103,6 +1103,25 @@ class ChapterFlowV13Tests(unittest.TestCase):
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         self.assertIn("ChapterCatalog.isOpen(id, this.cleared)", _func_body(ui, "openChapter"))
 
+    def test_p1_skins_do_not_move_layout_or_lock(self) -> None:
+        """P1 (ab3c9c9): 09 dual-tone + mock 6×6 only. BOARD_OY / isOpen frozen."""
+        ship = (ROOT / "mockups/chapter-skins-v9/ch05-10-SHIP.md").read_text(encoding="utf-8")
+        self.assertIn("示意盘 **6×6**", ship)
+        self.assertIn("09 双调加力", ship)
+        self.assertIn("BOARD_OY_VP=**202**", ship)
+        self.assertIn("改为 lock **6×6**", ship)
+        theme = (ROOT / "entry/src/main/cangjie/theme.cj").read_text(encoding="utf-8")
+        self.assertIn("bandH: Int64 = 100", theme)
+        self.assertIn("bandClear: Int64 = 10", theme)
+        self.assertIn("designW: Int64 = 360", theme)
+        is_open = _func_body(
+            (ROOT / "entry/src/main/cangjie/chapter.cj").read_text(encoding="utf-8"),
+            "isOpen",
+        )
+        self.assertIn("cleared >= ch.levelStart", is_open)
+        self.assertIn("!ch.open", is_open)
+        self.assertIn("ch.levelCount <= 0", is_open)
+
     def test_open_chapter_refuses_locked_cards(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         body = _func_body(ui, "openChapter")
