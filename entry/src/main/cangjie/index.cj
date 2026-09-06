@@ -108,42 +108,46 @@ class EntryView {
         this.refresh()
     }
 
-    /* Mock 甲 24vp hairline arrows. Path2D + stroke(path) / fill(path)
-       from docs_cangjie cj-canvas-drawing-canvasrenderingcontext2d.md
-       (lineWidth is a property). Harmony Button default start-icon tofu
-       is avoided by drawing on Canvas inside a clickable Row. */
+    /* Approved 24vp stroke-only undo/redraw (icons/icon-undo.svg,
+       icons/icon-reset.svg). SVG A → Path2D.arc; open chevron is two
+       separate moveTo/lineTo strokes. lineWidth is a property
+       (docs_cangjie cj-canvas-drawing-canvasrenderingcontext2d.md).
+       Harmony Button default start-icon tofu is avoided by drawing on
+       Canvas inside a clickable Row. */
     func drawUndoIcon(): Unit {
         this.undoContext.clearRect(0.0, 0.0, Float64(Theme.iconVp), Float64(Theme.iconVp))
-        this.undoContext.lineWidth = Theme.hairline
+        this.undoContext.lineWidth = 1.5
         this.undoContext.strokeStyle = Theme.ink
-        this.undoContext.fillStyle = Theme.ink
         this.undoContext.lineCap = "round"
         let undoArc = Path2D()
-        undoArc.arc(12.0, 12.0, 7.0, 0.35, 3.32, counterclockwise: true)
+        undoArc.arc(13.02, 12.07, 6.35, 2.28, 4.18, counterclockwise: true)
         this.undoContext.stroke(undoArc)
-        this.undoContext.beginPath()
-        this.undoContext.moveTo(1.5, 10.8)
-        this.undoContext.lineTo(5.1, 8.7)
-        this.undoContext.lineTo(5.1, 12.9)
-        this.undoContext.closePath()
-        this.undoContext.fill()
+        let undoArmA = Path2D()
+        undoArmA.moveTo(12.0, 2.5)
+        undoArmA.lineTo(6.5, 6.5)
+        this.undoContext.stroke(undoArmA)
+        let undoArmB = Path2D()
+        undoArmB.moveTo(6.5, 9.5)
+        undoArmB.lineTo(12.0, 14.0)
+        this.undoContext.stroke(undoArmB)
     }
 
     func drawRedrawIcon(): Unit {
         this.redrawContext.clearRect(0.0, 0.0, Float64(Theme.iconVp), Float64(Theme.iconVp))
-        this.redrawContext.lineWidth = Theme.hairline
+        this.redrawContext.lineWidth = 1.5
         this.redrawContext.strokeStyle = Theme.ink
-        this.redrawContext.fillStyle = Theme.ink
         this.redrawContext.lineCap = "round"
         let redrawArc = Path2D()
-        redrawArc.arc(12.0, 12.0, 7.0, 3.93, 2.36, counterclockwise: false)
+        redrawArc.arc(10.98, 12.07, 6.35, 0.86, 5.24, counterclockwise: false)
         this.redrawContext.stroke(redrawArc)
-        this.redrawContext.beginPath()
-        this.redrawContext.moveTo(4.5, 19.5)
-        this.redrawContext.lineTo(5.5, 15.4)
-        this.redrawContext.lineTo(8.5, 18.4)
-        this.redrawContext.closePath()
-        this.redrawContext.fill()
+        let redrawArmA = Path2D()
+        redrawArmA.moveTo(12.0, 2.5)
+        redrawArmA.lineTo(17.5, 6.5)
+        this.redrawContext.stroke(redrawArmA)
+        let redrawArmB = Path2D()
+        redrawArmB.moveTo(17.5, 9.5)
+        redrawArmB.lineTo(12.0, 14.0)
+        this.redrawContext.stroke(redrawArmB)
     }
 
     func handleDrag(event: TouchEvent): Unit {

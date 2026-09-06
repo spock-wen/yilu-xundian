@@ -9,6 +9,7 @@ behaviours, the Cangjie side is wrong unless this spec is updated first.
 from __future__ import annotations
 
 import json
+import math
 import sys
 import unittest
 from pathlib import Path
@@ -428,7 +429,7 @@ def _func_body(src: str, name: str) -> str:
 
 
 class BottomBarIconTests(unittest.TestCase):
-    """Mock 甲: thin-stroke Path2D arrows, not Harmony Button default tofu icons."""
+    """Approved 24vp stroke-only open-chevron icons, not filled tips or tofu."""
 
     def test_undo_clear_are_not_harmony_buttons(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
@@ -451,7 +452,10 @@ class BottomBarIconTests(unittest.TestCase):
         self.assertIn("counterclockwise: true", undo)
         self.assertIn("counterclockwise: false", redraw)
         self.assertIn("lineWidth", undo)
-        self.assertIn("Theme.hairline", undo)
+        self.assertIn("lineWidth = 1.5", undo)
+        self.assertIn("lineWidth = 1.5", redraw)
+        self.assertNotIn("Theme.hairline", undo)
+        self.assertNotIn("Theme.hairline", redraw)
         self.assertIn("Theme.ink", undo)
         self.assertIn("Theme.ink", redraw)
         self.assertIn("Path2D()", undo)
@@ -467,26 +471,53 @@ class BottomBarIconTests(unittest.TestCase):
         self.assertIn("Canvas(this.undoContext)", bar)
         self.assertIn("Canvas(this.redrawContext)", bar)
 
-    def test_icon_geometry_matches_mock_jia(self) -> None:
+    def test_icons_are_stroke_only_open_chevron(self) -> None:
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        undo = _func_body(ui, "drawUndoIcon")
+        redraw = _func_body(ui, "drawRedrawIcon")
+        for body in (undo, redraw):
+            self.assertNotIn("closePath", body)
+            self.assertNotIn("fill(", body)
+            self.assertNotIn("fillStyle", body)
+            self.assertIn("moveTo", body)
+            self.assertIn("lineTo", body)
+            self.assertEqual(body.count("stroke("), 3)
+            self.assertEqual(body.count("lineTo("), 2)
+        # Old filled-triangle vertices from the 24vp blob.
+        blob = undo + redraw
+        for token in ("10.8", "8.7", "12.9", "19.5", "15.4", "18.4"):
+            self.assertNotIn(token, blob)
+
+    def test_icon_geometry_matches_svg(self) -> None:
         from bar_icons import (  # noqa: E402
             ICON_VP,
             REDRAW,
+            STROKE,
             UNDO,
-            arrowhead_points,
             assert_inside_icon,
+            assert_open_chevron,
         )
 
         self.assertEqual(ICON_VP, 24)
-        self.assertTrue(UNDO.counterclockwise)
-        self.assertFalse(REDRAW.counterclockwise)
-        self.assertGreater(UNDO.sweep_rad(), 3.0)
-        self.assertLess(UNDO.sweep_rad(), 4.1)
-        self.assertGreater(REDRAW.sweep_rad(), 4.0)
-        self.assertLess(REDRAW.sweep_rad(), 5.2)
+        self.assertEqual(STROKE, 1.5)
+        self.assertTrue(UNDO.counterclockwise())
+        self.assertFalse(REDRAW.counterclockwise())
+        self.assertGreater(UNDO.sweep_rad(), 4.2)
+        self.assertLess(UNDO.sweep_rad(), 4.6)
+        self.assertGreater(REDRAW.sweep_rad(), 4.2)
+        self.assertLess(REDRAW.sweep_rad(), 4.6)
         for spec in (UNDO, REDRAW):
-            assert_inside_icon(spec.end_point())
-            for pt in arrowhead_points(spec):
-                assert_inside_icon(pt)
+            assert_open_chevron(spec)
+            assert_inside_icon((spec.arc_x0, spec.arc_y0))
+            assert_inside_icon((spec.arc_x1, spec.arc_y1))
+            for arm in (spec.arm_a, spec.arm_b):
+                for pt in arm.points():
+                    assert_inside_icon(pt)
+            cx, cy, r, start, end, _ccw = spec.canvas_arc()
+            self.assertAlmostEqual(cx + r * math.cos(start), spec.arc_x0, places=2)
+            self.assertAlmostEqual(cy + r * math.sin(start), spec.arc_y0, places=2)
+            self.assertAlmostEqual(cx + r * math.cos(end), spec.arc_x1, places=2)
+            self.assertAlmostEqual(cy + r * math.sin(end), spec.arc_y1, places=2)
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         undo = _func_body(ui, "drawUndoIcon")
         redraw = _func_body(ui, "drawRedrawIcon")
@@ -494,6 +525,21 @@ class BottomBarIconTests(unittest.TestCase):
             self.assertIn(token, undo, f"missing undo token {token}")
         for token in REDRAW.cj_tokens():
             self.assertIn(token, redraw, f"missing redraw token {token}")
+
+    def test_committed_svgs_match_spec(self) -> None:
+        from bar_icons import REDRAW, UNDO  # noqa: E402
+
+        undo_svg = (ROOT / "icons/icon-undo.svg").read_text(encoding="utf-8")
+        reset_svg = (ROOT / "icons/icon-reset.svg").read_text(encoding="utf-8")
+        self.assertEqual(undo_svg, UNDO.icon_svg())
+        self.assertEqual(reset_svg, REDRAW.icon_svg())
+        for raw in (undo_svg, reset_svg):
+            self.assertIn('stroke-width="1.5"', raw)
+            self.assertIn("stroke-linecap=\"round\"", raw)
+            self.assertNotIn("<polygon", raw)
+            self.assertNotIn("closePath", raw)
+            self.assertEqual(raw.count('fill="none"'), 1)
+            self.assertEqual(raw.count("fill="), 1)
 
 
 def station_number_vp(cell_size: float) -> int:
