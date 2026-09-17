@@ -24,4 +24,4 @@ Preconditions:
 ## Gotchas
 
 - Empty-path undo must not crash; absence of a toast is OK.
-- Icon regressions are visual; PNG proof is mandatory for icon ships.
+- Icon regressions are visual; fullscreen JPEG proof is mandatory for icon ships.

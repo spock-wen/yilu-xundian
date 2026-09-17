@@ -47,13 +47,13 @@ If doctor fails, fix the environment before Drive.
 Harness: `tools/verify/control_yilu.py`. Prefer text/bounds from `uitest dumpLayout` over hard-coded coordinates. Coordinates in feature recipes are fallbacks for the 1080×2340-class emulator used in prior ships; re-dump if layout drifts.
 
 ```bash
-# Home → 开始传书 (primary smoke)
+# Home → 开始传书 → current board (fresh install: 涿郡·涿)
 python3 tools/verify/control_yilu.py drive home-start
 
 # Home → 章节 (chapter list)
 python3 tools/verify/control_yilu.py drive chapter-list
 
-# After chapter list open: enter 涿郡 first station board (when 可入)
+# 章节 → 涿郡·驿程 → first station board (when 可入)
 python3 tools/verify/control_yilu.py drive board-zhuo
 
 # On board: tap 撤销 / 重绘驿道 chrome (does not claim a full clear)
@@ -64,12 +64,16 @@ Read `.cursor/skills/verify-yilu-xundian/features/` before a non-smoke run. A pr
 
 ## Evidence
 
-Directory (survives cleanup): `artifacts/verify/<run-id>/`
+Live directory (survives cleanup, gitignored): `artifacts/verify/<run-id>/`
+
+hdc `snapshot_display` writes **JPEG** (`<label>.jpeg`), not PNG. Pair with `<label>.layout.json` when claiming a tap.
+
+For a review gate, copy that run folder to `_ship/verify-proof/<run-id>/` (see the tracked `PROOF.md` there). Do not treat `artifacts/verify/` as the committed proof — it is ignored.
 
 Required for review gate:
 
-- Fullscreen PNG via `snapshot_display` (not a cropped window).
-- Optional: `uitest dumpLayout` JSON beside the PNG.
+- Fullscreen JPEG via `snapshot_display` (not a cropped window).
+- Optional: `uitest dumpLayout` JSON beside the JPEG.
 - `PROOF.md` naming feature ID, commands, target, git SHA, and what the screenshot shows.
 
 ```bash
@@ -98,7 +102,7 @@ Force-stops `com.yilu.xundian`. Does not delete `artifacts/verify/`. Does not un
 | `python3 tools/verify/control_yilu.py launch` | Start EntryAbility |
 | `python3 tools/verify/control_yilu.py drive <feature>` | Drive one mapped path |
 | `python3 tools/verify/control_yilu.py evidence --label <id>` | Screenshot + layout dump |
-| `python3 tools/verify/control_yilu.py proof-home` | launch → doctor → home-start → evidence → cleanup |
+| `python3 tools/verify/control_yilu.py proof-home` | doctor → launch → home-start → evidence → cleanup |
 | `python3 tools/verify/control_yilu.py cleanup` | Stop ability |
 
 Env:

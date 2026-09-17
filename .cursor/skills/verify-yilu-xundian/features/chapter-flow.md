@@ -1,6 +1,6 @@
 # Chapter flow
 
-Chapter list (v1.3) lets the player pick 涿郡 / 平原 when open, see grey-locked later chapters, and open skin preview for locked skinned chapters without inventing boards.
+Chapter list (v1.3) lets the player pick 涿郡 / 平原 when open, see locked later chapters (`未开`), and open fullscreen skin preview for chapters 05–10 (投袁…北伐) without inventing boards. 徐州 / 吕布 stay card-only (tap is a no-op).
 
 ## Sub-features
 
@@ -10,8 +10,8 @@ Chapter list (v1.3) lets the player pick 涿郡 / 平原 when open, see grey-loc
 
 ## How to get to it (user POV)
 
-- From Home choose the 章节 / 驿程 entry the build exposes (shipped UI uses chapter navigation from Home chrome).
-- Run `drive chapter-list` which taps the documented Home secondary control then asserts list chrome.
+- From Home tap the bordered `章节` row (not the muted `驿程` link — that opens the global station list).
+- Run `drive chapter-list` which taps `章节` then dumps list chrome.
 
 ## Driving it with control_yilu
 
@@ -20,11 +20,11 @@ Preconditions:
 - Doctor passed; prefer cold launch.
 - For 涿郡 enter: chapter 涿郡 must be open (default for fresh install).
 
-- **Open list.** Run `python3 tools/verify/control_yilu.py drive chapter-list`. Screenshot/list dump shows chapter titles such as `涿郡` and locked later chapters.
-- **Enter 涿郡.** Run `python3 tools/verify/control_yilu.py drive board-zhuo` only after list is open (or use the combined path the script documents). 驿程 or board for 涿郡 appears.
-- **Evidence.** `evidence --label chapter-list` with at least two chapter rows visible.
+- **Open list.** Run `python3 tools/verify/control_yilu.py drive chapter-list`. Screenshot/list dump shows `章节`, `涿郡` `可入`, and later `未开` cards.
+- **Enter 涿郡.** Run `python3 tools/verify/control_yilu.py drive board-zhuo`. The chapter-card tap lands on `涿郡·驿程` (screen 5); a station-row tap is required before the patrol board.
+- **Evidence.** `evidence --label chapter-list` (JPEG + layout) with at least two chapter rows visible.
 
 ## Gotchas
 
-- 徐州 / 吕布 / 05–10 may show skin cards but `levelCount` 0. Do not claim a playable board there.
+- 徐州 / 吕布 have `levelCount` 0 and no fullscreen skin preview (tap stays on the list). Chapters 05–10 show skin cards / preview only. Do not claim a playable board there.
 - 平原 may be `未开` until progress lock is satisfied. That is expected; see progress-lock.md.

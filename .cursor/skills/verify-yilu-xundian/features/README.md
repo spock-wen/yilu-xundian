@@ -15,12 +15,13 @@ Maintained source for verifying user-facing behavior of `com.yilu.xundian`. Read
 - Start from cold launch or Home unless a recipe says otherwise.
 - Prefer `uitest dumpLayout` text matches (`开始传书`, `章节`, `撤销`, `重绘驿道`, `涿郡`, `可入`, `未开`) over raw coordinates.
 - Treat every `control_yilu.py` invocation as literal.
-- After each drive, keep evidence under `artifacts/verify/<run-id>/`.
+- After each drive, keep live evidence under `artifacts/verify/<run-id>/` (gitignored JPEG + layout).
+- Review-gate copies live under `_ship/verify-proof/<run-id>/` with `PROOF.md`.
 
 ## Proof and skip reporting
 
-- UI proof needs a fullscreen PNG with readable chrome (title or bottom bar visible).
-- Pair PNG with layout dump when claiming a control was tapped.
+- UI proof needs a fullscreen JPEG with readable chrome (title or bottom bar visible).
+- Pair JPEG with layout dump when claiming a control was tapped.
 - Report unreachable paths with the unmet precondition (e.g. 平原 locked while `cleared < 10`).
 - Do not claim board clear unless the 通关 overlay is in evidence (full clear is slow; smoke may stop at board chrome).
 
