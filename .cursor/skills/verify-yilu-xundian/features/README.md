@@ -14,6 +14,7 @@ Maintained source for verifying user-facing behavior of `com.yilu.xundian`. Read
 
 - Start from cold launch or Home unless a recipe says otherwise.
 - Prefer `uitest dumpLayout` text matches (`开始传书`, `章节`, `撤销`, `重绘驿道`, `涿郡`, `可入`, `未开`) over raw coordinates.
+- Station rows (涿郡·驿程) use `当前` / `已通` / `锁` and the level name (`涿郡·涿`). `可入` / `未开` are chapter-card badges only. Do not tap `驿程` when the recipe says `章节`.
 - Treat every `control_yilu.py` invocation as literal.
 - After each drive, keep live evidence under `artifacts/verify/<run-id>/` (gitignored JPEG + layout).
 - Review-gate copies live under `_ship/verify-proof/<run-id>/` with `PROOF.md`.

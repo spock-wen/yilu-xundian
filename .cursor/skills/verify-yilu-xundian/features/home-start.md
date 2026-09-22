@@ -27,5 +27,5 @@ Preconditions:
 ## Gotchas
 
 - A warm process may resume mid-board. Prefer `cleanup` then `launch` for Home proofs.
-- Coordinate fallbacks assume ~1080-wide phone emulator. Re-dump layout if the tap misses.
+- `drive home-start` taps `开始传书` from dumpLayout only (no pixel fallback). The tracked proof surface is 1320×2856 (`_ship/verify-proof/20260916T092315Z/home-start.layout.json` root bounds). Do not assume a 1080-wide tap point.
 - Rules tests passing do not prove Home rendered.

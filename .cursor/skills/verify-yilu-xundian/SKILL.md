@@ -44,7 +44,7 @@ If doctor fails, fix the environment before Drive.
 
 ## Drive
 
-Harness: `tools/verify/control_yilu.py`. Prefer text/bounds from `uitest dumpLayout` over hard-coded coordinates. Coordinates in feature recipes are fallbacks for the 1080×2340-class emulator used in prior ships; re-dump if layout drifts.
+Harness: `tools/verify/control_yilu.py`. Prefer text/bounds from `uitest dumpLayout` over hard-coded coordinates. Pixel fallbacks exist only for `撤销` / `重绘驿道`, taken from text-node centers in `_ship/verify-proof/20260916T092315Z/home-start.layout.json` (root bounds `[0,0][1320,2856]`). That dump is not a 1080-wide surface. If the root bounds change, ignore the fallbacks and re-dump. Home and chapter taps have no pixel fallback; a missing text match fails the drive.
 
 ```bash
 # Home → 开始传书 → current board (fresh install: 涿郡·涿)
@@ -53,7 +53,7 @@ python3 tools/verify/control_yilu.py drive home-start
 # Home → 章节 (chapter list)
 python3 tools/verify/control_yilu.py drive chapter-list
 
-# 章节 → 涿郡·驿程 → first station board (when 可入)
+# 章节 card (badge 可入) → screen 5 涿郡·驿程 → station row 涿郡·涿 (badge 当前)
 python3 tools/verify/control_yilu.py drive board-zhuo
 
 # On board: tap 撤销 / 重绘驿道 chrome (does not claim a full clear)

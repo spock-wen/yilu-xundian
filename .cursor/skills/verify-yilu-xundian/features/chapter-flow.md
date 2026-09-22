@@ -21,7 +21,7 @@ Preconditions:
 - For 涿郡 enter: chapter 涿郡 must be open (default for fresh install).
 
 - **Open list.** Run `python3 tools/verify/control_yilu.py drive chapter-list`. Screenshot/list dump shows `章节`, `涿郡` `可入`, and later `未开` cards.
-- **Enter 涿郡.** Run `python3 tools/verify/control_yilu.py drive board-zhuo`. The chapter-card tap lands on `涿郡·驿程` (screen 5); a station-row tap is required before the patrol board.
+- **Enter 涿郡.** Run `python3 tools/verify/control_yilu.py drive board-zhuo`. It taps `章节`, then the chapter card whose label contains `涿郡` (badge `可入`, screen 4), which lands on `涿郡·驿程` (screen 5). It then taps the station name `涿郡·涿` (row badge `当前`). Station rows do not say `可入`. A needle of `涿` matches the screen title `涿郡·驿程` before the station row.
 - **Evidence.** `evidence --label chapter-list` (JPEG + layout) with at least two chapter rows visible.
 
 ## Gotchas

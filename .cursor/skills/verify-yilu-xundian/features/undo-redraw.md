@@ -18,7 +18,7 @@ Preconditions:
 
 - On a board screen (`drive board-zhuo` first).
 
-- **Tap chrome.** Run `python3 tools/verify/control_yilu.py drive undo-redraw`. Layout dump before/after still shows board; no crash.
+- **Tap chrome.** Run `python3 tools/verify/control_yilu.py drive undo-redraw`. The drive returns non-zero if `撤销` or `重绘驿道` is missing from the dump. Layout dump before/after still shows the board; no crash.
 - **Evidence.** `evidence --label undo-redraw` with bottom bar in frame.
 
 ## Gotchas

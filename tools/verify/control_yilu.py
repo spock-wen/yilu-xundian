@@ -62,12 +62,14 @@ def git_sha() -> str:
 def cmd_doctor(_: argparse.Namespace) -> int:
     print(f"target={TARGET} bundle={BUNDLE} sha={git_sha()}")
     listed = hdc("list", "targets", check=False)
+    blob = (listed.stdout or "") + (listed.stderr or "")
     print(listed.stdout or listed.stderr)
-    if TARGET.split(":")[0] not in (listed.stdout or "") and TARGET not in (listed.stdout or ""):
-        # hdc may print bare IP or IP:port
-        if TARGET not in (listed.stdout or "") and "Empty" in (listed.stdout or listed.stderr or ""):
-            print("doctor FAIL: no hdc targets", file=sys.stderr)
-            return 1
+    # hdc may print bare IP or IP:port. Absent target is a fail
+    # (do not pass just because the output lacks the word "Empty").
+    host = TARGET.split(":")[0]
+    if TARGET not in blob and host not in blob:
+        print("doctor FAIL: target not in hdc list targets", file=sys.stderr)
+        return 1
     dump = hdc_shell(f"bm dump -n {BUNDLE}", check=False)
     if dump.returncode != 0 or BUNDLE not in (dump.stdout or ""):
         # older images use different bm flags; try aa dump
@@ -178,40 +180,46 @@ def tap_text(needle: str, fallback: tuple[int, int] | None = None) -> bool:
     return True
 
 
-# Fallback centers for 1080×~2340 phone emulator used in prior ships (vp scale ~3).
-FB_START = (540, 1500)
-FB_CHAPTER = (540, 1700)
-FB_ZHUO = (540, 700)
-FB_UNDO = (270, 2200)
-FB_REDRAW = (810, 2200)
+# Last-resort pixels only. Measured text-node centers in
+# _ship/verify-proof/20260916T092315Z/home-start.layout.json
+# (root bounds [0,0][1320,2856]): 撤销 [355,2599][467,2665],
+# 重绘驿道 [910,2599][1134,2665]. Not a 1080-wide assumption.
+# Home / chapter taps have no measured fallback in that dump — fail closed.
+FB_UNDO = (411, 2632)
+FB_REDRAW = (1022, 2632)
 
 
 def cmd_drive(ns: argparse.Namespace) -> int:
     feat = ns.feature
     if feat == "home-start":
-        ok = tap_text("开始传书", FB_START)
+        ok = tap_text("开始传书", None)
         return 0 if ok else 2
     if feat == "chapter-list":
-        # Try secondary entries then assert 章节/涿郡 appears
-        if not tap_text("章节", FB_CHAPTER):
-            tap_text("驿程", FB_CHAPTER)
+        # 章节 opens screen 4. 驿程 is the global station list (screen 3), not a fallback.
+        if not tap_text("章节", None):
+            return 2
         time.sleep(0.5)
         d = art_dir()
         dump_layout(d / "layout-chapter-list.json")
         return 0
     if feat == "board-zhuo":
-        tap_text("章节", FB_CHAPTER) or tap_text("驿程", FB_CHAPTER)
-        time.sleep(0.4)
-        if not tap_text("涿郡", FB_ZHUO):
+        # Home 章节 → chapter card 涿郡 (badge 可入) → screen 5 涿郡·驿程
+        # → station name 涿郡·涿 (badge 当前). 可入 is not on the station list.
+        # Needle 涿 matches the screen title 涿郡·驿程 before the station row.
+        if not tap_text("章节", None):
             return 2
         time.sleep(0.4)
-        # first open station / 可入 row if present
-        tap_text("可入", None)
-        tap_text("涿", None)
+        if not tap_text("涿郡", None):
+            return 2
+        time.sleep(0.4)
+        if not tap_text("涿郡·涿", None):
+            return 2
         return 0
     if feat == "undo-redraw":
-        tap_text("撤销", FB_UNDO)
-        tap_text("重绘驿道", FB_REDRAW) or tap_text("重绘", FB_REDRAW)
+        if not tap_text("撤销", FB_UNDO):
+            return 2
+        if not (tap_text("重绘驿道", FB_REDRAW) or tap_text("重绘", FB_REDRAW)):
+            return 2
         return 0
     print(f"unknown feature {feat}", file=sys.stderr)
     return 2

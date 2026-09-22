@@ -20,7 +20,7 @@ Preconditions:
 - Cold launch or known in-session `cleared`. Progress is `@State` RAM only (starts at 0); `cleanup` / force-stop resets it. There is no shipped debug setter and no Preferences file. Advancing `cleared` requires real clears in the same process.
 
 - **Locked proof.** Cold launch → `drive chapter-list` → `evidence --label pingyuan-locked`. JPEG/list shows 平原 `未开` and rejects entry.
-- **Open proof.** Only after 涿郡 cleared: same drive shows `可入` and `drive` into 平原 驿程 succeeds. Label `pingyuan-open`.
+- **Open proof.** Only after 涿郡 is cleared (`cleared >= 10`): `drive chapter-list` shows 平原 `可入`. No `drive` feature opens 平原; tap the 平原 card to reach `平原·驿程`. Label `pingyuan-open`.
 
 ## Gotchas
 

@@ -19,7 +19,7 @@ Preconditions:
 
 - Chapter 涿郡 open; doctor passed.
 
-- **Enter board.** Run `python3 tools/verify/control_yilu.py drive board-zhuo`. Fullscreen shows grid + station numbers + bottom chrome.
+- **Enter board.** Run `python3 tools/verify/control_yilu.py drive board-zhuo` (chapter card `涿郡`, then station row `涿郡·涿`). Fullscreen shows grid + station numbers + bottom chrome. The drive fails if either text is missing; it does not tap `可入` or `驿程`.
 - **Smoke chrome only.** Do not require a full DFS clear for routine ships. Capture `evidence --label board-zhuo`.
 - **Full clear (optional).** Drive cells via `uitest uiInput drag` along a known solution from `tools/solve_levels.py` for id 0. Proof requires 通关 / `文书到` visible. Record as `board-clear` only when overlay is in the JPEG.
 
