@@ -18,7 +18,7 @@ Preconditions:
 
 - On a board screen (`drive board-zhuo` first).
 
-- **Tap chrome.** Run `python3 tools/verify/control_yilu.py drive undo-redraw`. The drive returns non-zero if `撤销` or `重绘驿道` is missing from the dump. Layout dump before/after still shows the board; no crash.
+- **Tap chrome.** Run `python3 tools/verify/control_yilu.py drive undo-redraw`. Text match is preferred. If `撤销` or `重绘驿道` is missing from the dump, the drive still taps the measured centers from `_ship/verify-proof/20260916T092315Z/home-start.layout.json` and returns 0: `撤销` `[355,2599][467,2665]` → (411, 2632), `重绘驿道` `[910,2599][1134,2665]` → (1022, 2632), root `[0,0][1320,2856]`. A missing text node on this drive is not a non-zero exit. Layout dump before/after still shows the board; no crash. If the root bounds change, ignore those pixels and re-dump.
 - **Evidence.** `evidence --label undo-redraw` with bottom bar in frame.
 
 ## Gotchas

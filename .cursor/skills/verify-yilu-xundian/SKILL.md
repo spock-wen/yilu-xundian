@@ -35,16 +35,17 @@ python3 tools/verify/control_yilu.py doctor
 
 Checks (read-only):
 
-1. `hdc -t "$YILU_HDC_TARGET" list targets` contains the target.
-2. `bm dump -n com.yilu.xundian` (or `hdc shell bm dump`) shows the bundle.
-3. From repo root, `python3 tools/test_rules.py` exit 0 (rules + catalog lock). Skip only if `YILU_SKIP_RULES=1` and document why.
-4. Optional: HAP mtime / git `HEAD` short SHA printed for the proof log.
+1. `hdc` is on PATH. If the binary is missing, doctor exits 1 and prints `FAIL: hdc not on PATH`. That is an environment miss, not a UI-proof pass.
+2. `hdc -t "$YILU_HDC_TARGET" list targets` contains the target.
+3. `bm dump -n com.yilu.xundian` (or `hdc shell bm dump`) shows the bundle.
+4. From repo root, `python3 tools/test_rules.py` exit 0 (rules + catalog lock). Skip only if `YILU_SKIP_RULES=1` and document why.
+5. Optional: HAP mtime / git `HEAD` short SHA printed for the proof log. The harness prints the short SHA. It does not stat a HAP.
 
 If doctor fails, fix the environment before Drive.
 
 ## Drive
 
-Harness: `tools/verify/control_yilu.py`. Prefer text/bounds from `uitest dumpLayout` over hard-coded coordinates. Pixel fallbacks exist only for `撤销` / `重绘驿道`, taken from text-node centers in `_ship/verify-proof/20260916T092315Z/home-start.layout.json` (root bounds `[0,0][1320,2856]`). That dump is not a 1080-wide surface. If the root bounds change, ignore the fallbacks and re-dump. Home and chapter taps have no pixel fallback; a missing text match fails the drive.
+Harness: `tools/verify/control_yilu.py`. Prefer text/bounds from `uitest dumpLayout` over hard-coded coordinates. Pixel fallbacks exist only for `撤销` / `重绘驿道`, taken from text-node centers in `_ship/verify-proof/20260916T092315Z/home-start.layout.json` (root bounds `[0,0][1320,2856]`). That dump is not a 1080-wide surface. If the root bounds change, ignore the fallbacks and re-dump. Home and chapter taps have no pixel fallback; a missing text match fails the drive. On the chapter list, do not needle `可入` or `驿程`: subtitle `选章入驿 · 开章可入 · 灰章未启` and footer `点开章入驿程` match before the badge and before any station title (`chapter-list.layout.json` in that same proof run).
 
 ```bash
 # Home → 开始传书 → current board (fresh install: 涿郡·涿)

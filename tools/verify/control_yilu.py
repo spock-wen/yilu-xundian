@@ -24,7 +24,13 @@ ART_ROOT = Path(os.environ.get("YILU_ARTIFACTS", str(ROOT / "artifacts" / "verif
 
 def hdc(*args: str, check: bool = True) -> subprocess.CompletedProcess:
     cmd = ["hdc", "-t", TARGET, *args]
-    return subprocess.run(cmd, text=True, capture_output=True, check=check)
+    try:
+        return subprocess.run(cmd, text=True, capture_output=True, check=check)
+    except FileNotFoundError as exc:
+        # Cloud VMs often have no DevEco hdc. Exit 1; do not look like a pass.
+        sys.stdout.flush()
+        print(f"FAIL: hdc not on PATH ({exc.filename})", file=sys.stderr)
+        raise SystemExit(1)
 
 
 def hdc_shell(script: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -203,9 +209,12 @@ def cmd_drive(ns: argparse.Namespace) -> int:
         dump_layout(d / "layout-chapter-list.json")
         return 0
     if feat == "board-zhuo":
-        # Home 章节 → chapter card 涿郡 (badge 可入) → screen 5 涿郡·驿程
-        # → station name 涿郡·涿 (badge 当前). 可入 is not on the station list.
-        # Needle 涿 matches the screen title 涿郡·驿程 before the station row.
+        # Home 章节 → chapter card label 涿郡 (badge text is 可入, but do not
+        # search 可入: subtitle 开章可入 is the first hit in
+        # _ship/verify-proof/20260916T092315Z/chapter-list.layout.json).
+        # Screen 5 title is 涿郡·驿程; needle 涿 matches that title first.
+        # Station row name is 涿郡·涿 (badge 当前). Do not search 驿程:
+        # chapter-list footer 点开章入驿程 matches first.
         if not tap_text("章节", None):
             return 2
         time.sleep(0.4)
