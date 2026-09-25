@@ -21,7 +21,7 @@ Preconditions:
 
 - **Enter board.** Run `python3 tools/verify/control_yilu.py drive board-zhuo` (chapter card `涿郡`, then station row `涿郡·涿`). Fullscreen shows grid + station numbers + bottom chrome. The drive fails if either text is missing; it does not tap `可入` or `驿程`.
 - **Smoke chrome only.** Do not require a full DFS clear for routine ships. Capture `evidence --label board-zhuo`.
-- **Full clear (optional).** Drive cells via `uitest uiInput drag` along a known solution from `tools/solve_levels.py` for id 0. Proof requires 通关 / `文书到` visible. Record as `board-clear` only when overlay is in the JPEG.
+- **Full clear (optional).** Drive cells via `uitest uiInput drag` along a known solution from `tools/solve_levels.py` for id 0. Proof requires overlay chrome visible: `通关` and `驿道已通` (also `文书递达本驿`). The vermillion seal is three separate Text nodes (`文` / `书` / `到`), not one `文书到` string — do not dumpLayout-needle `文书到`. Record as `board-clear` only when that overlay is in the JPEG.
 
 ## Gotchas
 

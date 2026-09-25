@@ -23,7 +23,7 @@ Start (or foreground) the app:
 python3 tools/verify/control_yilu.py launch
 ```
 
-Ready when `doctor` reports the ability process and a fresh screenshot can be taken. There is no long-lived server: each drive uses the shared device session. Do not double-drive the same target from two agents at once (shared touch focus).
+Ready when `doctor` passes (hdc on PATH, target listed, bundle installed, rules green) and a fresh screenshot can be taken. There is no long-lived server: each drive uses the shared device session. Do not double-drive the same target from two agents at once (shared touch focus).
 
 Teardown: `python3 tools/verify/control_yilu.py cleanup` (force-stops the ability only; leaves evidence).
 
