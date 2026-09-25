@@ -1,46 +1,77 @@
 #!/usr/bin/env python3
 """Emit Cangjie LevelCatalog from levels.json.
 
-Does not invent levels. The locked SoT catalog is 涿郡 + 平原: exactly 20
-boards with ids 0..19. Names stay as written (chapter·station, sometimes
-already including ·第 2 驿).
+Does not invent levels. The locked SoT catalog is ch1..10 (涿郡..北伐):
+100 boards with ids 0..99. Names stay as written (chapter·station, sometimes
+already including ·第 N 驿).
 """
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = ROOT / "entry/src/main/resources/rawfile/levels.json"
 OUT_PATH = ROOT / "entry/src/main/cangjie/levels.cj"
-
-EXPECTED_NAMES = (
-    "涿郡·涿",
-    "涿郡·范阳",
-    "涿郡·故安",
-    "涿郡·遒",
-    "涿郡·中山",
-    "涿郡·中山·第 2 驿",
-    "涿郡·卢奴",
-    "涿郡·卢奴·第 2 驿",
-    "涿郡·安喜",
-    "涿郡·安喜·第 2 驿",
-    "平原·高唐",
-    "平原·高唐·第 2 驿",
-    "平原·郡治",
-    "平原·郡治·第 2 驿",
-    "平原·安德",
-    "平原·安德·第 2 驿",
-    "平原·鬲",
-    "平原·鬲·第 2 驿",
-    "平原·祝阿",
-    "平原·祝阿·第 2 驿",
+LOCKED_DIR = ROOT / "boards-locked"
+LOCKED_FILES = (
+    "ch1_zhuo.json",
+    "ch2_pingyuan.json",
+    "ch3_xuzhou.json",
+    "ch4_lvbu.json",
+    "ch5_touyuan.json",
+    "ch6_jingzhou.json",
+    "ch7_chibi.json",
+    "ch8_rushu.json",
+    "ch9_hanzhong.json",
+    "ch10_beifa.json",
 )
 
 ST02_WALLS = [
     {"x1": 2, "y1": 4, "x2": 3, "y2": 4},
     {"x1": 2, "y1": 3, "x2": 2, "y2": 4},
 ]
+
+
+def convert_board(b: dict, global_id: int) -> dict:
+    wps = [{"n": int(n), "x": int(c), "y": int(r)} for r, c, n in b["numbers_rc"]]
+    wps.sort(key=lambda item: item["n"])
+    walls = []
+    for r, c in b.get("walls", {}).get("h_between", []):
+        walls.append({"x1": int(c), "y1": int(r), "x2": int(c) + 1, "y2": int(r)})
+    for r, c in b.get("walls", {}).get("v_between", []):
+        walls.append({"x1": int(c), "y1": int(r), "x2": int(c), "y2": int(r) + 1})
+    return {
+        "id": global_id,
+        "name": b["name"],
+        "cols": int(b["size"]),
+        "rows": int(b["size"]),
+        "waypoints": wps,
+        "walls": walls,
+    }
+
+
+def load_source_levels() -> list[dict]:
+    missing = [fname for fname in LOCKED_FILES if not (LOCKED_DIR / fname).is_file()]
+    if missing:
+        print(
+            f"error: missing locked board file(s) under {LOCKED_DIR}: {', '.join(missing)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    levels = []
+    for ch_idx, fname in enumerate(LOCKED_FILES):
+        fpath = LOCKED_DIR / fname
+        data = json.loads(fpath.read_text(encoding="utf-8"))
+        for tip_idx, b in enumerate(data["boards"]):
+            global_id = ch_idx * 10 + tip_idx
+            levels.append(convert_board(b, global_id))
+    return levels
+
+
+EXPECTED_NAMES = tuple(lv["name"] for lv in load_source_levels())
 
 
 def emit(levels: list[dict]) -> str:
@@ -101,18 +132,34 @@ def load_verified() -> list[dict]:
     levels = json.loads(JSON_PATH.read_text(encoding="utf-8"))
     if not isinstance(levels, list):
         raise SystemExit("levels.json must be a JSON array")
-    if len(levels) != 20:
-        raise SystemExit(f"need exactly 20 locked 涿郡+平原 levels, found {len(levels)}")
+    if len(levels) != 100:
+        raise SystemExit(f"need exactly 100 locked ch1..10 levels, found {len(levels)}")
     ids = [int(lv["id"]) for lv in levels]
-    if ids != list(range(20)):
-        raise SystemExit(f"refusing to emit: ids {ids} are not 0..19 consecutive")
+    if ids != list(range(100)):
+        raise SystemExit(f"refusing to emit: ids {ids} are not 0..99 consecutive")
     names = [lv["name"] for lv in levels]
     if names != list(EXPECTED_NAMES):
-        raise SystemExit(f"refusing to emit: locked names {names} != {list(EXPECTED_NAMES)}")
+        raise SystemExit(f"refusing to emit: locked names {names} != expected names")
     if any("_src" in lv for lv in levels):
         raise SystemExit("refusing to emit: levels.json must not contain _src fields")
     if any(lv["name"] == "汽梁" for lv in levels):
         raise SystemExit("refusing to emit: 汽梁 is a typo; use 汴梁")
+    source_levels = load_source_levels()
+    for idx, (lv, src_lv) in enumerate(zip(levels, source_levels)):
+        if lv["name"] != src_lv["name"]:
+            raise SystemExit(
+                f"level {idx} name mismatch: {lv['name']} != {src_lv['name']}"
+            )
+        if int(lv["cols"]) != src_lv["cols"] or int(lv["rows"]) != src_lv["rows"]:
+            raise SystemExit(
+                f"level {idx} size mismatch: ({lv['cols']},{lv['rows']}) != ({src_lv['cols']},{src_lv['rows']})"
+            )
+        if [_wp_key(w) for w in lv["waypoints"]] != [_wp_key(w) for w in src_lv["waypoints"]]:
+            raise SystemExit(f"level {idx} waypoints mismatch with locked source")
+        if [_wall_key(w) for w in (lv.get("walls") or [])] != [
+            _wall_key(w) for w in src_lv["walls"]
+        ]:
+            raise SystemExit(f"level {idx} walls mismatch with locked source")
     st01 = levels[0]
     if (
         st01["name"] != "涿郡·涿"
@@ -131,9 +178,23 @@ def load_verified() -> list[dict]:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Emit Cangjie LevelCatalog from levels.json.")
+    parser.add_argument(
+        "--sync-json",
+        action="store_true",
+        help="Rebuild entry/src/main/resources/rawfile/levels.json from boards-locked/",
+    )
+    args = parser.parse_args()
+    if args.sync_json:
+        source_levels = load_source_levels()
+        JSON_PATH.write_text(
+            json.dumps(source_levels, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(f"wrote {JSON_PATH} ({len(source_levels)} levels)")
     levels = load_verified()
     OUT_PATH.write_text(emit(levels), encoding="utf-8")
-    print(f"wrote {OUT_PATH} ({len(levels)} locked 涿郡+平原 levels)")
+    print(f"wrote {OUT_PATH} ({len(levels)} locked levels ch1..ch10)")
 
 
 if __name__ == "__main__":

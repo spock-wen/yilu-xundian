@@ -1,0 +1,3525 @@
+{
+  "chapter": 10,
+  "title": "北伐",
+  "note": "7×7 Zip; 负重禁区首亮; 塌桥+符节; wall-diet CEILING; HARD=决策密度/软齿/假线; 禁近满墙假出口; tip≤15; pure Zip≥半",
+  "burden_rule": "负重禁区：载态一位 empty/laden。踏装粮点→laden；踏卸粮点→empty。laden 时不可进入禁区格。装/卸为格标，非驿号/Zip 数字。",
+  "collapse_rule": "塌桥（schema=step_on_trigger）：踏触发格后，指定邻边变为墙，之后不可再过该边。非「边只过一次」（铺满一次本已成立）。",
+  "collapse_schema": "step_on_trigger",
+  "parity_rule": "某边仅奇数或偶数步可过；步=已铺格数（含当前格，即将跨边时的 filled）。filled 为奇数时 require_odd 边可过；filled 为偶数时 require_even 边可过。宵禁⊂奇偶，本章只用奇/偶。",
+  "ferry_rule": "踏甲记已访并从乙续（乙记已访）；中间格不因跳接免填。",
+  "slide_rule": "入泽后沿入向滑到受阻；滑过每一格计入铺满。",
+  "seal_rule": "踩符格取得符节 → 解锁闸门边；闸画成锁/X，勿当普通墙。",
+  "seed": 20261435,
+  "boards": [
+    {
+      "id": 1,
+      "name": "北伐·箕谷",
+      "dessert": false,
+      "note": "负重首讲：装粮后禁区不可入；卸粮后可过。粮道。",
+      "size": 7,
+      "numbers_rc": [
+        [
+          6,
+          6,
+          1
+        ],
+        [
+          4,
+          4,
+          2
+        ],
+        [
+          3,
+          3,
+          3
+        ],
+        [
+          1,
+          1,
+          4
+        ]
+      ],
+      "walls": {
+        "h_between": [
+          [
+            0,
+            4
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            5,
+            0
+          ],
+          [
+            5,
+            1
+          ]
+        ],
+        "v_between": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            4
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            5
+          ],
+          [
+            3,
+            6
+          ],
+          [
+            4,
+            3
+          ],
+          [
+            5,
+            6
+          ]
+        ]
+      },
+      "wall_count": 12,
+      "one_ways": [],
+      "one_way_count": 0,
+      "ferry": null,
+      "ferry_count": 0,
+      "ferry_manhattan": null,
+      "slide_cells": [],
+      "slide_count": 0,
+      "token_cells": [],
+      "seal_gates": [],
+      "seal_count": 0,
+      "token_count": 0,
+      "parity_edges": [],
+      "parity_count": 0,
+      "parity_rule": "某边仅奇数或偶数步可过；步=已铺格数（含当前格，即将跨边时的 filled）。filled 为奇数时 require_odd 边可过；filled 为偶数时 require_even 边可过。宵禁⊂奇偶，本章只用奇/偶。",
+      "burden": {
+        "forbidden_cells": [
+          [
+            0,
+            3
+          ],
+          [
+            1,
+            4
+          ]
+        ],
+        "load_cell": [
+          5,
+          4
+        ],
+        "unload_cell": [
+          0,
+          2
+        ],
+        "start_laden": false,
+        "forbidden_count": 2,
+        "rule": "负重禁区：载态一位 empty/laden。踏装粮点→laden；踏卸粮点→empty。laden 时不可进入禁区格。装/卸为格标，非驿号/Zip 数字。"
+      },
+      "burden_count": 1,
+      "burden_forbidden_count": 2,
+      "burden_rule": "负重禁区：载态一位 empty/laden。踏装粮点→laden；踏卸粮点→empty。laden 时不可进入禁区格。装/卸为格标，非驿号/Zip 数字。",
+      "collapse": null,
+      "collapse_count": 0,
+      "collapse_rule": null,
+      "collapse_schema": null,
+      "sols_no_seal": null,
+      "sols_open_seal": null,
+      "sols_no_parity": null,
+      "sols_no_burden": 3,
+      "sols_no_collapse": null,
+      "pure_zip": false,
+      "num_count": 4,
+      "max_blind": 23,
+      "blinds": [
+        11,
+        11,
+        23
+      ],
+      "turns": 22,
+      "greedy": false,
+      "solutions": 1,
+      "solutions_cs": 1,
+      "ascii": " ·   ·   ·   ·   ·┃ ·   ·\n    ━━                    \n ·   4   ·   ·   ·   ·   ·\n        ━━      ━━        \n ·   ·   ·┃ ·   ·   ·   ·\n━━                  ━━    \n ·   ·   ·   3   ·   ·   ·\n                        ━━\n ·   ·   ·   ·   2   ·   ·\n            ━━            \n ·┃ ·┃ ·   ·   ·   ·   ·\n                        ━━\n ·   ·   ·   ·   ·   ·   1\nburden:\n  forbidden=[[0, 3], [1, 4]]\n  load=[5, 4]\n  unload=[0, 2]\n  start_laden=False",
+      "path": [
+        [
+          6,
+          6
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          4,
+          6
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          3,
+          6
+        ],
+        [
+          2,
+          6
+        ],
+        [
+          1,
+          6
+        ],
+        [
+          0,
+          6
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          6,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "start_rc": [
+        6,
+        6
+      ],
+      "consec_adj": [],
+      "L_pocket_on_1": false,
+      "mechanic_types": 1,
+      "teach_notes": {
+        "burden": "首讲负重禁区；粮道主题；禁区压在必经走廊。"
+      },
+      "fork_cells": 21,
+      "soft_tempt": 23,
+      "decision_span": 0.429,
+      "path_max_run": 5
+    },
+    {
+      "id": 2,
+      "name": "北伐·祁山",
+      "dessert": false,
+      "note": "纯 Zip。开叉假线，非一眼走廊。",
+      "size": 7,
+      "numbers_rc": [
+        [
+          1,
+          5,
+          1
+        ],
+        [
+          4,
+          6,
+          2
+        ],
+        [
+          6,
+          3,
+          3
+        ],
+        [
+          1,
+          3,
+          4
+        ]
+      ],
+      "walls": {
+        "h_between": [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            3,
+            2
+          ],
+          [
+            5,
+            3
+          ],
+          [
+            5,
+            4
+          ]
+        ],
+        "v_between": [
+          [
+            0,
+            3
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            3,
+            1
+          ],
+          [
+            3,
+            5
+          ],
+          [
+            4,
+            0
+          ],
+          [
+            4,
+            2
+          ],
+          [
+            5,
+            2
+          ]
+        ]
+      },
+      "wall_count": 12,
+      "one_ways": [],
+      "one_way_count": 0,
+      "ferry": null,
+      "ferry_count": 0,
+      "ferry_manhattan": null,
+      "slide_cells": [],
+      "slide_count": 0,
+      "token_cells": [],
+      "seal_gates": [],
+      "seal_count": 0,
+      "token_count": 0,
+      "parity_edges": [],
+      "parity_count": 0,
+      "parity_rule": "某边仅奇数或偶数步可过；步=已铺格数（含当前格，即将跨边时的 filled）。filled 为奇数时 require_odd 边可过；filled 为偶数时 require_even 边可过。宵禁⊂奇偶，本章只用奇/偶。",
+      "burden": null,
+      "burden_count": 0,
+      "burden_forbidden_count": 0,
+      "burden_rule": null,
+      "collapse": null,
+      "collapse_count": 0,
+      "collapse_rule": null,
+      "collapse_schema": null,
+      "sols_no_seal": null,
+      "sols_open_seal": null,
+      "sols_no_parity": null,
+      "sols_no_burden": null,
+      "sols_no_collapse": null,
+      "pure_zip": true,
+      "num_count": 4,
+      "max_blind": 26,
+      "blinds": [
+        11,
+        8,
+        26
+      ],
+      "turns": 23,
+      "greedy": false,
+      "solutions": 1,
+      "solutions_cs": 1,
+      "ascii": " ·   ·   ·   ·   ·   ·   ·\n            ━━            \n ·   ·┃ ·┃ 4   ·   1   ·\n            ━━            \n ·   ·   ·   ·   ·   ·   ·\n                          \n ·   ·   ·┃ ·   ·   ·   ·\n    ━━              ━━    \n ·   ·   ·   ·   ·   ·   2\n━━      ━━                \n ·   ·   ·   ·┃ ·┃ ·   ·\n        ━━                \n ·   ·   ·   3   ·   ·   ·",
+      "path": [
+        [
+          1,
+          5
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          0,
+          6
+        ],
+        [
+          1,
+          6
+        ],
+        [
+          2,
+          6
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          3,
+          6
+        ],
+        [
+          4,
+          6
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          6,
+          6
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          6,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          1,
+          3
+        ]
+      ],
+      "start_rc": [
+        1,
+        5
+      ],
+      "consec_adj": [],
+      "L_pocket_on_1": false,
+      "mechanic_types": 0,
+      "teach_notes": {},
+      "fork_cells": 21,
+      "soft_tempt": 24,
+      "decision_span": 0.524,
+      "path_max_run": 5
+    },
+    {
+      "id": 3,
+      "name": "北伐·街亭",
+      "dessert": false,
+      "note": "纯 Zip。多歧路；软齿。",
+      "size": 7,
+      "numbers_rc": [
+        [
+          3,
+          3,
+          1
+        ],
+        [
+          3,
+          1,
+          2
+        ],
+        [
+          4,
+          6,
+          3
+        ],
+        [
+          6,
+          6,
+          4
+        ]
+      ],
+      "walls": {
+        "h_between": [
+          [
+            0,
+            1
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            4
+          ],
+          [
+            3,
+            0
+          ],
+          [
+            5,
+            3
+          ]
+        ],
+        "v_between": [
+          [
+            0,
+            3
+          ],
+          [
+            2,
+            1
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            3,
+            6
+          ],
+          [
+            4,
+            1
+          ],
+          [
+            5,
+            3
+          ],
+          [
+            5,
+            6
+          ]
+        ]
+      },
+      "wall_count": 12,
+      "one_ways": [],
+      "one_way_count": 0,
+      "ferry": null,
+      "ferry_count": 0,
+      "ferry_manhattan": null,
+      "slide_cells": [],
+      "slide_count": 0,
+      "token_cells": [],
+      "seal_gates": [],
+      "seal_count": 0,
+      "token_count": 0,
+      "parity_edges": [],
+      "parity_count": 0,
+      "parity_rule": "某边仅奇数或偶数步可过；步=已铺格数（含当前格，即将跨边时的 filled）。filled 为奇数时 require_odd 边可过；filled 为偶数时 require_even 边可过。宵禁⊂奇偶，本章只用奇/偶。",
+      "burden": null,
+      "burden_count": 0,
+      "burden_forbidden_count": 0,
+      "burden_rule": null,
+      "collapse": null,
+      "collapse_count": 0,
+      "collapse_rule": null,
+      "collapse_schema": null,
+      "sols_no_seal": null,
+      "sols_open_seal": null,
+      "sols_no_parity": null,
+      "sols_no_burden": null,
+      "sols_no_collapse": null,
+      "pure_zip": true,
+      "num_count": 4,
+      "max_blind": 27,
+      "blinds": [
+        27,
+        15,
+        3
+      ],
+      "turns": 28,
+      "greedy": false,
+      "solutions": 1,
+      "solutions_cs": 1,
+      "ascii": " ·   ·┃ ·   ·   ·   ·   ·\n            ━━            \n ·   ·   ·   ·   ·   ·   ·\n                          \n ·   ·   ·┃ ·   ·┃ ·   ·\n    ━━      ━━            \n ·┃ 2   ·   1   ·   ·   ·\n                        ━━\n ·   ·   ·   ·   ·   ·   3\n    ━━                    \n ·   ·   ·   ·┃ ·   ·   ·\n            ━━          ━━\n ·   ·   ·   ·   ·   ·   4",
+      "path": [
+        [
+          3,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          3,
+          6
+        ],
+        [
+          2,
+          6
+        ],
+        [
+          1,
+          6
+        ],
+        [
+          0,
+          6
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          6,
+          0
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          4,
+          6
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          6,
+          6
+        ]
+      ],
+      "start_rc": [
+        3,
+        3
+      ],
+      "consec_adj": [],
+      "L_pocket_on_1": false,
+      "mechanic_types": 0,
+      "teach_notes": {},
+      "fork_cells": 21,
+      "soft_tempt": 24,
+      "decision_span": 0.476,
+      "path_max_run": 5
+    },
+    {
+      "id": 4,
+      "name": "北伐·散关",
+      "dessert": false,
+      "note": "载粮急进=负重+单向（≤2）。单向始终生效（非 laden-only）。",
+      "size": 7,
+      "numbers_rc": [
+        [
+          2,
+          4,
+          1
+        ],
+        [
+          4,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          3
+        ],
+        [
+          4,
+          6,
+          4
+        ]
+      ],
+      "walls": {
+        "h_between": [
+          [
+            1,
+            5
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            2,
+            4
+          ],
+          [
+            3,
+            3
+          ],
+          [
+            4,
+            5
+          ],
+          [
+            5,
+            0
+          ]
+        ],
+        "v_between": [
+          [
+            0,
+            3
+          ],
+          [
+            0,
+            5
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            3,
+            1
+          ],
+          [
+            4,
+            3
+          ],
+          [
+            4,
+            6
+          ]
+        ]
+      },
+      "wall_count": 13,
+      "one_ways": [
+        {
+          "from": [
+            5,
+            4
+          ],
+          "to": [
+            5,
+            3
+          ]
+        }
+      ],
+      "one_way_count": 1,
+      "ferry": null,
+      "ferry_count": 0,
+      "ferry_manhattan": null,
+      "slide_cells": [],
+      "slide_count": 0,
+      "token_cells": [],
+      "seal_gates": [],
+      "seal_count": 0,
+      "token_count": 0,
+      "parity_edges": [],
+      "parity_count": 0,
+      "parity_rule": "某边仅奇数或偶数步可过；步=已铺格数（含当前格，即将跨边时的 filled）。filled 为奇数时 require_odd 边可过；filled 为偶数时 require_even 边可过。宵禁⊂奇偶，本章只用奇/偶。",
+      "burden": {
+        "forbidden_cells": [
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            6
+          ]
+        ],
+        "load_cell": [
+          1,
+          5
+        ],
+        "unload_cell": [
+          6,
+          5
+        ],
+        "start_laden": false,
+        "forbidden_count": 2,
+        "rule": "负重禁区：载态一位 empty/laden。踏装粮点→laden；踏卸粮点→empty。laden 时不可进入禁区格。装/卸为格标，非驿号/Zip 数字。"
+      },
+      "burden_count": 1,
+      "burden_forbidden_count": 2,
+      "burden_rule": "负重禁区：载态一位 empty/laden。踏装粮点→laden；踏卸粮点→empty。laden 时不可进入禁区格。装/卸为格标，非驿号/Zip 数字。",
+      "collapse": null,
+      "collapse_count": 0,
+      "collapse_rule": null,
+      "collapse_schema": null,
+      "sols_no_seal": null,
+      "sols_open_seal": null,
+      "sols_no_parity": null,
+      "sols_no_burden": 5,
+      "sols_no_collapse": null,
+      "pure_zip": false,
+      "num_count": 4,
+      "max_blind": 32,
+      "blinds": [
+        8,
+        5,
+        32
+      ],
+      "turns": 24,
+      "greedy": false,
+      "solutions": 1,
+      "solutions_cs": 1,
+      "ascii": " ·   ·   ·   ·   ·   ·   ·\n            ━━      ━━    \n ·   ·   ·   ·   ·   ·┃ ·\n    ━━                    \n ·┃ ·   ·   3┃ 1┃ ·   ·\n                          \n ·   ·   ·   ·┃ ·   ·   ·\n    ━━                    \n ·   ·   ·   2   ·   ·┃ 4\n            ━━          ━━\n ·┃ ·   ·   ·   ·   ·   ·\n                          \n ·   ·   ·   ·   ·   ·   ·\none_ways:\n  [5, 4] -> [5, 3]\nburden:\n  forbidden=[[5, 5], [5, 6]]\n  load=[1, 5]\n  unload=[6, 5]\n  start_laden=False",
+      "path": [
+        [
+          2,
+          4
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          2,
+          6
+        ],
+        [
+          1,
+          6
+        ],
+        [
+          0,
+          6
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          6,
+          0
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          6,
+          6
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          3,
+          6
+        ],
+        [
+          4,
+          6
+        ]
+      ],
+      "start_rc": [
+        2,
+        4
+      ],
+      "consec_adj": [],
+      "L_pocket_on_1": false,
+      "mechanic_types": 2,
+      "teach_notes": {
+        "载粮单行": "负重+单向同盘；本章单向始终生效（非 laden-only/empty-both-ways）。若改为 empty 时双向，则改写单向语义，需另标 teach。"
+      },
+      "sols_no_ow": 5,
+      "fork_cells": 20,
+      "soft_tempt": 23,
+      "decision_span": 0.4,
+      "path_max_run": 7
+    },
+    {
+      "id": 5,
+      "name": "北伐·陈仓",
+      "dessert": true,
+      "note": "本章甜点：墙略松；纯 Zip；开叉假线。",
+      "size": 7,
+      "numbers_rc": [
+        [
+          6,
+          4,
+          1
+        ],
+        [
+          4,
+          2,
+          2
+        ],
+        [
+          0,
+          2,
+          3
+        ],
+        [
+          2,
+          6,
+          4
+        ]
+      ],
+      "walls": {
+        "h_between": [
+          [
+            2,
+            5
+          ],
+          [
+            4,
+            2
+          ],
+          [
+            5,
+            5
+          ]
+        ],
+        "v_between": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            6
+          ],
+          [
+            2,
+            1
+          ],
+          [
+            3,
+            2
+          ],
+          [
+            4,
+            0
+          ],
+          [
+            4,
+            3
+          ],
+          [
+            5,
+            4
+          ]
+        ]
+      },
+      "wall_count": 11,
+      "one_ways": [],
+      "one_way_count": 0,
+      "ferry": null,
+      "ferry_count": 0,
+      "ferry_manhattan": null,
+      "slide_cells": [],
+      "slide_count": 0,
+      "token_cells": [],
+      "seal_gates": [],
+      "seal_count": 0,
+      "token_count": 0,
+      "parity_edges": [],
+      "parity_count": 0,
+      "parity_rule": "某边仅奇数或偶数步可过；步=已铺格数（含当前格，即将跨边时的 filled）。filled 为奇数时 require_odd 边可过；filled 为偶数时 require_even 边可过。宵禁⊂奇偶，本章只用奇/偶。",
+      "burden": null,
+      "burden_count": 0,
+      "burden_forbidden_count": 0,
+      "burden_rule": null,
+      "collapse": null,
+      "collapse_count": 0,
+      "collapse_rule": null,
+      "collapse_schema": null,
+      "sols_no_seal": null,
+      "sols_open_seal": null,
+      "sols_no_parity": null,
+      "sols_no_burden": null,
+      "sols_no_collapse": null,
+      "pure_zip": true,
+      "num_count": 4,
+      "max_blind": 21,
+      "blinds": [
+        15,
+        21,
+        9
+      ],
+      "turns": 27,
+      "greedy": false,
+      "solutions": 1,
+      "solutions_cs": 1,
+      "ascii": " ·   ·   3   ·   ·   ·   ·\n    ━━                    \n ·   ·   ·   ·   ·   ·   ·\n        ━━              ━━\n ·   ·   ·   ·   ·   ·┃ 4\n    ━━                    \n ·   ·   ·   ·   ·   ·   ·\n        ━━                \n ·   ·   2┃ ·   ·   ·   ·\n━━          ━━            \n ·   ·   ·   ·   ·   ·┃ ·\n                ━━        \n ·   ·   ·   ·   1   ·   ·",
+      "path": [
+        [
+          6,
+          4
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          6,
+          6
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          4,
+          6
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          6,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          0,
+          6
+        ],
+        [
+          1,
+          6
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          3,
+          6
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "start_rc": [
+        6,
+        4
+      ],
+      "consec_adj": [],
+      "L_pocket_on_1": false,
+      "mechanic_types": 0,
+      "teach_notes": {},
+      "fork_cells": 22,
+      "soft_tempt": 25,
+      "decision_span": 0.591,
+      "path_max_run": 7
+    },
+    {
+      "id": 6,
+      "name": "北伐·武都",
+      "dessert": false,
+      "note": "符节：先近闸后回取符；塌桥练习保留（seal+collapse）。",
+      "size": 7,
+      "numbers_rc": [
+        [
+          2,
+          6,
+          1
+        ],
+        [
+          4,
+          2,
+          2
+        ],
+        [
+          6,
+          6,
+          3
+        ]
+      ],
+      "walls": {
+        "h_between": [
+          [
+            2,
+            1
+          ],
+          [
+            2,
+            4
+          ],
+          [
+            5,
+            3
+          ],
+          [
+            6,
+            5
+          ]
+        ],
+        "v_between": [
+          [
+            0,
+            4
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            1,
+            6
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            2,
+            5
+          ],
+          [
+            2,
+            6
+          ],
+          [
+            3,
+            3
+          ],
+          [
+            3,
+            4
+          ],
+          [
+            5,
+            2
+          ]
+        ]
+      },
+      "wall_count": 13,
+      "one_ways": [],
+      "one_way_count": 0,
+      "ferry": null,
+      "ferry_count": 0,
+      "ferry_manhattan": null,
+      "slide_cells": [],
+      "slide_count": 0,
+      "token_cells": [
+        [
+          1,
+          5
+        ]
+      ],
+      "seal_gates": [
+        {
+          "between": [
+            [
+              6,
+              4
+            ],
+            [
+              6,
+              5
+            ]
+          ],
+          "locked_until_token": true
+        }
+      ],
+      "seal_count": 1,
+      "token_count": 1,
+      "parity_edges": [],
+      "parity_count": 0,
+      "parity_rule": "某边仅奇数或偶数步可过；步=已铺格数（含当前格，即将跨边时的 filled）。filled 为奇数时 require_odd 边可过；filled 为偶数时 require_even 边可过。宵禁⊂奇偶，本章只用奇/偶。",
+      "burden": null,
+      "burden_count": 0,
+      "burden_forbidden_count": 0,
+      "burden_rule": null,
+      "collapse": {
+        "schema": "step_on_trigger",
+        "trigger_rc": [
+          0,
+          0
+        ],
+        "collapse_edge": {
+          "between": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              2
+            ]
+          ]
+        },
+        "rule": "塌桥（schema=step_on_trigger）：踏触发格后，指定邻边变为墙，之后不可再过该边。非「边只过一次」（铺满一次本已成立）。"
+      },
+      "collapse_count": 1,
+      "collapse_rule": "塌桥（schema=step_on_trigger）：踏触发格后，指定邻边变为墙，之后不可再过该边。非「边只过一次」（铺满一次本已成立）。",
+      "collapse_schema": "step_on_trigger",
+      "sols_no_seal": 0,
+      "sols_open_seal": 1,
+      "sols_no_parity": null,
+      "sols_no_burden": null,
+      "sols_no_collapse": 2,
+      "pure_zip": false,
+      "num_count": 3,
+      "max_blind": 29,
+      "blinds": [
+        29,
+        17
+      ],
+      "turns": 29,
+      "greedy": false,
+      "solutions": 1,
+      "solutions_cs": 1,
+      "ascii": " ·   ·   ·   ·   ·   ·   ·\n                ━━        \n ·   ·   ·   ·   ·   ·   ·\n            ━━          ━━\n ·   ·┃ ·   ·   ·┃ ·   1\n            ━━      ━━  ━━\n ·   ·   ·   ·   ·   ·   ·\n            ━━  ━━        \n ·   ·   2   ·   ·   ·   ·\n                          \n ·   ·   ·   ·┃ ·   ·   ·\n        ━━                \n ·   ·   ·   ·   ·   ·┃ 3\ntoken_cells:\n  [1, 5]\nseal_gates:\n  [6, 4]--[6, 5]\ncollapse:\n  trigger=[0, 0]\n  edge=[1, 1]--[1, 2]\n  schema=step_on_trigger",
+      "path": [
+        [
+          2,
+          6
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          1,
+          6
+        ],
+        [
+          0,
+          6
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          6,
+          0
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          3,
+          6
+        ],
+        [
+          4,
+          6
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          6,
+          6
+        ]
+      ],
+      "start_rc": [
+        2,
+        6
+      ],
+      "consec_adj": [],
+      "L_pocket_on_1": false,
+      "mechanic_types": 2,
+      "teach_notes": {
+        "collapse": "塌桥（schema=step_on_trigger）：踏触发格后，指定邻边变为墙，之后不可再过该边。非「边只过一次」（铺满一次本已成立）。",
+        "seal": "符节+塌桥同盘：先近闸后回取符与塌桥时序交织。"
+      },
+      "fork_cells": 21,
+      "soft_tempt": 23,
+      "decision_span": 0.619,
+      "path_max_run": 6
+    },
+    {
+      "id": 7,
+      "name": "北伐·阴平",
+      "dessert": false,
+      "note": "纯 Zip。长盲+转弯，非堆墙。",
+      "size": 7,
+      "numbers_rc": [
+        [
+          5,
+          1,
+          1
+        ],
+        [
+          3,
+          4,
+          2
+        ],
+        [
+          0,
+          2,
+          3
+        ]
+      ],
+      "walls": {
+        "h_between": [
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            4
+          ],
+          [
+            4,
+            0
+          ],
+          [
+            4,
+            3
+          ],
+          [
+            5,
+            3
+          ]
+        ],
+        "v_between": [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            0
+          ],
+          [
+            2,
+            1
+          ],
+          [
+            2,
+            5
+          ],
+          [
+            3,
+            5
+          ],
+          [
+            4,
+            1
+          ],
+          [
+            4,
+            4
+          ]
+        ]
+      },
+      "wall_count": 12,
+      "one_ways": [],
+      "one_way_count": 0,
+      "ferry": null,
+      "ferry_count": 0,
+      "ferry_manhattan": null,
+      "slide_cells": [],
+      "slide_count": 0,
+      "token_cells": [],
+      "seal_gates": [],
+      "seal_count": 0,
+      "token_count": 0,
+      "parity_edges": [],
+      "parity_count": 0,
+      "parity_rule": "某边仅奇数或偶数步可过；步=已铺格数（含当前格，即将跨边时的 filled）。filled 为奇数时 require_odd 边可过；filled 为偶数时 require_even 边可过。宵禁⊂奇偶，本章只用奇/偶。",
+      "burden": null,
+      "burden_count": 0,
+      "burden_forbidden_count": 0,
+      "burden_rule": null,
+      "collapse": null,
+      "collapse_count": 0,
+      "collapse_rule": null,
+      "collapse_schema": null,
+      "sols_no_seal": null,
+      "sols_open_seal": null,
+      "sols_no_parity": null,
+      "sols_no_burden": null,
+      "sols_no_collapse": null,
+      "pure_zip": true,
+      "num_count": 3,
+      "max_blind": 24,
+      "blinds": [
+        22,
+        24
+      ],
+      "turns": 30,
+      "greedy": false,
+      "solutions": 1,
+      "solutions_cs": 1,
+      "ascii": " ·   ·   3┃ ·   ·   ·   ·\n        ━━                \n ·   ·   ·   ·   ·   ·   ·\n━━                        \n ·   ·   ·   ·   ·┃ ·   ·\n    ━━              ━━    \n ·   ·   ·   ·   2   ·   ·\n                    ━━    \n ·┃ ·   ·   ·┃ ·   ·   ·\n    ━━          ━━        \n ·   1   ·   ·┃ ·   ·   ·\n                          \n ·   ·   ·   ·   ·   ·   ·",
+      "path": [
+        [
+          5,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          0,
+          6
+        ],
+        [
+          1,
+          6
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          2,
+          6
+        ],
+        [
+          3,
+          6
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          4,
+          6
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          6,
+          6
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          6,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "start_rc": [
+        5,
+        1
+      ],
+      "consec_adj": [],
+      "L_pocket_on_1": false,
+      "mechanic_types": 0,
+      "teach_notes": {},
+      "fork_cells": 20,
+      "soft_tempt": 24,
+      "decision_span": 0.35,
+      "path_max_run": 5
+    },
+    {
+      "id": 8,
+      "name": "北伐·斜谷邸阁",
+      "dessert": false,
+      "note": "拆栈取符=符节+塌桥（≤2）。",
+      "size": 7,
+      "numbers_rc": [
+        [
+          0,
+          6,
+          1
+        ],
+        [
+          0,
+          4,
+          2
+        ],
+        [
+          6,
+          4,
+          3
+        ]
+      ],
+      "walls": {
+        "h_between": [
+          [
+            0,
+            4
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            5
+          ],
+          [
+            4,
+            5
+          ],
+          [
+            5,
+            2
+          ],
+          [
+            6,
+            3
+          ],
+          [
+            6,
+            4
+          ]
+        ],
+        "v_between": [
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            6
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            3,
+            1
+          ],
+          [
+            3,
+            2
+          ],
+          [
+            4,
+            1
+          ],
+          [
+            4,
+            4
+          ]
+        ]
+      },
+      "wall_count": 14,
+      "one_ways": [],
+      "one_way_count": 0,
+      "ferry": null,
+      "ferry_count": 0,
+      "ferry_manhattan": null,
+      "slide_cells": [],
+      "slide_count": 0,
+      "token_cells": [
+        [
+          1,
+          5
+        ]
+      ],
+      "seal_gates": [
+        {
+          "between": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "locked_until_token": true
+        }
+      ],
+      "seal_count": 1,
+      "token_count": 1,
+      "parity_edges": [],
+      "parity_count": 0,
+      "parity_rule": "某边仅奇数或偶数步可过；步=已铺格数（含当前格，即将跨边时的 filled）。filled 为奇数时 require_odd 边可过；filled 为偶数时 require_even 边可过。宵禁⊂奇偶，本章只用奇/偶。",
+      "burden": null,
+      "burden_count": 0,
+      "burden_forbidden_count": 0,
+      "burden_rule": null,
+      "collapse": {
+        "schema": "step_on_trigger",
+        "trigger_rc": [
+          2,
+          2
+        ],
+        "collapse_edge": {
+          "between": [
+            [
+              3,
+              0
+            ],
+            [
+              3,
+              1
+            ]
+          ]
+        },
+        "rule": "塌桥（schema=step_on_trigger）：踏触发格后，指定邻边变为墙，之后不可再过该边。非「边只过一次」（铺满一次本已成立）。"
+      },
+      "collapse_count": 1,
+      "collapse_rule": "塌桥（schema=step_on_trigger）：踏触发格后，指定邻边变为墙，之后不可再过该边。非「边只过一次」（铺满一次本已成立）。",
+      "collapse_schema": "step_on_trigger",
+      "sols_no_seal": 0,
+      "sols_open_seal": 1,
+      "sols_no_parity": null,
+      "sols_no_burden": null,
+      "sols_no_collapse": 3,
+      "pure_zip": false,
+      "num_count": 3,
+      "max_blind": 27,
+      "blinds": [
+        19,
+        27
+      ],
+      "turns": 29,
+      "greedy": false,
+      "solutions": 1,
+      "solutions_cs": 1,
+      "ascii": " ·   ·   ·   ·   2┃ ·   1\n    ━━                  ━━\n ·   ·   ·┃ ·   ·   ·   ·\n        ━━                \n ·   ·   ·   ·   ·   ·┃ ·\n                          \n ·   ·   ·   ·   ·   ·   ·\n    ━━  ━━                \n ·   ·   ·   ·   ·   ·┃ ·\n    ━━          ━━        \n ·   ·   ·┃ ·   ·   ·   ·\n                          \n ·   ·   ·   ·┃ 3┃ ·   ·\ntoken_cells:\n  [1, 5]\nseal_gates:\n  [1, 1]--[1, 2]\ncollapse:\n  trigger=[2, 2]\n  edge=[3, 0]--[3, 1]\n  schema=step_on_trigger",
+      "path": [
+        [
+          0,
+          6
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          1,
+          6
+        ],
+        [
+          2,
+          6
+        ],
+        [
+          3,
+          6
+        ],
+        [
+          4,
+          6
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          6,
+          6
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          6,
+          0
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          6,
+          4
+        ]
+      ],
+      "start_rc": [
+        0,
+        6
+      ],
+      "consec_adj": [],
+      "L_pocket_on_1": false,
+      "mechanic_types": 2,
+      "teach_notes": {
+        "拆栈取符": "符节+塌桥：取符开闸与塌桥封边时序交织。"
+      },
+      "fork_cells": 18,
+      "soft_tempt": 21,
+      "decision_span": 0.556,
+      "path_max_run": 6
+    },
+    {
+      "id": 9,
+      "name": "北伐·郿",
+      "dessert": false,
+      "note": "纯 Zip 尖峰：选择密度，禁近满墙；墙≤15 prefer≤14。",
+      "size": 7,
+      "numbers_rc": [
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          6,
+          3,
+          2
+        ],
+        [
+          0,
+          4,
+          3
+        ]
+      ],
+      "walls": {
+        "h_between": [
+          [
+            0,
+            3
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            5,
+            0
+          ],
+          [
+            6,
+            2
+          ]
+        ],
+        "v_between": [
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            4
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            5
+          ],
+          [
+            2,
+            1
+          ],
+          [
+            4,
+            3
+          ],
+          [
+            4,
+            6
+          ]
+        ]
+      },
+      "wall_count": 12,
+      "one_ways": [],
+      "one_way_count": 0,
+      "ferry": null,
+      "ferry_count": 0,
+      "ferry_manhattan": null,
+      "slide_cells": [],
+      "slide_count": 0,
+      "token_cells": [],
+      "seal_gates": [],
+      "seal_count": 0,
+      "token_count": 0,
+      "parity_edges": [],
+      "parity_count": 0,
+      "parity_rule": "某边仅奇数或偶数步可过；步=已铺格数（含当前格，即将跨边时的 filled）。filled 为奇数时 require_odd 边可过；filled 为偶数时 require_even 边可过。宵禁⊂奇偶，本章只用奇/偶。",
+      "burden": null,
+      "burden_count": 0,
+      "burden_forbidden_count": 0,
+      "burden_rule": null,
+      "collapse": null,
+      "collapse_count": 0,
+      "collapse_rule": null,
+      "collapse_schema": null,
+      "sols_no_seal": null,
+      "sols_open_seal": null,
+      "sols_no_parity": null,
+      "sols_no_burden": null,
+      "sols_no_collapse": null,
+      "pure_zip": true,
+      "num_count": 3,
+      "max_blind": 28,
+      "blinds": [
+        28,
+        18
+      ],
+      "turns": 28,
+      "greedy": false,
+      "solutions": 1,
+      "solutions_cs": 1,
+      "ascii": " ·   ·   ·   ·┃ 3   ·   ·\n    ━━          ━━        \n ·   1   ·   ·   ·   ·   ·\n    ━━  ━━          ━━    \n ·   ·   ·   ·┃ ·   ·   ·\n    ━━                    \n ·   ·   ·   ·   ·   ·   ·\n                          \n ·   ·   ·   ·   ·   ·   ·\n            ━━          ━━\n ·┃ ·   ·   ·   ·   ·   ·\n                          \n ·   ·   ·┃ 2   ·   ·   ·",
+      "path": [
+        [
+          1,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          6,
+          0
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          6,
+          6
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          4,
+          6
+        ],
+        [
+          3,
+          6
+        ],
+        [
+          2,
+          6
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          1,
+          6
+        ],
+        [
+          0,
+          6
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "start_rc": [
+        1,
+        1
+      ],
+      "consec_adj": [],
+      "L_pocket_on_1": false,
+      "mechanic_types": 0,
+      "teach_notes": {},
+      "fork_cells": 19,
+      "soft_tempt": 24,
+      "decision_span": 0.526,
+      "path_max_run": 4
+    },
+    {
+      "id": 10,
+      "name": "北伐·五丈原",
+      "dessert": false,
+      "note": "塌桥须避早踏+单向（collapse+OW 尖峰）；墙≤15 prefer≤14。",
+      "size": 7,
+      "numbers_rc": [
+        [
+          6,
+          2,
+          1
+        ],
+        [
+          2,
+          5,
+          2
+        ],
+        [
+          1,
+          1,
+          3
+        ]
+      ],
+      "walls": {
+        "h_between": [
+          [
+            1,
+            0
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            5
+          ],
+          [
+            3,
+            3
+          ],
+          [
+            5,
+            0
+          ],
+          [
+            6,
+            2
+          ],
+          [
+            6,
+            4
+          ]
+        ],
+        "v_between": [
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            4
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            3,
+            4
+          ],
+          [
+            4,
+            3
+          ]
+        ]
+      },
+      "wall_count": 12,
+      "one_ways": [
+        {
+          "from": [
+            4,
+            2
+          ],
+          "to": [
+            4,
+            1
+          ]
+        }
+      ],
+      "one_way_count": 1,
+      "ferry": null,
+      "ferry_count": 0,
+      "ferry_manhattan": null,
+      "slide_cells": [],
+      "slide_count": 0,
+      "token_cells": [],
+      "seal_gates": [],
+      "seal_count": 0,
+      "token_count": 0,
+      "parity_edges": [],
+      "parity_count": 0,
+      "parity_rule": "某边仅奇数或偶数步可过；步=已铺格数（含当前格，即将跨边时的 filled）。filled 为奇数时 require_odd 边可过；filled 为偶数时 require_even 边可过。宵禁⊂奇偶，本章只用奇/偶。",
+      "burden": null,
+      "burden_count": 0,
+      "burden_forbidden_count": 0,
+      "burden_rule": null,
+      "collapse": {
+        "schema": "step_on_trigger",
+        "trigger_rc": [
+          3,
+          1
+        ],
+        "collapse_edge": {
+          "between": [
+            [
+              2,
+              1
+            ],
+            [
+              2,
+              2
+            ]
+          ]
+        },
+        "rule": "塌桥（schema=step_on_trigger）：踏触发格后，指定邻边变为墙，之后不可再过该边。非「边只过一次」（铺满一次本已成立）。"
+      },
+      "collapse_count": 1,
+      "collapse_rule": "塌桥（schema=step_on_trigger）：踏触发格后，指定邻边变为墙，之后不可再过该边。非「边只过一次」（铺满一次本已成立）。",
+      "collapse_schema": "step_on_trigger",
+      "sols_no_seal": null,
+      "sols_open_seal": null,
+      "sols_no_parity": null,
+      "sols_no_burden": null,
+      "sols_no_collapse": 4,
+      "pure_zip": false,
+      "num_count": 3,
+      "max_blind": 32,
+      "blinds": [
+        32,
+        14
+      ],
+      "turns": 29,
+      "greedy": false,
+      "solutions": 1,
+      "solutions_cs": 1,
+      "ascii": " ·   ·   ·   ·   ·   ·   ·\n    ━━          ━━        \n ·┃ 3┃ ·   ·   ·   ·┃ ·\n        ━━                \n ·   ·   ·   ·   ·   2   ·\n                          \n ·   ·   ·   ·┃ ·   ·   ·\n                ━━        \n ·   ·   ·   ·   ·   ·   ·\n            ━━            \n ·┃ ·   ·   ·   ·   ·   ·\n                          \n ·   ·   1┃ ·   ·┃ ·   ·\none_ways:\n  [4, 2] -> [4, 1]\ncollapse:\n  trigger=[3, 1]\n  edge=[2, 1]--[2, 2]\n  schema=step_on_trigger",
+      "path": [
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          6,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          6,
+          6
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          4,
+          6
+        ],
+        [
+          3,
+          6
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          2,
+          6
+        ],
+        [
+          1,
+          6
+        ],
+        [
+          0,
+          6
+        ],
+        [
+          0,
+          5
+        ],
+        [
+          0,
+          4
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "start_rc": [
+        6,
+        2
+      ],
+      "consec_adj": [],
+      "L_pocket_on_1": false,
+      "mechanic_types": 2,
+      "teach_notes": {
+        "collapse_ow": "塌桥须避早踏+单向；两机关都非装饰。"
+      },
+      "sols_no_ow": 3,
+      "fork_cells": 19,
+      "soft_tempt": 23,
+      "decision_span": 0.526,
+      "path_max_run": 4
+    }
+  ],
+  "wall_diet": {
+    "mean": 12.3,
+    "peak": 14,
+    "ceiling_band": [
+      13.5,
+      16.5
+    ],
+    "tip_ceil": 15,
+    "tip_prefer": 14,
+    "hardness": "soft_tempt_fork_primary",
+    "sot": "/workspace/yilu_difficulty/DIFFICULTY_CONTROL_LOCKED_20260925.md",
+    "ban_near_full_fake_exit": true,
+    "date": "2026-09-25"
+  }
+}

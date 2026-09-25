@@ -1,10 +1,10 @@
 package ohos_app_cangjie_entry
 
 /* chapter-flow v1.3 SHIP cards over LevelCatalog.
-   Catalog.open = has boards (涿郡/平原), not current unlock.
-   Runtime: 涿郡 always; 平原 iff cleared >= 10.
-   Locked cards only (levelCount 0, no boards): 徐州, 吕布, 投袁…北伐.
-   05–10 skins (assets/chapter-skins-05-10-v91) are fullscreen preview only.
+   Catalog.open = has boards (涿郡..北伐 ch1..10), not current unlock.
+   Runtime: 涿郡 always; later chapters iff cleared >= levelStart.
+   All 10 chapters (levelCount 10) have boards wired in LevelCatalog.
+   05–10 skins (assets/chapter-skins-05-10-v91) provide fullscreen preview when locked.
    Official media: bust_p01..p10 + bust_s01, flag_p01..p10 + flag_gate_pattern,
    skin_01/02 + skin_05..10, card_05..10. Gate flag is pattern-only (no 关).
    Board landscape bands (assets/chapter-bands-v91): band_zhuojun_v91 /
@@ -107,8 +107,8 @@ public class ChapterCatalog {
             "淮泗争粮",
             "徐州·下邳",
             20,
-            0,
-            false
+            10,
+            true
         ))
         chapters.add(ChapterDef(
             3,
@@ -121,9 +121,9 @@ public class ChapterCatalog {
             "吕布",
             "下邳同仓",
             "下邳",
-            20,
-            0,
-            false
+            30,
+            10,
+            true
         ))
         chapters.add(ChapterDef(
             4,
@@ -136,9 +136,9 @@ public class ChapterCatalog {
             "袁→备",
             "乌巢仓破、半印失散；北不可回",
             "邺（乌巢仓影可辅）",
-            20,
-            0,
-            false
+            40,
+            10,
+            true
         ))
         chapters.add(ChapterDef(
             5,
@@ -151,9 +151,9 @@ public class ChapterCatalog {
             "刘表",
             "刘表辖下友道；不给曹营送",
             "襄阳",
-            20,
-            0,
-            false
+            50,
+            10,
+            true
         ))
         chapters.add(ChapterDef(
             6,
@@ -166,9 +166,9 @@ public class ChapterCatalog {
             "孙刘",
             "孙刘联军岸；不往乌林送曹营",
             "柴桑",
-            20,
-            0,
-            false
+            60,
+            10,
+            true
         ))
         chapters.add(ChapterDef(
             7,
@@ -181,9 +181,9 @@ public class ChapterCatalog {
             "蜀",
             "峡江入川关隘递进；非曹粮道，勿挂曹脸",
             "白水关（辅成都）",
-            20,
-            0,
-            false
+            70,
+            10,
+            true
         ))
         chapters.add(ChapterDef(
             8,
@@ -196,9 +196,9 @@ public class ChapterCatalog {
             "诸葛",
             "两道分运：汉中关城 vs 南中北运",
             "阳平关",
-            20,
-            0,
-            false
+            80,
+            10,
+            true
         ))
         chapters.add(ChapterDef(
             9,
@@ -211,9 +211,9 @@ public class ChapterCatalog {
             "诸葛",
             "对魏远征；街亭/空仓余韵",
             "五丈原",
-            20,
-            0,
-            false
+            90,
+            10,
+            true
         ))
         return chapters
     }
