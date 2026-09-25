@@ -168,8 +168,11 @@ class EntryView {
     }
 
     func chapterListFooter(): String {
+        let ch = this.currentChapter()
         let n = ChapterCatalog.clearedCount(this.chapterIndex, this.cleared)
-        return "已通 ${n} · 当前${this.chapterCurrentName()} · 共10驿 · 全6×6"
+        /* 本章尺寸取自 LevelCatalog 首驿（ch1–3 6×6，ch4–10 7×7）。 */
+        let board = LevelCatalog.byIndex(ch.levelStart)
+        return "已通 ${n} · 当前${this.chapterCurrentName()} · 共10驿 · ${board.cols}×${board.rows}"
     }
 
     func chapterOpenFooter(): String {

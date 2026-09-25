@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,14 +54,16 @@ def convert_board(b: dict, global_id: int) -> dict:
 
 
 def load_source_levels() -> list[dict]:
-    source_dir = (
-        LOCKED_DIR
-        if (LOCKED_DIR / LOCKED_FILES[0]).exists()
-        else Path("/workspace/tmp/locked-boards-inject")
-    )
+    missing = [fname for fname in LOCKED_FILES if not (LOCKED_DIR / fname).is_file()]
+    if missing:
+        print(
+            f"error: missing locked board file(s) under {LOCKED_DIR}: {', '.join(missing)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     levels = []
     for ch_idx, fname in enumerate(LOCKED_FILES):
-        fpath = source_dir / fname
+        fpath = LOCKED_DIR / fname
         data = json.loads(fpath.read_text(encoding="utf-8"))
         for tip_idx, b in enumerate(data["boards"]):
             global_id = ch_idx * 10 + tip_idx
