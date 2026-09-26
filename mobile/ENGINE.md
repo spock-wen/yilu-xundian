@@ -31,9 +31,9 @@
 | 壳 | 做什么 |
 | --- | --- |
 | `ios/app/YiluXundian/*.swift` | 读 bundle 里的 `level.json`，画格子，触摸调用 `yilu_touch_to_cell` / `yilu_try_step`。链接 iOS **静态库**。进第一笔 `yilu_*` 之前由 `CangjieRuntimeBootstrap.c` 调用 `CJ_MRT_CjRuntimeInit`。模拟器冒烟在 tip `eaf7aed` 通过（涿郡·范阳 id 1）；截图目录 `qa-shots/ios-shell-eaf7aed-gate`（本检出不含该目录）。 |
-| `android/app/src/main/java/com/yilu/xundian/*.kt` | 读 assets 里的同一盘 JSON，经 JNI 调同一批符号。加载 Android **动态库** `libyilu_zip.so`。 |
+| `android/app/src/main/java/com/yilu/xundian/*.kt` | 读 assets 里的同一盘 JSON，经 JNI 调同一批符号。加载 Android **动态库** `libyilu_zip.so`。进第一笔 `yilu_*` 之前由 `android/app/src/main/cpp/CangjieRuntimeBootstrap.c` 调用 `CJ_MRT_CjRuntimeInit`（ELF `.init_array` 只排队元数据）。tip `4986524` 的 Mac AVD 冒烟是 FAIL；本树补了初始化，仍须复测，不要标 PASSED。 |
 
-iOS 用已提交的 `cjpm.toml`（`output-type = "static"`）。Android 脚本另写一份 gitignore 的 manifest（`output-type = "dynamic"`），因为同一个 toml 不能同时是静态库和动态库。源码目录仍是这一份 `src/`。
+iOS 用已提交的 `cjpm.toml`（`output-type = "static"`）。Android 脚本另写一份 gitignore 的 manifest（`output-type = "dynamic"`），因为同一个 toml 不能同时是静态库和动态库。源码仍是这一份 `src/`。cjpm 1.1.3 拒绝 `src-dir = "../src"`，脚本把 `src/` 拷进 `mobile/shared/.android-build/src` 再写 `src-dir = "./src"`。
 
 ## 留在鸿蒙、没有搬进来的
 

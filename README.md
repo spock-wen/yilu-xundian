@@ -6,7 +6,7 @@
 - UI：官方仓颉 ArkUI Canvas + `onTouch`
 - 无内购、无登录、无 Game Service
 - 本仓库 **没有** 在 CI / 云主机上编出 HAP：当前环境没有 DevEco / 仓颉鸿蒙工具链。请用本机 DevEco 打开后编译。
-- iOS 壳见 [ios/README.md](ios/README.md)。Android 壳见 [android/README.md](android/README.md)。两边共用 [mobile/shared](mobile/shared) 里的仓颉 Zip 引擎，不是把规则重写成 Swift 或 Kotlin。**iOS 模拟器冒烟 PASSED**（tip `eaf7aed`，进入涿郡·范阳 id 1；截图目录 `qa-shots/ios-shell-eaf7aed-gate`，本检出不含该目录）。**Android SMOKE: BLOCKED**（冒烟 Mac 上没有 NDK / 完整 Android SDK）。
+- iOS 壳见 [ios/README.md](ios/README.md)。Android 壳见 [android/README.md](android/README.md)。两边共用 [mobile/shared](mobile/shared) 里的仓颉 Zip 引擎，不是把规则重写成 Swift 或 Kotlin。**iOS 模拟器冒烟 PASSED**（tip `eaf7aed`，进入涿郡·范阳 id 1；截图目录 `qa-shots/ios-shell-eaf7aed-gate`，本检出不含该目录）。**Android SMOKE: FAIL**（tip `4986524`，Mac AVD `grokdump`：第一次 `yilu_load_level_json` abort，`Check failed: runtime != nullptr`，未进入涿郡·范阳。壳已调用 `CJ_MRT_CjRuntimeInit`，本检出没有复测，不要标 PASSED。见 [android/README.md](android/README.md)）。
 
 ## 玩法
 

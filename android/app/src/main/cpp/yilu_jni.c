@@ -3,6 +3,18 @@
 #include <string.h>
 
 #include "yilu_zip.h"
+#include "CangjieRuntimeBootstrap.h"
+
+/* JNI_OnLoad runs after YiluZip.prepare has dlopen'd the Cangjie .so files,
+   so their .init_array constructors have already queued metadata. Every
+   native method also calls the guard: a second CJ_MRT_CjRuntimeInit fatals. */
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
+{
+    (void)vm;
+    (void)reserved;
+    yilu_ensure_cj_runtime();
+    return JNI_VERSION_1_6;
+}
 
 static jstring copy_buf(JNIEnv *env, int32_t (*read)(uint8_t *, int32_t)) {
     uint8_t buf[512];
@@ -33,6 +45,7 @@ Java_com_yilu_xundian_YiluZip_nativeLoadLevel(JNIEnv *env, jclass clazz, jstring
     const char *utf;
     int32_t rc;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     if (json == NULL) {
         return 1;
     }
@@ -49,12 +62,14 @@ JNIEXPORT jint JNICALL
 Java_com_yilu_xundian_YiluZip_nativeReady(JNIEnv *env, jclass clazz) {
     (void)env;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     return yilu_ready();
 }
 
 JNIEXPORT jstring JNICALL
 Java_com_yilu_xundian_YiluZip_nativeLastError(JNIEnv *env, jclass clazz) {
     (void)clazz;
+    yilu_ensure_cj_runtime();
     return copy_buf(env, yilu_last_error);
 }
 
@@ -62,6 +77,7 @@ JNIEXPORT jint JNICALL
 Java_com_yilu_xundian_YiluZip_nativeLevelId(JNIEnv *env, jclass clazz) {
     (void)env;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     return yilu_level_id();
 }
 
@@ -69,6 +85,7 @@ JNIEXPORT jint JNICALL
 Java_com_yilu_xundian_YiluZip_nativeCols(JNIEnv *env, jclass clazz) {
     (void)env;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     return yilu_cols();
 }
 
@@ -76,12 +93,14 @@ JNIEXPORT jint JNICALL
 Java_com_yilu_xundian_YiluZip_nativeRows(JNIEnv *env, jclass clazz) {
     (void)env;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     return yilu_rows();
 }
 
 JNIEXPORT jstring JNICALL
 Java_com_yilu_xundian_YiluZip_nativeLevelName(JNIEnv *env, jclass clazz) {
     (void)clazz;
+    yilu_ensure_cj_runtime();
     return copy_buf(env, yilu_copy_name);
 }
 
@@ -89,6 +108,7 @@ JNIEXPORT jint JNICALL
 Java_com_yilu_xundian_YiluZip_nativeNumberAt(JNIEnv *env, jclass clazz, jint x, jint y) {
     (void)env;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     return yilu_number_at(x, y);
 }
 
@@ -96,6 +116,7 @@ JNIEXPORT jint JNICALL
 Java_com_yilu_xundian_YiluZip_nativeWallCount(JNIEnv *env, jclass clazz) {
     (void)env;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     return yilu_wall_count();
 }
 
@@ -107,6 +128,7 @@ Java_com_yilu_xundian_YiluZip_nativeWallAt(JNIEnv *env, jclass clazz, jint index
     int32_t y2 = 0;
     jint vals[4];
     (void)clazz;
+    yilu_ensure_cj_runtime();
     if (out == NULL || (*env)->GetArrayLength(env, out) < 4) {
         return 0;
     }
@@ -125,6 +147,7 @@ JNIEXPORT jint JNICALL
 Java_com_yilu_xundian_YiluZip_nativePathLen(JNIEnv *env, jclass clazz) {
     (void)env;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     return yilu_path_len();
 }
 
@@ -133,6 +156,7 @@ Java_com_yilu_xundian_YiluZip_nativePathAt(JNIEnv *env, jclass clazz, jint index
     int32_t x = 0;
     int32_t y = 0;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     if (yilu_path_at(index, &x, &y) != 1) {
         return 0;
     }
@@ -143,6 +167,7 @@ JNIEXPORT jint JNICALL
 Java_com_yilu_xundian_YiluZip_nativeFilled(JNIEnv *env, jclass clazz) {
     (void)env;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     return yilu_filled();
 }
 
@@ -150,6 +175,7 @@ JNIEXPORT jint JNICALL
 Java_com_yilu_xundian_YiluZip_nativeNextRequired(JNIEnv *env, jclass clazz) {
     (void)env;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     return yilu_next_required();
 }
 
@@ -157,6 +183,7 @@ JNIEXPORT jint JNICALL
 Java_com_yilu_xundian_YiluZip_nativeIsWin(JNIEnv *env, jclass clazz) {
     (void)env;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     return yilu_is_win();
 }
 
@@ -164,6 +191,7 @@ JNIEXPORT jint JNICALL
 Java_com_yilu_xundian_YiluZip_nativeTryStep(JNIEnv *env, jclass clazz, jint x, jint y) {
     (void)env;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     return yilu_try_step(x, y);
 }
 
@@ -171,6 +199,7 @@ JNIEXPORT jint JNICALL
 Java_com_yilu_xundian_YiluZip_nativeUndo(JNIEnv *env, jclass clazz) {
     (void)env;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     return yilu_undo();
 }
 
@@ -178,6 +207,7 @@ JNIEXPORT void JNICALL
 Java_com_yilu_xundian_YiluZip_nativeClear(JNIEnv *env, jclass clazz) {
     (void)env;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     yilu_clear();
 }
 
@@ -195,6 +225,7 @@ Java_com_yilu_xundian_YiluZip_nativeTouch(
     int32_t x = 0;
     int32_t y = 0;
     (void)clazz;
+    yilu_ensure_cj_runtime();
     if (yilu_touch_to_cell(px, py, origin_x, origin_y, cell, &x, &y) != 1) {
         return 0;
     }

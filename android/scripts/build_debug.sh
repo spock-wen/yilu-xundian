@@ -1,7 +1,15 @@
 #!/bin/bash
 # Cross-compile the shared Zip engine for Android and assemble a debug APK.
-# Does not install or launch the APK. Smoke is BLOCKED until NDK + Cangjie
-# Android SDK + Android SDK exist on a build machine.
+# Does not install or launch the APK.
+#
+# Programmer smoke on tip 4986524 was FAIL (AVD grokdump: runtime != nullptr
+# on the first yilu_load_level_json). This script still does not run that
+# smoke. Do not mark SMOKE PASSED. Re-smoke on a Mac AVD after rebuilding.
+#
+# cjpm 1.1.3 rejects src-dir outside the module, so sources are copied to
+# .android-build/src and src-dir is "./src". cjc needs NDK llvm-ar: pass
+# -B ${PREBUILT}/bin and prepend that directory to PATH. libcangjie-runtime.so
+# DT_NEEDED libc++_shared.so, so the NDK copy is packaged and listed first.
 #
 # Flags:
 # https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/compile_and_build/cross_compilation.html
@@ -25,8 +33,8 @@ JNILIBS="$ROOT/app/src/main/jniLibs/arm64-v8a"
 ASSETS="$ROOT/app/src/main/assets"
 
 blocked() {
-  echo "SMOKE BLOCKED: Android smoke has not been run."
-  echo "This script only assembles an APK. It does not install or launch it."
+  echo "BUILD STOPPED. This script only assembles an APK. It does not install or launch."
+  echo "Programmer smoke on tip 4986524 was FAIL. Do not mark SMOKE PASSED."
   echo "$*"
   exit 1
 }
@@ -152,9 +160,13 @@ echo "NDK=$NDK"
 echo "SYSROOT=$SYSROOT"
 echo "BUILTINS_DIR=$BUILTINS_DIR"
 echo "RUNTIME=$RUNTIME"
-echo "SMOKE BLOCKED: compile only, no emulator launch."
+echo "SMOKE: compile only, no emulator launch. Do not mark PASSED."
 
 mkdir -p "$STAGE"
+# cjpm 1.1.3 requires src-dir inside the module directory (../src is rejected).
+# Copy sources into the stage dir. Also pass -B so cjc finds NDK llvm-ar.
+rm -rf "$STAGE/src"
+cp -R "$SHARED/src" "$STAGE/src"
 cat > "$STAGE/cjpm.toml" << EOF
 [package]
   cjc-version = "1.1.3"
@@ -162,13 +174,15 @@ cat > "$STAGE/cjpm.toml" << EOF
   description = "Generated Android dynamic build. Do not commit."
   version = "1.0.0"
   output-type = "dynamic"
-  src-dir = "../src"
+  src-dir = "./src"
 
 [target.${TARGET}]
-  compile-option = "--sysroot ${SYSROOT} -L ${BUILTINS_DIR}"
+  compile-option = "--sysroot ${SYSROOT} -L ${BUILTINS_DIR} -B ${PREBUILT}/bin"
 EOF
 
 cd "$STAGE"
+# Ensure NDK llvm tools are findable even if -B is ignored by some cjc paths.
+export PATH="${PREBUILT}/bin:${PATH}"
 cjpm build --target "$TARGET" -V
 
 so_list="$(find target -type f -name 'libyilu_zip*.so' | sort)"
@@ -221,6 +235,29 @@ $engine_first
 $root_so
 EOF
 
+# libcangjie-runtime.so DT_NEEDED libc++_shared.so from the NDK.
+CXX_SHARED=""
+for candidate in \
+  "$PREBUILT/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" \
+  "$(find "$NDK" -path '*aarch64-linux-android*' -name 'libc++_shared.so' 2>/dev/null | head -n 1)"
+do
+  if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+    CXX_SHARED="$candidate"
+    break
+  fi
+done
+if [ -z "$CXX_SHARED" ]; then
+  blocked "libc++_shared.so not found under NDK (needed by libcangjie-runtime.so)."
+fi
+cp "$CXX_SHARED" "$JNILIBS/"
+# Prepend so System.loadLibrary order loads it before cangjie-runtime if the app loads the list.
+if [ -f "$ASSETS/cangjie_native_libs.txt" ]; then
+  { echo "c++_shared"; cat "$ASSETS/cangjie_native_libs.txt"; } > "$ASSETS/cangjie_native_libs.txt.tmp"
+  mv "$ASSETS/cangjie_native_libs.txt.tmp" "$ASSETS/cangjie_native_libs.txt"
+else
+  echo "c++_shared" > "$ASSETS/cangjie_native_libs.txt"
+fi
+
 echo "jniLibs:"
 find "$JNILIBS" -type f -name '*.so' | sort
 echo "load order:"
@@ -235,4 +272,4 @@ else
 fi
 
 echo "assembleDebug finished. APK is under android/app/build/outputs/apk/debug/."
-echo "SMOKE BLOCKED: not installed, not launched, no UI pass."
+echo "SMOKE: not installed, not launched. Mac AVD re-smoke is still required. Do not mark PASSED."

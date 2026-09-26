@@ -7,7 +7,10 @@ import yilu_zip.game.{PatrolGame, blankLevel, levelFromJson}
    https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/FFI/cangjie-c.html
    iOS links section.o and cjstart.o, then the shell calls CJ_MRT_CjRuntimeInit
    before the first yilu_* entry (cjstart only queues metadata).
-   Android loads the Cangjie runtime .so files before libyilu_zip.so.
+   Android loads the Cangjie runtime .so files before libyilu_zip.so. Each ELF
+   .so queues its own metadata from .init_array; the Android shell must still
+   call CJ_MRT_CjRuntimeInit once before these entries
+   (android/app/src/main/cpp/CangjieRuntimeBootstrap.c).
    https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/compile_and_build/cross_compilation.html */
 
 var gGame: PatrolGame = PatrolGame(blankLevel())

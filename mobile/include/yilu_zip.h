@@ -5,7 +5,11 @@
 
 /* C ABI exported by mobile/shared/src/ffi.cj (@C, unmangled names).
    https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/FFI/cangjie-c.html
-   iOS links this staticlib; Android JNI calls the same symbols from the .so. */
+   iOS links this staticlib; Android JNI calls the same symbols from the .so.
+   Both shells must call CJ_MRT_CjRuntimeInit before the first yilu_* entry.
+   iOS: ios/app/YiluXundian/CangjieRuntimeBootstrap.c (Mach-O metadata).
+   Android: android/app/src/main/cpp/CangjieRuntimeBootstrap.c (ELF .init_array
+   already queued metadata; this header does not do that walk). */
 
 #ifdef __cplusplus
 extern "C" {
