@@ -6,7 +6,7 @@
 - UI：官方仓颉 ArkUI Canvas + `onTouch`
 - 无内购、无登录、无 Game Service
 - 本仓库 **没有** 在 CI / 云主机上编出 HAP：当前环境没有 DevEco / 仓颉鸿蒙工具链。请用本机 DevEco 打开后编译。
-- iOS 壳见 [ios/README.md](ios/README.md)。Android 壳见 [android/README.md](android/README.md)。两边共用 [mobile/shared](mobile/shared) 里的仓颉 Zip 引擎，不是把规则重写成 Swift 或 Kotlin。**模拟器 / 真机冒烟都是 BLOCKED**。iOS 已在开发者 Mac 上编过 arm64 模拟器包，但启动即 abort，本仓库这次改动还没在模拟器里复验。Android NDK 与仓颉 Android SDK 也还没在构建机上冒烟。
+- iOS 壳见 [ios/README.md](ios/README.md)。Android 壳见 [android/README.md](android/README.md)。两边共用 [mobile/shared](mobile/shared) 里的仓颉 Zip 引擎，不是把规则重写成 Swift 或 Kotlin。**模拟器 / 真机冒烟都是 BLOCKED**。iOS 的 arm64 包在开发者 Mac 上能编过、能装上；`a6c9b53` 启动时在 `CString.toString` 里栈溢出，避开这条路径的改动还没在模拟器里复验。Android NDK 与仓颉 Android SDK 也还没在构建机上冒烟。
 
 ## 玩法
 

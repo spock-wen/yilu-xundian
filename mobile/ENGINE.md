@@ -22,8 +22,8 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `mobile/shared/src/game/json_level.cj` | 读一盘 JSON，建成 `LevelDef`。不用 `stdx`。`String` 按下标取的是 UTF-8 字节（[1.1.3 String](https://cj-docs.gitcode.com/zh/1.1.3/libs/std/core/core_package_api/core_package_structs.html)）。 |
-| `mobile/shared/src/ffi.cj` | 顶层 `@C` 函数。命名避免 `CJ_` 前缀（[仓颉-C 互操作](https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/FFI/cangjie-c.html)）。 |
+| `mobile/shared/src/game/json_level.cj` | 读一盘 JSON，建成 `LevelDef`。不用 `stdx`。字节用 `String.get`（越界返回 `None`），不用会抛 `IndexOutOfBoundsException` 的 `[]`（[1.1.3 String](https://cj-docs.gitcode.com/zh/1.1.3/libs/std/core/core_package_api/core_package_structs.html)）。错误文案用手写十进制拼接，不走 `${整数}`。 |
+| `mobile/shared/src/ffi.cj` | 顶层 `@C` 函数。命名避免 `CJ_` 前缀（[仓颉-C 互操作](https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/FFI/cangjie-c.html)）。`yilu_load_level_json` 不用 `CString.toString()`：那条实现在长度 ≥ 32 时调用 `memcpy_s`，失败路径会把 iOS 上的越界异常格式化递归撑爆栈。 |
 | `mobile/include/yilu_zip.h` | 同一份 C 声明。iOS bridging header 引用它；Android `yilu_jni.c` 也引用它。 |
 
 ## 壳里没有 Zip 规则

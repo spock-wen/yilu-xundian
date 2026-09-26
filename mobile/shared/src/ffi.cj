@@ -34,19 +34,62 @@ func writeUtf8(text: String, buf: CPointer<UInt8>, cap: Int32): Int32 {
         return -1
     }
     var i: Int64 = 0
+    var written: Int64 = 0
     while (i < n) {
-        let b = text[i]
-        unsafe {
-            let p = buf + i
-            p.write(b)
+        match (text.get(i)) {
+            case Some(b) =>
+                unsafe {
+                    let p = buf + i
+                    p.write(b)
+                }
+                written = i + 1
+            case None => break
         }
         i = i + 1
     }
     unsafe {
-        let p = buf + n
+        let p = buf + written
         p.write(0u8)
     }
-    return Int32(n)
+    return Int32(written)
+}
+
+/* level.json is 613 bytes. CString.toString in runtime v1.1.3 copies with memcpy_s
+   when the length is >= STRING_C_THRESHOLD (32) and, on failure, interpolates the
+   Int32 error code. That interpolation is StringBuilder.append(Int32) -> numberToString,
+   and IndexOutOfBoundsException's message interpolates the index again, so the same
+   path recurses into the stack guard. Copy with CPointer.read instead.
+   https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/stdlib/libs/std/core/c_string_resource.cj
+   https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/stdlib/libs/std/core/string_common.cj
+   https://cj-docs.gitcode.com/zh/1.1.3/libs/std/core/core_package_api/core_package_intrinsics.html */
+const JSON_BYTE_CAP: Int64 = 1048576
+
+func utf8FromCString(raw: CString): Option<String> {
+    if (raw.isNull()) {
+        return None
+    }
+    let n = raw.size()
+    if (n <= 0 || n > JSON_BYTE_CAP) {
+        return None
+    }
+    let chars = unsafe { raw.getChars() }
+    if (chars.isNull()) {
+        return None
+    }
+    /* Element writes, not memcpy_s. v1.1.3 toString uses memcpy_s only when
+       len >= 32; that failure path is what the simulator stack overflowed in. */
+    let arr = Array<UInt8>(n, repeat: 0)
+    var i: Int64 = 0
+    while (i < n) {
+        let b = unsafe { chars.read(i) }
+        arr[i] = b
+        i = i + 1
+    }
+    if (!String.checkUtf8Encoding(arr)) {
+        return None
+    }
+    let text = unsafe { String.fromUtf8Unchecked(arr) }
+    return Some(text)
 }
 
 @C
@@ -56,7 +99,20 @@ public func yilu_load_level_json(json: CString): Int32 {
         gError = "null json pointer"
         return 1
     }
-    let text = json.toString()
+    let n = json.size()
+    if (n <= 0 || n > JSON_BYTE_CAP) {
+        gReady = false
+        gError = "json byte length is out of range"
+        return 1
+    }
+    var text = ""
+    match (utf8FromCString(json)) {
+        case None =>
+            gReady = false
+            gError = "json is not utf-8"
+            return 1
+        case Some(decoded) => text = decoded
+    }
     let loaded = levelFromJson(text)
     match (loaded.level) {
         case Some(level) =>
@@ -144,14 +200,17 @@ public func yilu_wall_at(
     if (i < 0 || i >= gGame.level.walls.size) {
         return 0
     }
-    let wall = gGame.level.walls[i]
-    unsafe {
-        x1.write(Int32(wall.x1))
-        y1.write(Int32(wall.y1))
-        x2.write(Int32(wall.x2))
-        y2.write(Int32(wall.y2))
+    match (gGame.level.walls.get(i)) {
+        case None => return 0
+        case Some(wall) =>
+            unsafe {
+                x1.write(Int32(wall.x1))
+                y1.write(Int32(wall.y1))
+                x2.write(Int32(wall.x2))
+                y2.write(Int32(wall.y2))
+            }
+            return 1
     }
-    return 1
 }
 
 @C

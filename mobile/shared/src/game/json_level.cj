@@ -4,10 +4,61 @@ import std.collection.ArrayList
 import yilu_zip.engine.Wall
 
 /* Minimal JSON reader for one levels.json object.
-   String indexing is UTF-8 bytes (Cangjie 1.1.3 String <: Collection<Byte>).
+   String bytes are read with String.get, which returns None past the end
+   (1.1.3 String <: Collection<Byte>). operator[] throws IndexOutOfBoundsException,
+   and that exception's message interpolates the index through numberToString.
+   On the iOS 1.1.3 runtime that formatting recurses until the stack guard
+   (YiluXundian-2026-09-26-223058.ips). This loader returns an error string instead.
    https://cj-docs.gitcode.com/zh/1.1.3/libs/std/core/core_package_api/core_package_structs.html
+   https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/stdlib/libs/std/core/array.cj
    parityEdges must be absent or empty: this loader does not construct ParityEdge values.
    stepLimit is stored on LevelDef and not enforced, same as PatrolGame in patrol.cj. */
+
+func asciiDigit(d: Int64): String {
+    if (d == 1) {
+        return "1"
+    }
+    if (d == 2) {
+        return "2"
+    }
+    if (d == 3) {
+        return "3"
+    }
+    if (d == 4) {
+        return "4"
+    }
+    if (d == 5) {
+        return "5"
+    }
+    if (d == 6) {
+        return "6"
+    }
+    if (d == 7) {
+        return "7"
+    }
+    if (d == 8) {
+        return "8"
+    }
+    if (d == 9) {
+        return "9"
+    }
+    return "0"
+}
+
+/* Decimal without Int64.toString / StringBuilder.append. Those call numberToString,
+   which is the frame that recurses in the iOS crash. */
+func decimalText(n: Int64): String {
+    if (n <= 0) {
+        return "0"
+    }
+    var v = n
+    var out = ""
+    while (v > 0) {
+        out = asciiDigit(v % 10) + out
+        v = v / 10
+    }
+    return out
+}
 
 public class LevelLoad {
     public var level: Option<LevelDef>
@@ -70,42 +121,69 @@ public class JsonParser {
             return
         }
         this.failed = true
-        this.message = "json at ${this.i}: ${message}"
+        this.message = "json at " + decimalText(this.i) + ": " + message
+    }
+
+    func current(): Option<UInt8> {
+        return this.text.get(this.i)
     }
 
     public func skipWs(): Unit {
-        while (!this.eof()) {
-            let b = this.text[this.i]
-            if (b != 32u8 && b != 9u8 && b != 10u8 && b != 13u8) {
-                return
+        while (!this.failed) {
+            match (this.current()) {
+                case None => return
+                case Some(b) =>
+                    if (b != 32u8 && b != 9u8 && b != 10u8 && b != 13u8) {
+                        return
+                    }
+                    this.i = this.i + 1
             }
-            this.i = this.i + 1
         }
     }
 
     func consumeByte(b: UInt8): Bool {
-        if (this.eof() || this.text[this.i] != b) {
-            this.markFailed("expected delimiter")
-            return false
+        match (this.current()) {
+            case Some(got) =>
+                if (got == b) {
+                    this.i = this.i + 1
+                    return true
+                }
+            case None => ()
         }
-        this.i = this.i + 1
-        return true
+        this.markFailed("expected delimiter")
+        return false
     }
 
     func consumeByteIf(b: UInt8): Bool {
-        if (this.eof() || this.text[this.i] != b) {
-            return false
+        match (this.current()) {
+            case Some(got) =>
+                if (got == b) {
+                    this.i = this.i + 1
+                    return true
+                }
+            case None => ()
         }
-        this.i = this.i + 1
-        return true
+        return false
     }
 
     func consumeLiteral(literal: String): Bool {
         var k: Int64 = 0
         while (k < literal.size) {
-            if (this.eof() || this.text[this.i] != literal[k]) {
-                this.markFailed("bad literal")
-                return false
+            match (this.current()) {
+                case None =>
+                    this.markFailed("bad literal")
+                    return false
+                case Some(b) =>
+                    match (literal.get(k)) {
+                        case None =>
+                            this.markFailed("bad literal")
+                            return false
+                        case Some(lb) =>
+                            if (b != lb) {
+                                this.markFailed("bad literal")
+                                return false
+                            }
+                    }
             }
             this.i = this.i + 1
             k = k + 1
@@ -118,8 +196,13 @@ public class JsonParser {
         if (n == 0) {
             return ""
         }
-        let arr = Array<UInt8>(n, {idx => list[idx]})
-        return String.fromUtf8(arr)
+        let arr = Array<UInt8>(n, {idx =>
+            match (list.get(idx)) {
+                case Some(b) => b
+                case None => 0u8
+            }
+        })
+        return unsafe { String.fromUtf8Unchecked(arr) }
     }
 
     func parseString(): String {
@@ -128,18 +211,32 @@ public class JsonParser {
             return ""
         }
         let bytes = ArrayList<UInt8>()
-        while (!this.eof() && !this.failed) {
-            let b = this.text[this.i]
+        while (!this.failed) {
+            match (this.current()) {
+                case None =>
+                    this.markFailed("unterminated string")
+                    return ""
+                case Some(_) => ()
+            }
+            let b = match (this.current()) {
+                case Some(got) => got
+                case None => 0u8
+            }
             this.i = this.i + 1
             if (b == 34u8) {
                 return this.bytesToString(bytes)
             }
             if (b == 92u8) {
-                if (this.eof()) {
-                    this.markFailed("truncated escape")
-                    return ""
+                match (this.current()) {
+                    case None =>
+                        this.markFailed("truncated escape")
+                        return ""
+                    case Some(_) => ()
                 }
-                let e = this.text[this.i]
+                let e = match (this.current()) {
+                    case Some(got) => got
+                    case None => 0u8
+                }
                 this.i = this.i + 1
                 if (e == 34u8 || e == 92u8 || e == 47u8) {
                     bytes.add(e)
@@ -173,29 +270,43 @@ public class JsonParser {
 
     func parseNumber(): Int64 {
         var sign: Int64 = 1
-        if (!this.eof() && this.text[this.i] == 45u8) {
-            sign = -1
-            this.i = this.i + 1
+        match (this.current()) {
+            case Some(b) =>
+                if (b == 45u8) {
+                    sign = -1
+                    this.i = this.i + 1
+                }
+            case None => ()
         }
-        if (this.eof() || this.text[this.i] < 48u8 || this.text[this.i] > 57u8) {
-            this.markFailed("expected digit")
-            return 0
+        match (this.current()) {
+            case None =>
+                this.markFailed("expected digit")
+                return 0
+            case Some(b) =>
+                if (b < 48u8 || b > 57u8) {
+                    this.markFailed("expected digit")
+                    return 0
+                }
         }
         var n: Int64 = 0
-        while (!this.eof()) {
-            let b = this.text[this.i]
-            if (b < 48u8 || b > 57u8) {
-                break
+        while (true) {
+            match (this.current()) {
+                case None => break
+                case Some(b) =>
+                    if (b < 48u8 || b > 57u8) {
+                        break
+                    }
+                    this.i = this.i + 1
+                    n = n * 10 + (Int64(b) - 48)
             }
-            this.i = this.i + 1
-            n = n * 10 + (Int64(b) - 48)
         }
-        if (!this.eof()) {
-            let b = this.text[this.i]
-            if (b == 46u8 || b == 101u8 || b == 69u8) {
-                this.markFailed("only integers are accepted")
-                return 0
-            }
+        match (this.current()) {
+            case Some(b) =>
+                if (b == 46u8 || b == 101u8 || b == 69u8) {
+                    this.markFailed("only integers are accepted")
+                    return 0
+                }
+            case None => ()
         }
         return n * sign
     }
@@ -205,11 +316,12 @@ public class JsonParser {
             return JsonVal()
         }
         this.skipWs()
-        if (this.eof()) {
-            this.markFailed("unexpected end")
-            return JsonVal()
+        let b = match (this.current()) {
+            case None =>
+                this.markFailed("unexpected end")
+                return JsonVal()
+            case Some(got) => got
         }
-        let b = this.text[this.i]
         if (b == 123u8) {
             return this.parseObject()
         }
@@ -325,9 +437,12 @@ public class JsonParser {
 func jsonField(obj: JsonVal, key: String): Option<JsonVal> {
     var i: Int64 = 0
     while (i < obj.fields.size) {
-        let field = obj.fields[i]
-        if (field.key == key) {
-            return Some(field.val)
+        match (obj.fields.get(i)) {
+            case None => return None
+            case Some(field) =>
+                if (field.key == key) {
+                    return Some(field.val)
+                }
         }
         i = i + 1
     }
@@ -337,11 +452,11 @@ func jsonField(obj: JsonVal, key: String): Option<JsonVal> {
 func readIntField(obj: JsonVal, key: String, err: LevelLoad): Int64 {
     match (jsonField(obj, key)) {
         case None =>
-            err.error = "missing ${key}"
+            err.error = "missing " + key
             return 0
         case Some(v) =>
             if (v.kind != 2) {
-                err.error = "${key} must be an int"
+                err.error = key + " must be an int"
                 return 0
             }
             return v.intVal
@@ -408,7 +523,10 @@ public func levelFromJson(text: String): LevelLoad {
             }
             var i: Int64 = 0
             while (i < v.arr.size) {
-                let item = v.arr[i]
+                let item = match (v.arr.get(i)) {
+                    case None => return LevelLoad(None, "waypoint index")
+                    case Some(got) => got
+                }
                 if (item.kind != 5) {
                     return LevelLoad(None, "waypoint must be an object")
                 }
@@ -437,7 +555,10 @@ public func levelFromJson(text: String): LevelLoad {
             }
             var i: Int64 = 0
             while (i < v.arr.size) {
-                let item = v.arr[i]
+                let item = match (v.arr.get(i)) {
+                    case None => return LevelLoad(None, "wall index")
+                    case Some(got) => got
+                }
                 if (item.kind != 5) {
                     return LevelLoad(None, "wall must be an object")
                 }

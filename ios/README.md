@@ -8,10 +8,14 @@
 
 - `cjpm` 编 `aarch64-apple-ios-simulator` 静态库：成功。
 - 旧脚本的 `-destination 'generic/platform=iOS Simulator'`：失败。该目标还会链 **x86_64**，仓颉模拟器库只有 arm64，x86_64 切片报 `Undefined symbols: _yilu_*`。
-- 只编 arm64（iPhone 16 的 UDID，加上 `EXCLUDED_ARCHS=x86_64` / `ARCHS=arm64`）可以编过并装上（bundle id `com.yilu.xundian.ios`）。
-- 启动后立刻 **SIGABRT**，棋盘没出来。崩溃栈：`BoardViewController.viewDidLoad` → `YiluZip.loadBundledLevel` → `yilu_load_level_json` → `CJ_MCC_N2CStub` → `MRT_TryNewAndRunCJThread` → `MapleRuntime::Logger::FormatLog` → `abort`。日志在本机上传件里，没有仓颉业务帧。
+- 只编 arm64（iPhone 16 的 UDID，加上 `EXCLUDED_ARCHS=x86_64` / `ARCHS=arm64`）可以编过并装上（bundle id `com.yilu.xundian.ios`）。`a6c9b53` 的 arm64 脚本在 Mac 上**编译和安装都成功了**。
+- `a6c9b53` 启动后不再是早先的 `MRT_TryNewAndRunCJThread` / `FormatLog` abort。运行时已经进了仓颉帧。新的崩溃是 **SIGSEGV** `KERN_PROTECTION_FAILURE`，信息 `Could not determine thread index for stack guard region`，故障地址在 Stack Guard。日志：`YiluXundian-2026-09-26-223058.ips`。触发线程栈顶是 `_CNatUarray$37arrayIndexOutOfBoundsExceptionMessageHll` 与 `numberToString` / `StringBuilder.append` 互相调用，下面才是：
 
-这次改了默认目标（只 arm64）并在第一次 `yilu_*` 之前调用 `CJ_MRT_CjRuntimeInit`。**Linux 云主机没有 Simulator，不能把这次改动标成冒烟通过。** 要开发者 Mac 再跑下面的安装和启动。
+  `_CNat13StringBuilder6appendHi` → `_CNatXk8toStringHv` → `_CN8yilu_zip20yilu_load_level_jsonHk` → `yilu_load_level_json` → `YiluZip.loadBundledLevel`（`YiluZip.swift` 的 `withCString` / `yilu_load_level_json`）→ `BoardViewController.viewDidLoad`。
+
+  仓颉 runtime 标签 [v1.1.3 的 `c_string_resource.cj`](https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/stdlib/libs/std/core/c_string_resource.cj) 里，`CString.toString` 在长度 ≥ [`STRING_C_THRESHOLD` = 32](https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/stdlib/libs/std/core/string_common.cj) 时用 `memcpy_s`，失败则抛 `IllegalMemoryException("... error code: ${rc}.")`，`${rc}` 是 `StringBuilder.append(Int32)`。[`array.cj` 的越界文案](https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/stdlib/libs/std/core/array.cj)再插值下标，同一条 `numberToString` 递归直到栈保护页。本仓库 `ios/app/YiluXundian/level.json` 是 **613** 字节（`wc -c`），会走 ≥32 的分支。本环境不能反汇编 Mac 上的 `.a`，没有把 `toString +540` 逐条指令对上；源码里这条函数唯一的 `append(Int32)` 就是那个 `${rc}`。
+
+这次不再调用 `CString.toString()`。`getChars()` + `CPointer.read` 拷进 `Array<UInt8>`，`String.checkUtf8Encoding` 失败就返回错误码，成功再用 `String.fromUtf8Unchecked`。解析用 `String.get` / `ArrayList.get`，错误文案不走 `${整数}`。**Linux 云主机没有 Simulator，不能把这次改动标成冒烟通过。** 要开发者 Mac 再跑下面的安装和启动。
 
 ## 这一版接上的一关
 
@@ -137,7 +141,7 @@ cd demo
 
 ## 已知限制
 
-- **SMOKE: BLOCKED。** arm64 模拟器包曾经能装上，但一调用 `yilu_load_level_json` 就在仓颉运行时里 abort。运行时初始化改动还没有在 Mac 上复验。云主机没有 Simulator。
+- **SMOKE: BLOCKED。** `a6c9b53` 的 arm64 包在开发者 Mac 上能编过、能装上。启动进了 `yilu_load_level_json`，然后在 `CString.toString` 的异常格式化里栈溢出（`YiluXundian-2026-09-26-223058.ips`）。避开 `toString` 的这次改动还没有在模拟器里复验。云主机没有 Simulator。
 - v1 只加载一关。`parityEdges` 非空会拒绝加载。`stepLimit` 会写进 `LevelDef`，`PatrolGame` 不读它（和鸿蒙 `patrol.cj` 一样）。
 - JSON 加载器接受这一盘用到的对象/数组/字符串/整数，以及 `\"` `\\` `\/` `\b` `\f` `\n` `\r` `\t`。不接受 `\u` 转义；范阳这盘的站名是 UTF-8 原文。
 - `@C` 符号名按[仓颉-C 互操作](https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/FFI/cangjie-c.html)应为未改名的 `yilu_*`。本环境没有 `nm` 可对 iOS 静态库做验证。链接失败时在 Mac 上执行 `nm -g ios/app/YiluXundian/Cangjie/libyilu_zip.a | grep yilu_`。
