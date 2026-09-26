@@ -15,3 +15,7 @@ __pycache__/
 *.so
 .cxx
 node_modules/
+
+# verification evidence
+artifacts/verify/**
+!artifacts/verify/.gitkeep
