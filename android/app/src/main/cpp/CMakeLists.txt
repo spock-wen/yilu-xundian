@@ -14,13 +14,13 @@ set(YILU_CJ_RUNTIME_SO "${YILU_ZIP_DIR}/libcangjie-runtime.so")
 if(NOT EXISTS "${YILU_ZIP_SO}")
     message(FATAL_ERROR
         "Missing ${YILU_ZIP_SO}. Run android/scripts/build_debug.sh. "
-        "See android/README.md. Do not mark Android SMOKE PASSED.")
+        "See android/README.md (tip f25f813: programmer Mac smoke PASSED, tester gate PASS).")
 endif()
 if(NOT EXISTS "${YILU_CJ_RUNTIME_SO}")
     message(FATAL_ERROR
         "Missing ${YILU_CJ_RUNTIME_SO}. CJ_MRT_CjRuntimeInit is exported from "
         "libcangjie-runtime.so. Run android/scripts/build_debug.sh. "
-        "See android/README.md. Do not mark Android SMOKE PASSED.")
+        "See android/README.md (tip f25f813: programmer Mac smoke PASSED, tester gate PASS).")
 endif()
 
 # Link via -L/-l so DT_NEEDED is "libyilu_zip.so" / "libcangjie-runtime.so",

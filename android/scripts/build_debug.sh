@@ -2,9 +2,11 @@
 # Cross-compile the shared Zip engine for Android and assemble a debug APK.
 # Does not install or launch the APK.
 #
-# Programmer smoke on tip 4986524 was FAIL (AVD grokdump: runtime != nullptr
-# on the first yilu_load_level_json). This script still does not run that
-# smoke. Do not mark SMOKE PASSED. Re-smoke on a Mac AVD after rebuilding.
+# This script does not install or launch. Recorded results at tip f25f813
+# (f25f813d81388b550fd336f3b819b93117f214c5), programmer smoke ≠ tester gate:
+#   Programmer Mac smoke PASSED — AVD grokdump, 涿郡·范阳 id 1, visible 6×6.
+#   Tester gate PASS — fullscreen evidence, same tip.
+# Tip 4986524 programmer smoke was FAIL (missing CJ_MRT_CjRuntimeInit).
 #
 # cjpm 1.1.3 rejects src-dir outside the module, so sources are copied to
 # .android-build/src and src-dir is "./src". cjc needs NDK llvm-ar: pass
@@ -34,7 +36,7 @@ ASSETS="$ROOT/app/src/main/assets"
 
 blocked() {
   echo "BUILD STOPPED. This script only assembles an APK. It does not install or launch."
-  echo "Programmer smoke on tip 4986524 was FAIL. Do not mark SMOKE PASSED."
+  echo "Recorded at tip f25f813: programmer Mac smoke PASSED; tester gate PASS (separate). This script did not re-run either."
   echo "$*"
   exit 1
 }
@@ -160,7 +162,7 @@ echo "NDK=$NDK"
 echo "SYSROOT=$SYSROOT"
 echo "BUILTINS_DIR=$BUILTINS_DIR"
 echo "RUNTIME=$RUNTIME"
-echo "SMOKE: compile only, no emulator launch. Do not mark PASSED."
+echo "Compile only, no emulator launch. Tip f25f813 records are separate: programmer Mac smoke PASSED, tester gate PASS."
 
 mkdir -p "$STAGE"
 # cjpm 1.1.3 requires src-dir inside the module directory (../src is rejected).
@@ -272,4 +274,4 @@ else
 fi
 
 echo "assembleDebug finished. APK is under android/app/build/outputs/apk/debug/."
-echo "SMOKE: not installed, not launched. Mac AVD re-smoke is still required. Do not mark PASSED."
+echo "Not installed, not launched. Tip f25f813: programmer Mac smoke PASSED; tester gate PASS. This script did not re-run them."

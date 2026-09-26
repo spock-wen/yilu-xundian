@@ -2,17 +2,16 @@
 
 Kotlin 只画格子，并把触摸交给 `mobile/shared` 里的仓颉 Zip 引擎。不是把 Zip 重写成 Kotlin，也不是鸿蒙界面移植。JNI 见 `android/app/src/main/cpp/yilu_jni.c`，符号与 iOS 相同（`mobile/include/yilu_zip.h`）。
 
-## SMOKE: FAIL（programmer Mac，2026-09-27 Asia/Shanghai）
+## SMOKE（tip `f25f813`）
 
-programmer Mac 在 tip `4986524`（`4986524a6cb3cb8889c73cd2d475fc832dade380`）上的冒烟是 **FAIL**。不要标 PASSED。
+程序员 Mac 冒烟和测试门禁是两件记录。两条都相对 tip `f25f813`（`f25f813d81388b550fd336f3b819b93117f214c5`）。截图目录可以不在本检出里。
 
-- 用仓颉 Android SDK 1.1.3 + NDK 27.0.12077973 + platform 34 编出 debug APK。
-- 装上 AVD `grokdump`（Pixel 6 / Android 15 arm64，emulator-5560）。
-- 原生库能加载（打进 NDK `libc++_shared.so`，并把 JNI 的 `DT_NEEDED` 改成 `libyilu_zip.so` 之后）。
-- **第一次 `yilu_load_level_json` 就 abort**：`Check failed: runtime != nullptr`。栈顶是 `yilu_load_level_json` ← `Java_com_yilu_xundian_YiluZip_nativeLoadLevel` ← `MainActivity.onCreate`。时间戳 2026-09-27 00:28:40 CST。仓颉运行时单例是空的；iOS 用 `CJ_MRT_CjRuntimeInit` 避开同一类检查（[Runtime.h](https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/runtime/src/Common/Runtime.h)）。
-- 棋盘（涿郡·范阳 / id 1）**没有**出现。截图是崩溃后的桌面或错误态，目录名 `_smoke/` 与 `qa-shots/android-shell-4986524-gate/`。本检出不含这些目录。
+1. **程序员 Mac 冒烟：PASSED**（tip `f25f813`）。AVD `grokdump` 进入涿郡·范阳 id 1，6×6 棋盘可见。证据目录名：`_smoke/android-fanyang-f25f813-resmoke-*`、`qa-shots/android-shell-f25f813-gate/`。
+2. **测试门禁：PASS**（同一 tip `f25f813`）。全屏证据目录：`qa-shots/android-shell-f25f813-tester`。
 
-这次改动在 JNI 里补了一次性的 `CJ_MRT_CjRuntimeInit`（见下文「运行时」）。**本环境没有 AVD，没有重装、没有重跑。** 状态仍是 FAIL，直到同一类 Mac 冒烟打开涿郡·范阳 id 1，并且能看见 6×6 格子。`build_debug.sh` 只编 APK，不安装、不启动。
+背景：tip `4986524`（`4986524a6cb3cb8889c73cd2d475fc832dade380`）的程序员冒烟是 FAIL。AVD `grokdump` 在第一次 `yilu_load_level_json` abort，`Check failed: runtime != nullptr`（当时没有 `CJ_MRT_CjRuntimeInit`）。栈是 `yilu_load_level_json` ← `Java_com_yilu_xundian_YiluZip_nativeLoadLevel` ← `MainActivity.onCreate`（2026-09-27 00:28:40 CST）。那次没有进入棋盘。目录名 `_smoke/` 与 `qa-shots/android-shell-4986524-gate/`。当前状态是上面两条，都在 `f25f813`。
+
+`build_debug.sh` 仍然只编 APK，不安装、不启动。上面的 PASSED 与 PASS 是 tip `f25f813` 上已经记下的结果，不是脚本每次运行自动重测出来的。
 
 ### 那次 Mac 会话的环境（只在当次 shell，没有写进 profile）
 
@@ -90,7 +89,7 @@ export YILU_ANDROID_TARGET=aarch64-linux-android31
 android/scripts/build_debug.sh
 ```
 
-装好 APK 之后，预期标题是「驿路巡点」，副标题 **涿郡·范阳 · id 1**。拖格子、撤销、重绘驿道都进仓颉。tip `4986524` 没有走到这一屏。本树补了运行时初始化，但没有在模拟器上复测，不要做通过记录。
+装好 APK 之后，标题是「驿路巡点」，副标题 **涿郡·范阳 · id 1**。拖格子、撤销、重绘驿道都进仓颉。tip `f25f813` 的程序员 Mac 冒烟已经进入这一屏，并且 6×6 可见。测试门禁是另一条记录，见上文 SMOKE。
 
 ## 运行时
 
@@ -104,7 +103,7 @@ Kotlin 必须先按清单加载仓颉 `.so`，再加载 `yilu_jni`，这样 `JNI
 
 ## 已知限制
 
-- **SMOKE: FAIL。** tip `4986524` 已在 Mac AVD 上崩溃。本改动没有复测。看见 6×6 的涿郡·范阳之前不要标 PASSED。
+- 当前冒烟见上文两条，都在 tip `f25f813`：程序员 Mac 冒烟 PASSED，测试门禁 PASS。tip `4986524` 曾因缺少 `CJ_MRT_CjRuntimeInit` 而 FAIL。
 - 只接范阳这一关。非空 `parityEdges` 会拒绝加载。
 - 若 `cjpm` 没有产出 `libyilu_zip.so`，脚本会把 `target/` 里的文件名打出来并失败，而不是假装动态库已经链进 APK。
 - 崩溃栈说明 `yilu_load_level_json` 这个符号已经进了 `.so`。其余 `yilu_*` 没有在本环境用 `nm` 逐个核对（这里没有 Android SDK / 仓颉 Android SDK）。
