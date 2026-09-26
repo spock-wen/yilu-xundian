@@ -15,4 +15,12 @@ CODE_SIGNING_ALLOWED = NO
 CODE_SIGNING_REQUIRED = NO
 ENABLE_BITCODE = NO
 
+// cangjie-sdk-mac-aarch64-ios ships an arm64 simulator static runtime
+// (lib/ios_simulator_aarch64_cjnative). A generic iOS Simulator destination
+// also links x86_64, and _yilu_* is then undefined in that slice.
+// Mac 2026-09-26: generic/platform=iOS Simulator failed that way; arm64-only linked.
+EXCLUDED_ARCHS[sdk=iphonesimulator*] = x86_64
+ARCHS[sdk=iphonesimulator*] = arm64
+ONLY_ACTIVE_ARCH = YES
+
 #include? "Cangjie.local.xcconfig"

@@ -24,6 +24,7 @@ final class YiluZip {
             loadError = "level.json is not UTF-8"
             return
         }
+        yilu_ensure_cj_runtime()
         let rc = text.withCString { ptr in
             yilu_load_level_json(ptr)
         }

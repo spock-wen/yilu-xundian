@@ -4,7 +4,14 @@
 
 ## SMOKE: BLOCKED
 
-模拟器冒烟**没有做**，也不能标成通过。目标 Mac 上还没有 **Xcode.app**。云主机是 Linux，没有 `xcodebuild`，也没有 `cjc`。下面的命令是 Xcode 装好之后的编译路径；`build_simulator.sh` 即使编完也不会启动 Simulator，更不会代替冒烟。
+模拟器冒烟**没有通过**。2026-09-26 在开发者 Mac（Xcode 27，`CANGJIE_HOME=/Users/spock/sdk/cangjie`，包 `cangjie-sdk-mac-aarch64-ios-1.1.3`）上：
+
+- `cjpm` 编 `aarch64-apple-ios-simulator` 静态库：成功。
+- 旧脚本的 `-destination 'generic/platform=iOS Simulator'`：失败。该目标还会链 **x86_64**，仓颉模拟器库只有 arm64，x86_64 切片报 `Undefined symbols: _yilu_*`。
+- 只编 arm64（iPhone 16 的 UDID，加上 `EXCLUDED_ARCHS=x86_64` / `ARCHS=arm64`）可以编过并装上（bundle id `com.yilu.xundian.ios`）。
+- 启动后立刻 **SIGABRT**，棋盘没出来。崩溃栈：`BoardViewController.viewDidLoad` → `YiluZip.loadBundledLevel` → `yilu_load_level_json` → `CJ_MCC_N2CStub` → `MRT_TryNewAndRunCJThread` → `MapleRuntime::Logger::FormatLog` → `abort`。日志在本机上传件里，没有仓颉业务帧。
+
+这次改了默认目标（只 arm64）并在第一次 `yilu_*` 之前调用 `CJ_MRT_CjRuntimeInit`。**Linux 云主机没有 Simulator，不能把这次改动标成冒烟通过。** 要开发者 Mac 再跑下面的安装和启动。
 
 ## 这一版接上的一关
 
@@ -74,12 +81,26 @@ ios/scripts/build_simulator.sh
    - `$CANGJIE_HOME/lib/ios_simulator_aarch64_cjnative/section.o`
    - `$CANGJIE_HOME/lib/ios_simulator_aarch64_cjnative/cjstart.o`
    - `-lc++`
+   - `-Wl,-u,_CJ_MRT_CjRuntimeInit`（把运行时初始化从静态库里拉进来）
    - 然后是本仓库的 `libyilu_zip.a`（`-force_load`）和该目录下全部 `.a`
    - 另加 `-Wl,-no_compact_unwind`（同一页：Xcode 15 在 compact unwind 断言失败时需要 `-Wl,-ld_classic` 或 `-Wl,-no_compact_unwind`）
    - `DEAD_CODE_STRIPPING = NO`
-4. `xcodebuild -project ios/app/YiluXundian.xcodeproj -scheme YiluXundian -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath ios/app/build CODE_SIGNING_ALLOWED=NO build`
+4. `xcodebuild` 的模拟器目标是一台 **arm64 iPhone**（已 Booted 的优先，否则 `simctl list devices available` 里第一台 iPhone）。可用 `YILU_SIM_UDID` 指定。同时传入 `ARCHS=arm64 EXCLUDED_ARCHS=x86_64 ONLY_ACTIVE_ARCH=YES`。**不要**再用 `generic/platform=iOS Simulator`：那个目标会去链 x86_64。工程里的 `Cangjie.defaults.xcconfig` 也排除了模拟器的 x86_64。
+5. 链接行在交叉编译页的 `section.o`、`cjstart.o`、`-lc++` 之后加了 `-Wl,-u,_CJ_MRT_CjRuntimeInit`，把运行时初始化对象拉进来。`cjstart.o` 只调用 `MRT_LibraryOnLoad`（[aarch64 iOS Cjstart.S](https://github.com/cangjielanguage/cangjie_runtime/blob/main/runtime/src/arch/aarch64_ios/Cjstart.S)），元数据可以先排队、运行时单例仍是空的（[LoaderManager.cpp](https://github.com/cangjielanguage/cangjie_runtime/blob/main/runtime/src/LoaderManager.cpp)）。第一次进 `@C` 时 `Runtime::Current()` 发现单例为空就会 fatal 然后 `abort`（[Runtime.h](https://github.com/cangjielanguage/cangjie_runtime/blob/main/runtime/src/Common/Runtime.h)）。壳在 `yilu_load_level_json` 之前调用 Apple 导出符号 `CJ_MRT_CjRuntimeInit`（[CjScheduler.cpp](https://github.com/cangjielanguage/cangjie_runtime/blob/main/runtime/src/CjScheduler.cpp) 里对 `MRT_CjRuntimeInit` 的别名）。1.1.3 SDK 的崩溃符号名是 `MRT_TryNewAndRunCJThread`，当前开源树里对应函数叫 `MRT_NewForeignCJThread`；本环境不能对 Mac 上的 `.a` 做 `nm`。若链接报 `_CJ_MRT_CjRuntimeInit` 未定义，在 Mac 上查：
 
-`generic/platform=iOS Simulator` 只编出模拟器 App，不启动模拟器。**SMOKE: BLOCKED**——目标 Mac 还没有 Xcode.app，这一步没有跑过。Xcode 装好之后，打开 `ios/app/YiluXundian.xcodeproj`，选一台 iOS Simulator，Run。预期画面是 **涿郡·范阳 · id 1**。从标了 1 的格子拖，正交一步交给 `yilu_try_step`；拖回上一格、点「撤销」「重绘驿道」都进仓颉引擎。在那之前不要把冒烟标成通过。
+```bash
+nm -gU "$CANGJIE_HOME/lib/ios_simulator_aarch64_cjnative/"*.a | grep -E 'CjRuntimeInit|TryNewAndRun'
+```
+
+脚本编完**不安装、不启动**。Mac 上复验（把 UDID 和 `.app` 路径换成脚本打印的那两行）：
+
+```bash
+xcrun simctl boot "$YILU_SIM_UDID"
+xcrun simctl install "$YILU_SIM_UDID" ios/app/build/Build/Products/Debug-iphonesimulator/YiluXundian.app
+xcrun simctl launch --console "$YILU_SIM_UDID" com.yilu.xundian.ios
+```
+
+预期第一屏是 **涿郡·范阳 · id 1**。从标了 1 的格子拖，正交一步交给 `yilu_try_step`；拖回上一格、点「撤销」「重绘驿道」都进仓颉引擎。在这台模拟器上看到这一屏之前，不要把冒烟标成通过。
 
 若 `cjc` 不接受默认的 `aarch64-apple-ios-simulator`，把 `YILU_IOS_TARGET` 设成 `cjc -v` 打印的 `Target` 再跑。交叉编译页的模拟器条目没有写 SDK 版本后缀；版本后缀出现在设备示例 `--target=aarch64-apple-ios17.5`（17.5 要换成 `xcrun --sdk iphoneos --show-sdk-version`）。
 
@@ -116,7 +137,7 @@ cd demo
 
 ## 已知限制
 
-- **SMOKE: BLOCKED。** 目标 Mac 还没有 Xcode.app。云主机也不能证明 `cjc` 已经接受这些源文件。
+- **SMOKE: BLOCKED。** arm64 模拟器包曾经能装上，但一调用 `yilu_load_level_json` 就在仓颉运行时里 abort。运行时初始化改动还没有在 Mac 上复验。云主机没有 Simulator。
 - v1 只加载一关。`parityEdges` 非空会拒绝加载。`stepLimit` 会写进 `LevelDef`，`PatrolGame` 不读它（和鸿蒙 `patrol.cj` 一样）。
 - JSON 加载器接受这一盘用到的对象/数组/字符串/整数，以及 `\"` `\\` `\/` `\b` `\f` `\n` `\r` `\t`。不接受 `\u` 转义；范阳这盘的站名是 UTF-8 原文。
 - `@C` 符号名按[仓颉-C 互操作](https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/FFI/cangjie-c.html)应为未改名的 `yilu_*`。本环境没有 `nm` 可对 iOS 静态库做验证。链接失败时在 Mac 上执行 `nm -g ios/app/YiluXundian/Cangjie/libyilu_zip.a | grep yilu_`。

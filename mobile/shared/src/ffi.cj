@@ -5,7 +5,8 @@ import yilu_zip.game.{PatrolGame, blankLevel, levelFromJson}
 
 /* C ABI for the iOS and Android shells. @C exports keep the C names (no CJ_ prefix).
    https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/FFI/cangjie-c.html
-   iOS must link cjstart.o so the runtime is up before these run.
+   iOS links section.o and cjstart.o, then the shell calls CJ_MRT_CjRuntimeInit
+   before the first yilu_* entry (cjstart only queues metadata).
    Android loads the Cangjie runtime .so files before libyilu_zip.so.
    https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/compile_and_build/cross_compilation.html */
 

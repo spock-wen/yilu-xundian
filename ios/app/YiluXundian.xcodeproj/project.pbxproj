@@ -11,6 +11,7 @@
 		E10000000000000000000022 /* BoardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000012 /* BoardViewController.swift */; };
 		E10000000000000000000023 /* BoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000013 /* BoardView.swift */; };
 		E10000000000000000000024 /* YiluZip.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000014 /* YiluZip.swift */; };
+		E10000000000000000000028 /* CangjieRuntimeBootstrap.c in Sources */ = {isa = PBXBuildFile; fileRef = E1000000000000000000001D /* CangjieRuntimeBootstrap.c */; };
 		E10000000000000000000025 /* level.json in Resources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000015 /* level.json */; };
 		E10000000000000000000026 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000016 /* Assets.xcassets */; };
 		E10000000000000000000027 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000017 /* LaunchScreen.storyboard */; };
@@ -21,6 +22,7 @@
 		E10000000000000000000012 /* BoardViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardViewController.swift; sourceTree = "<group>"; };
 		E10000000000000000000013 /* BoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardView.swift; sourceTree = "<group>"; };
 		E10000000000000000000014 /* YiluZip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YiluZip.swift; sourceTree = "<group>"; };
+		E1000000000000000000001D /* CangjieRuntimeBootstrap.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = CangjieRuntimeBootstrap.c; sourceTree = "<group>"; };
 		E10000000000000000000015 /* level.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = level.json; sourceTree = "<group>"; };
 		E10000000000000000000016 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E10000000000000000000017 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -49,6 +51,7 @@
 				E10000000000000000000012 /* BoardViewController.swift */,
 				E10000000000000000000013 /* BoardView.swift */,
 				E10000000000000000000014 /* YiluZip.swift */,
+				E1000000000000000000001D /* CangjieRuntimeBootstrap.c */,
 				E1000000000000000000001A /* YiluZip.h */,
 				E10000000000000000000019 /* YiluZip-Bridging-Header.h */,
 				E10000000000000000000015 /* level.json */,
@@ -174,6 +177,7 @@
 				E10000000000000000000022 /* BoardViewController.swift in Sources */,
 				E10000000000000000000023 /* BoardView.swift in Sources */,
 				E10000000000000000000024 /* YiluZip.swift in Sources */,
+				E10000000000000000000028 /* CangjieRuntimeBootstrap.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
