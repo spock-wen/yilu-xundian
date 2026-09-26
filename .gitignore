@@ -19,3 +19,13 @@ node_modules/
 # verification evidence
 artifacts/verify/**
 !artifacts/verify/.gitkeep
+
+# iOS / Android shell products (see ios/README.md and android/README.md)
+mobile/shared/target/
+mobile/shared/cjpm.lock
+mobile/shared/.android-build/
+ios/app/Config/Cangjie.local.xcconfig
+ios/app/YiluXundian/Cangjie/*.a
+ios/app/build/
+android/.gradle/
+android/app/src/main/assets/cangjie_native_libs.txt
