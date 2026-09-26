@@ -4,6 +4,8 @@ import kit.ArkUI.*
 import ohos.arkui.state_macro_manage.*
 import ohos_app_cangjie_entry.engine.{Cell, GridLayout, touchToCell}
 import ohos_app_cangjie_entry.game.{LevelDef, PatrolGame}
+import std.sync.Timer
+import std.core.Duration
 
 /*
  * Canvas + onTouch from official docs_cangjie (kit.ArkUI.*).
@@ -32,8 +34,10 @@ class EntryView {
     @State var cleared: Int64 = 0
     @State var parityRejectText: String = ""
     @State var parityRejectFlash: Bool = false
+    @State var parityRejectGen: Int64 = 0
 
     func clearParityReject(): Unit {
+        this.parityRejectGen = this.parityRejectGen + 1
         this.parityRejectText = ""
         this.parityRejectFlash = false
     }
@@ -48,7 +52,14 @@ class EntryView {
             return
         }
         this.parityRejectFlash = true
-        // Fallback: clear on next success/undo/clear/leave interaction
+        this.parityRejectGen = this.parityRejectGen + 1
+        let gen = this.parityRejectGen
+        Timer.once(Duration.millisecond * 180, { =>
+            if (gen == this.parityRejectGen) {
+                this.clearParityReject()
+                this.refresh()
+            }
+        })
     }
 
     func remainingSteps(): Int64 {
