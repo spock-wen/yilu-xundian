@@ -54,11 +54,16 @@ class EntryView {
     func remainingSteps(): Int64 {
         let lim = this.game.level.stepLimit
         if (lim <= 0) { return 0 }
-        let taken = this.game.filled() - 1
+        var taken = this.game.filled() - 1
         if (taken < 0) { taken = 0 }
         let left = lim - taken
         if (left < 0) { return 0 }
         return left
+    }
+
+    func stepChipBorder(): Int64 {
+        if (this.parityRejectFlash) { return Theme.vermillion }
+        return Theme.paperLine
     }
 
     func hasParityBoard(): Bool {
@@ -1420,7 +1425,7 @@ class EntryView {
                                 .padding(left: 12, right: 12)
                                 .height(28)
                                 .borderRadius(4)
-                                .border(width: 1, color: if (this.parityRejectFlash) { Theme.vermillion } else { Theme.paperLine })
+                                .border(width: 1, color: this.stepChipBorder())
                                 .backgroundColor(Theme.whitePaper)
                         }
                         if (this.game.level.stepLimit > 0) {
@@ -1441,16 +1446,20 @@ class EntryView {
                     .margin(bottom: 4)
                 }
                 if (this.parityRejectText.size > 0) {
-                    Text(this.parityRejectText)
-                        .fontSize(14)
-                        .fontFamily(Theme.serif)
-                        .fontColor(Theme.vermillion)
-                        .padding(left: 14, right: 14)
-                        .height(28)
-                        .borderRadius(4)
-                        .border(width: 1, color: Theme.vermillion)
-                        .backgroundColor(Theme.whitePaper)
-                        .margin(bottom: 4)
+                    Row {
+                        Text(this.parityRejectText)
+                            .fontSize(14)
+                            .fontFamily(Theme.serif)
+                            .fontColor(Theme.vermillion)
+                            .padding(left: 14, right: 14)
+                            .height(28)
+                            .borderRadius(4)
+                            .border(width: 1, color: Theme.vermillion)
+                            .backgroundColor(Theme.whitePaper)
+                    }
+                    .justifyContent(FlexAlign.Center)
+                    .width(100.percent)
+                    .margin(bottom: 4)
                 }
                 /* BANDS.md composite: 涿郡 0–9 / 平原 10–19.
                    Full-width 360×100 vp; Theme.bandClear keeps bust/flags
