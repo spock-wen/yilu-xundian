@@ -19,3 +19,10 @@ node_modules/
 # verification evidence
 artifacts/verify/**
 !artifacts/verify/.gitkeep
+
+# iOS shell products (Mac only; see ios/README.md)
+ios/shared/target/
+ios/shared/cjpm.lock
+ios/app/Config/Cangjie.local.xcconfig
+ios/app/YiluXundian/Cangjie/*.a
+ios/app/build/
