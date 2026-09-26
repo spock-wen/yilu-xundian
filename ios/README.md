@@ -15,7 +15,11 @@
 
   仓颉 runtime 标签 [v1.1.3 的 `c_string_resource.cj`](https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/stdlib/libs/std/core/c_string_resource.cj) 里，`CString.toString` 在长度 ≥ [`STRING_C_THRESHOLD` = 32](https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/stdlib/libs/std/core/string_common.cj) 时用 `memcpy_s`，失败则抛 `IllegalMemoryException("... error code: ${rc}.")`，`${rc}` 是 `StringBuilder.append(Int32)`。[`array.cj` 的越界文案](https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/stdlib/libs/std/core/array.cj)再插值下标，同一条 `numberToString` 递归直到栈保护页。本仓库 `ios/app/YiluXundian/level.json` 是 **613** 字节（`wc -c`），会走 ≥32 的分支。本环境不能反汇编 Mac 上的 `.a`，没有把 `toString +540` 逐条指令对上；源码里这条函数唯一的 `append(Int32)` 就是那个 `${rc}`。
 
-这次不再调用 `CString.toString()`。`getChars()` + `CPointer.read` 拷进 `Array<UInt8>`，`String.checkUtf8Encoding` 失败就返回错误码，成功再用 `String.fromUtf8Unchecked`。解析用 `String.get` / `ArrayList.get`，错误文案不走 `${整数}`。**Linux 云主机没有 Simulator，不能把这次改动标成冒烟通过。** 要开发者 Mac 再跑下面的安装和启动。
+`6da2283` 在 Mac 上能编过、能装上。`CString.toString` 那条栈溢出没有再出现。加载解析出了 `LevelDef`，然后在 `PatrolGame.reset` 里崩。日志：`YiluXundian-2026-09-26-225202.ips`。`EXC_BAD_ACCESS` / `SIGSEGV` `KERN_INVALID_ADDRESS at 0x8`。栈：`CJ_MCC_WriteRefField` → `PatrolGame.reset` → `yilu_load_level_json` → `YiluZip.loadBundledLevel` → `viewDidLoad`。
+
+[v1.1.3 `MCC_WriteRefField`](https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/runtime/src/CompilerCalls.cpp) 在对象不是堆地址时执行 `field->SetTargetObject`。故障地址 `0x8` 是空接收者加上对象头之后的第一个引用字段（`this.level`）。全局 `gGame = PatrolGame(blankLevel())` 当时仍是空引用。iOS 只跑名字里带 `_CGP` 的全局初始化（[CjFile.cpp](https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/runtime/src/Loader/BinaryFile/CjFile/CjFile.cpp)）。这次在 `yilu_load_level_json` 里执行 `gGame = PatrolGame(level)`，不再对空引用调用 `reset`。
+
+**Linux 云主机没有 Simulator，不能把这次改动标成冒烟通过。** 要开发者 Mac 再跑下面的安装和启动。
 
 ## 这一版接上的一关
 
@@ -141,7 +145,7 @@ cd demo
 
 ## 已知限制
 
-- **SMOKE: BLOCKED。** `a6c9b53` 的 arm64 包在开发者 Mac 上能编过、能装上。启动进了 `yilu_load_level_json`，然后在 `CString.toString` 的异常格式化里栈溢出（`YiluXundian-2026-09-26-223058.ips`）。避开 `toString` 的这次改动还没有在模拟器里复验。云主机没有 Simulator。
+- **SMOKE: BLOCKED。** `6da2283` 的 arm64 包在开发者 Mac 上能编过、能装上。JSON 已经能建成 `LevelDef`，随后 `PatrolGame.reset` 在空的 `gGame` 上写引用字段，`KERN_INVALID_ADDRESS at 0x8`（`YiluXundian-2026-09-26-225202.ips`）。改为 `gGame = PatrolGame(level)` 的这次提交还没有在模拟器里复验。云主机没有 Simulator。
 - v1 只加载一关。`parityEdges` 非空会拒绝加载。`stepLimit` 会写进 `LevelDef`，`PatrolGame` 不读它（和鸿蒙 `patrol.cj` 一样）。
 - JSON 加载器接受这一盘用到的对象/数组/字符串/整数，以及 `\"` `\\` `\/` `\b` `\f` `\n` `\r` `\t`。不接受 `\u` 转义；范阳这盘的站名是 UTF-8 原文。
 - `@C` 符号名按[仓颉-C 互操作](https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/FFI/cangjie-c.html)应为未改名的 `yilu_*`。本环境没有 `nm` 可对 iOS 静态库做验证。链接失败时在 Mac 上执行 `nm -g ios/app/YiluXundian/Cangjie/libyilu_zip.a | grep yilu_`。

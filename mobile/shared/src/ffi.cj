@@ -116,7 +116,19 @@ public func yilu_load_level_json(json: CString): Int32 {
     let loaded = levelFromJson(text)
     match (loaded.level) {
         case Some(level) =>
-            gGame.reset(level)
+            /* Do not call a method on the global. YiluXundian-2026-09-26-225202.ips
+               is SIGSEGV at 0x8 in CJ_MCC_WriteRefField from PatrolGame.reset.
+               v1.1.3 MCC_WriteRefField writes field->SetTargetObject when obj is
+               not a heap address (CompilerCalls.cpp). Address 0x8 is a null
+               receiver plus the first reference field after the 8-byte header,
+               so gGame was still null: the package initializer that does
+               PatrolGame(blankLevel()) had not stored an instance. iOS runs
+               only global-init symbols whose names contain "_CGP"
+               (CjFile.cpp GetGlobalInitFunc). Build a live object here and
+               store it into the global instead of resetting a null one.
+               https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/runtime/src/CompilerCalls.cpp
+               https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/runtime/src/Loader/BinaryFile/CjFile/CjFile.cpp */
+            gGame = PatrolGame(level)
             gReady = true
             gError = ""
             return 0
