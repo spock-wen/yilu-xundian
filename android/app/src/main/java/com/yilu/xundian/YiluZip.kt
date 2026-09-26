@@ -27,6 +27,8 @@ object YiluZip {
             }
             System.loadLibrary(name)
         }
+        /* Cangjie .so constructors (ELF .init_array -> MRT_LibraryOnLoad) must
+           run before yilu_jni. JNI_OnLoad then calls CJ_MRT_CjRuntimeInit. */
         System.loadLibrary("yilu_jni")
         nativesReady = true
     }

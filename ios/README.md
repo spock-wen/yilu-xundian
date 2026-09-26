@@ -6,7 +6,7 @@
 
 门禁：tester 与 reviewer 在 tip `eaf7aed` 上 PASS。iOS 模拟器进入 **涿郡·范阳（id 1）**。PM 指定的截图目录是 `qa-shots/ios-shell-eaf7aed-gate`。本仓库检出里没有 `qa-shots/`，也没有已跟踪的 `_smoke/`，截图文件不在这次提交里。
 
-**Android 仍是 SMOKE: BLOCKED。** 冒烟用的 Mac 上没有 NDK，也没有完整 Android SDK。见 [android/README.md](../android/README.md)。
+**Android** 在 tip `f25f813`：程序员 Mac 冒烟 PASSED，测试门禁 PASS（两件记录，见 [android/README.md](../android/README.md)）。tip `4986524` 曾 FAIL。
 
 此前同一台 Mac（Xcode 27，`CANGJIE_HOME=/Users/spock/sdk/cangjie`，包 `cangjie-sdk-mac-aarch64-ios-1.1.3`）上、更早 tip 的失败记录：
 
@@ -147,7 +147,7 @@ cd demo
 
 ## 已知限制
 
-- **iOS SMOKE: PASSED**（tip `eaf7aed`，模拟器进入涿郡·范阳 id 1）。截图目录名是 `qa-shots/ios-shell-eaf7aed-gate`；本检出不含该目录。**Android SMOKE: BLOCKED**（冒烟 Mac 上没有 NDK / 完整 Android SDK）。
+- **iOS SMOKE: PASSED**（tip `eaf7aed`，模拟器进入涿郡·范阳 id 1）。截图目录名是 `qa-shots/ios-shell-eaf7aed-gate`；本检出不含该目录。**Android** tip `f25f813`：程序员 Mac 冒烟 PASSED（AVD `grokdump`，涿郡·范阳 id 1，6×6），测试门禁 PASS（另一条全屏记录）。见 [android/README.md](../android/README.md)。tip `4986524` 曾 FAIL。
 - v1 只加载一关。`parityEdges` 非空会拒绝加载。`stepLimit` 会写进 `LevelDef`，`PatrolGame` 不读它（和鸿蒙 `patrol.cj` 一样）。
 - JSON 加载器接受这一盘用到的对象/数组/字符串/整数，以及 `\"` `\\` `\/` `\b` `\f` `\n` `\r` `\t`。不接受 `\u` 转义；范阳这盘的站名是 UTF-8 原文。
 - `@C` 符号名按[仓颉-C 互操作](https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/FFI/cangjie-c.html)应为未改名的 `yilu_*`。本环境没有 `nm` 可对 iOS 静态库做验证。链接失败时在 Mac 上执行 `nm -g ios/app/YiluXundian/Cangjie/libyilu_zip.a | grep yilu_`。

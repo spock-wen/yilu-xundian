@@ -6,7 +6,7 @@
 - UI：官方仓颉 ArkUI Canvas + `onTouch`
 - 无内购、无登录、无 Game Service
 - 本仓库 **没有** 在 CI / 云主机上编出 HAP：当前环境没有 DevEco / 仓颉鸿蒙工具链。请用本机 DevEco 打开后编译。
-- iOS 壳见 [ios/README.md](ios/README.md)。Android 壳见 [android/README.md](android/README.md)。两边共用 [mobile/shared](mobile/shared) 里的仓颉 Zip 引擎，不是把规则重写成 Swift 或 Kotlin。**iOS 模拟器冒烟 PASSED**（tip `eaf7aed`，进入涿郡·范阳 id 1；截图目录 `qa-shots/ios-shell-eaf7aed-gate`，本检出不含该目录）。**Android SMOKE: BLOCKED**（冒烟 Mac 上没有 NDK / 完整 Android SDK）。
+- iOS 壳见 [ios/README.md](ios/README.md)。Android 壳见 [android/README.md](android/README.md)。两边共用 [mobile/shared](mobile/shared) 里的仓颉 Zip 引擎，不是把规则重写成 Swift 或 Kotlin。**iOS 模拟器冒烟 PASSED**（tip `eaf7aed`，进入涿郡·范阳 id 1；截图目录 `qa-shots/ios-shell-eaf7aed-gate`，本检出不含该目录）。**Android** 把程序员 Mac 冒烟和测试门禁分开记，都在 tip `f25f813`（`f25f813d81388b550fd336f3b819b93117f214c5`）。**程序员 Mac 冒烟 PASSED**（AVD `grokdump`，进入涿郡·范阳 id 1，6×6 可见；目录 `_smoke/android-fanyang-f25f813-resmoke-*`、`qa-shots/android-shell-f25f813-gate/`，本检出可不含）。**测试门禁 PASS**（全屏目录 `qa-shots/android-shell-f25f813-tester`，本检出可不含）。更早 tip `4986524` 因缺少 `CJ_MRT_CjRuntimeInit` 为 FAIL。见 [android/README.md](android/README.md)。
 
 ## 玩法
 
