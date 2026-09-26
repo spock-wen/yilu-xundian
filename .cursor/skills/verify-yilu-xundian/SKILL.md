@@ -39,7 +39,7 @@ Checks (read-only):
 2. `hdc -t "$YILU_HDC_TARGET" list targets` contains the target.
 3. `bm dump -n com.yilu.xundian` (or `hdc shell bm dump`) shows the bundle.
 4. From repo root, `python3 tools/test_rules.py` exit 0 (rules + catalog lock). Skip only if `YILU_SKIP_RULES=1` and document why.
-5. Optional: HAP mtime / git `HEAD` short SHA printed for the proof log. The harness prints the short SHA. It does not stat a HAP.
+5. Prints the git `HEAD` short SHA (`git rev-parse --short HEAD`) on the doctor log line. It does not stat a HAP and does not read HAP mtime.
 
 If doctor fails, fix the environment before Drive.
 
