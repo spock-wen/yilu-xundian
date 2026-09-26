@@ -4,8 +4,6 @@ import kit.ArkUI.*
 import ohos.arkui.state_macro_manage.*
 import ohos_app_cangjie_entry.engine.{Cell, GridLayout, touchToCell}
 import ohos_app_cangjie_entry.game.{LevelDef, PatrolGame}
-import std.sync.Timer
-import std.core.Duration
 
 /*
  * Canvas + onTouch from official docs_cangjie (kit.ArkUI.*).
@@ -32,6 +30,7 @@ class EntryView {
     @State var boardBack: Int64 = 0
     @State var tick: Int64 = 0
     @State var cleared: Int64 = 0
+    @State var stepFilled: Int64 = 0
     @State var parityRejectText: String = ""
     @State var parityRejectFlash: Bool = false
     @State var parityRejectGen: Int64 = 0
@@ -54,18 +53,23 @@ class EntryView {
         this.parityRejectFlash = true
         this.parityRejectGen = this.parityRejectGen + 1
         let gen = this.parityRejectGen
-        Timer.once(Duration.millisecond * 180, { =>
-            if (gen == this.parityRejectGen) {
-                this.clearParityReject()
-                this.refresh()
-            }
-        })
+        /* UI-thread delayed clear: animateTo's onFinish runs on the
+           UI thread, so @State writes repaint immediately.  The 180ms
+           duration drives a no-op animation; onFinish clears the toast. */
+        this.getUIContext().animateTo(
+            AnimateParam(duration: 180, onFinish: Some({ =>
+                if (gen == this.parityRejectGen) {
+                    this.clearParityReject()
+                }
+            })),
+            { => }
+        )
     }
 
     func remainingSteps(): Int64 {
         let lim = this.game.level.stepLimit
         if (lim <= 0) { return 0 }
-        var taken = this.game.filled() - 1
+        var taken = this.stepFilled - 1
         if (taken < 0) { taken = 0 }
         let left = lim - taken
         if (left < 0) { return 0 }
@@ -82,7 +86,7 @@ class EntryView {
     }
 
     func stepChipLabel(): String {
-        return "第 ${this.game.filled()} 步"
+        return "第 ${this.stepFilled} 步"
     }
 
     func cellVp(): Int64 {
@@ -119,6 +123,7 @@ class EntryView {
 
     func refresh(): Unit {
         this.tick = this.tick + 1
+        this.stepFilled = this.game.filled()
         this.drawBoard()
     }
 
