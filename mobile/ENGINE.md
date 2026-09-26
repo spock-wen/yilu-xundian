@@ -30,7 +30,7 @@
 
 | 壳 | 做什么 |
 | --- | --- |
-| `ios/app/YiluXundian/*.swift` | 读 bundle 里的 `level.json`，画格子，触摸调用 `yilu_touch_to_cell` / `yilu_try_step`。链接 iOS **静态库**。进第一笔 `yilu_*` 之前由 `CangjieRuntimeBootstrap.c` 调用 `CJ_MRT_CjRuntimeInit`。 |
+| `ios/app/YiluXundian/*.swift` | 读 bundle 里的 `level.json`，画格子，触摸调用 `yilu_touch_to_cell` / `yilu_try_step`。链接 iOS **静态库**。进第一笔 `yilu_*` 之前由 `CangjieRuntimeBootstrap.c` 调用 `CJ_MRT_CjRuntimeInit`。模拟器冒烟在 tip `eaf7aed` 通过（涿郡·范阳 id 1）；截图目录 `qa-shots/ios-shell-eaf7aed-gate`（本检出不含该目录）。 |
 | `android/app/src/main/java/com/yilu/xundian/*.kt` | 读 assets 里的同一盘 JSON，经 JNI 调同一批符号。加载 Android **动态库** `libyilu_zip.so`。 |
 
 iOS 用已提交的 `cjpm.toml`（`output-type = "static"`）。Android 脚本另写一份 gitignore 的 manifest（`output-type = "dynamic"`），因为同一个 toml 不能同时是静态库和动态库。源码目录仍是这一份 `src/`。

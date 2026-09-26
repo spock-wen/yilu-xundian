@@ -2,9 +2,13 @@
 
 这是鸿蒙应用之外的 **iOS 壳**：仓颉 Zip 引擎交叉编译成静态库，Swift/UIKit 只负责画格子和把手势交给引擎。不是鸿蒙 ArkUI 的移植，也不是用 Swift 重写 Zip 规则。
 
-## SMOKE: BLOCKED
+## SMOKE: PASSED（iOS Simulator，tip `eaf7aed`）
 
-模拟器冒烟**没有通过**。2026-09-26 在开发者 Mac（Xcode 27，`CANGJIE_HOME=/Users/spock/sdk/cangjie`，包 `cangjie-sdk-mac-aarch64-ios-1.1.3`）上：
+门禁：tester 与 reviewer 在 tip `eaf7aed` 上 PASS。iOS 模拟器进入 **涿郡·范阳（id 1）**。PM 指定的截图目录是 `qa-shots/ios-shell-eaf7aed-gate`。本仓库检出里没有 `qa-shots/`，也没有已跟踪的 `_smoke/`，截图文件不在这次提交里。
+
+**Android 仍是 SMOKE: BLOCKED。** 冒烟用的 Mac 上没有 NDK，也没有完整 Android SDK。见 [android/README.md](../android/README.md)。
+
+此前同一台 Mac（Xcode 27，`CANGJIE_HOME=/Users/spock/sdk/cangjie`，包 `cangjie-sdk-mac-aarch64-ios-1.1.3`）上、更早 tip 的失败记录：
 
 - `cjpm` 编 `aarch64-apple-ios-simulator` 静态库：成功。
 - 旧脚本的 `-destination 'generic/platform=iOS Simulator'`：失败。该目标还会链 **x86_64**，仓颉模拟器库只有 arm64，x86_64 切片报 `Undefined symbols: _yilu_*`。
@@ -17,9 +21,7 @@
 
 `6da2283` 在 Mac 上能编过、能装上。`CString.toString` 那条栈溢出没有再出现。加载解析出了 `LevelDef`，然后在 `PatrolGame.reset` 里崩。日志：`YiluXundian-2026-09-26-225202.ips`。`EXC_BAD_ACCESS` / `SIGSEGV` `KERN_INVALID_ADDRESS at 0x8`。栈：`CJ_MCC_WriteRefField` → `PatrolGame.reset` → `yilu_load_level_json` → `YiluZip.loadBundledLevel` → `viewDidLoad`。
 
-[v1.1.3 `MCC_WriteRefField`](https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/runtime/src/CompilerCalls.cpp) 在对象不是堆地址时执行 `field->SetTargetObject`。故障地址 `0x8` 是空接收者加上对象头之后的第一个引用字段（`this.level`）。全局 `gGame = PatrolGame(blankLevel())` 当时仍是空引用。iOS 只跑名字里带 `_CGP` 的全局初始化（[CjFile.cpp](https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/runtime/src/Loader/BinaryFile/CjFile/CjFile.cpp)）。这次在 `yilu_load_level_json` 里执行 `gGame = PatrolGame(level)`，不再对空引用调用 `reset`。
-
-**Linux 云主机没有 Simulator，不能把这次改动标成冒烟通过。** 要开发者 Mac 再跑下面的安装和启动。
+[v1.1.3 `MCC_WriteRefField`](https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/runtime/src/CompilerCalls.cpp) 在对象不是堆地址时执行 `field->SetTargetObject`。故障地址 `0x8` 是空接收者加上对象头之后的第一个引用字段（`this.level`）。全局 `gGame = PatrolGame(blankLevel())` 当时仍是空引用。iOS 只跑名字里带 `_CGP` 的全局初始化（[CjFile.cpp](https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/runtime/src/Loader/BinaryFile/CjFile/CjFile.cpp)）。`eaf7aed` 在 `yilu_load_level_json` 里执行 `gGame = PatrolGame(level)`。这一 tip 的模拟器门禁已进入涿郡·范阳。
 
 ## 这一版接上的一关
 
@@ -108,7 +110,7 @@ xcrun simctl install "$YILU_SIM_UDID" ios/app/build/Build/Products/Debug-iphones
 xcrun simctl launch --console "$YILU_SIM_UDID" com.yilu.xundian.ios
 ```
 
-预期第一屏是 **涿郡·范阳 · id 1**。从标了 1 的格子拖，正交一步交给 `yilu_try_step`；拖回上一格、点「撤销」「重绘驿道」都进仓颉引擎。在这台模拟器上看到这一屏之前，不要把冒烟标成通过。
+预期第一屏是 **涿郡·范阳 · id 1**。从标了 1 的格子拖，正交一步交给 `yilu_try_step`；拖回上一格、点「撤销」「重绘驿道」都进仓颉引擎。门禁 tip `eaf7aed` 已经进入这一屏。脚本本身仍然不安装、不启动。
 
 若 `cjc` 不接受默认的 `aarch64-apple-ios-simulator`，把 `YILU_IOS_TARGET` 设成 `cjc -v` 打印的 `Target` 再跑。交叉编译页的模拟器条目没有写 SDK 版本后缀；版本后缀出现在设备示例 `--target=aarch64-apple-ios17.5`（17.5 要换成 `xcrun --sdk iphoneos --show-sdk-version`）。
 
@@ -145,7 +147,7 @@ cd demo
 
 ## 已知限制
 
-- **SMOKE: BLOCKED。** `6da2283` 的 arm64 包在开发者 Mac 上能编过、能装上。JSON 已经能建成 `LevelDef`，随后 `PatrolGame.reset` 在空的 `gGame` 上写引用字段，`KERN_INVALID_ADDRESS at 0x8`（`YiluXundian-2026-09-26-225202.ips`）。改为 `gGame = PatrolGame(level)` 的这次提交还没有在模拟器里复验。云主机没有 Simulator。
+- **iOS SMOKE: PASSED**（tip `eaf7aed`，模拟器进入涿郡·范阳 id 1）。截图目录名是 `qa-shots/ios-shell-eaf7aed-gate`；本检出不含该目录。**Android SMOKE: BLOCKED**（冒烟 Mac 上没有 NDK / 完整 Android SDK）。
 - v1 只加载一关。`parityEdges` 非空会拒绝加载。`stepLimit` 会写进 `LevelDef`，`PatrolGame` 不读它（和鸿蒙 `patrol.cj` 一样）。
 - JSON 加载器接受这一盘用到的对象/数组/字符串/整数，以及 `\"` `\\` `\/` `\b` `\f` `\n` `\r` `\t`。不接受 `\u` 转义；范阳这盘的站名是 UTF-8 原文。
 - `@C` 符号名按[仓颉-C 互操作](https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/FFI/cangjie-c.html)应为未改名的 `yilu_*`。本环境没有 `nm` 可对 iOS 静态库做验证。链接失败时在 Mac 上执行 `nm -g ios/app/YiluXundian/Cangjie/libyilu_zip.a | grep yilu_`。
