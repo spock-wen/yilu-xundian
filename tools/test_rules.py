@@ -120,6 +120,23 @@ class GridMap:
         return not self.orthogonal(a, b) or wall_key(a.x, a.y, b.x, b.y) in self.walls
 
 
+class ParityEdge:
+    """Mirrors Cangjie ParityEdge: parity gate on one orthogonal edge."""
+
+    def __init__(self, x1: int, y1: int, x2: int, y2: int, require_odd: bool, require_even: bool) -> None:
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
+        self.require_odd = require_odd
+        self.require_even = require_even
+
+    def matches(self, a: Cell, b: Cell) -> bool:
+        same = self.x1 == a.x and self.y1 == a.y and self.x2 == b.x and self.y2 == b.y
+        rev = self.x1 == b.x and self.y1 == b.y and self.x2 == a.x and self.y2 == a.y
+        return same or rev
+
+
 class PatrolGame:
     """THIS game's rules: ordered waypoints + fill-all Hamiltonian path."""
 
@@ -129,10 +146,26 @@ class PatrolGame:
         self.grid = GridMap(int(level["cols"]), int(level["rows"]), walls)
         self.wps = {(int(w["x"]), int(w["y"])): int(w["n"]) for w in level["waypoints"]}
         self.max_n = max(self.wps.values())
+        self.parity_edges = [
+            ParityEdge(
+                int(e["x1"]),
+                int(e["y1"]),
+                int(e["x2"]),
+                int(e["y2"]),
+                bool(e["requireOdd"]),
+                bool(e["requireEven"]),
+            )
+            for e in level.get("parityEdges") or []
+        ]
         self.path = GridPath()
+        self.last_reject_parity = 0
 
     def number_at(self, x: int, y: int) -> int:
         return self.wps.get((x, y), 0)
+
+    def filled(self) -> int:
+        """Mirrors Cangjie PatrolGame.filled: laid cells incl. the standing cell."""
+        return self.path.size()
 
     def next_required(self) -> int:
         seen = 0
@@ -142,7 +175,25 @@ class PatrolGame:
                 seen = n
         return seen + 1
 
+    def _check_parity(self, last: Cell, cell: Cell) -> bool:
+        """Mirrors Cangjie PatrolGame.checkParity.
+
+        SoT: filled odd → require_odd; even → require_even (filled = cells laid,
+        standing cell counted, before push).
+        """
+        filled = self.filled()
+        for pe in self.parity_edges:
+            if pe.matches(last, cell):
+                if pe.require_odd and filled % 2 == 0:
+                    self.last_reject_parity = 1
+                    return False
+                if pe.require_even and filled % 2 == 1:
+                    self.last_reject_parity = 2
+                    return False
+        return True
+
     def _can_enter(self, cell: Cell) -> bool:
+        self.last_reject_parity = 0
         if not self.grid.in_bounds(cell):
             return False
         if self.path.contains(cell):
@@ -151,6 +202,8 @@ class PatrolGame:
         if last is None:
             return self.number_at(cell.x, cell.y) == 1
         if self.grid.blocked(last, cell):
+            return False
+        if not self._check_parity(last, cell):
             return False
         num = self.number_at(cell.x, cell.y)
         nxt = self.next_required()
@@ -161,6 +214,7 @@ class PatrolGame:
         return True
 
     def try_step(self, cell: Cell) -> bool:
+        self.last_reject_parity = 0
         prev = self.path.prev()
         if prev is not None and cell.equals(prev):
             self.path.undo()
@@ -171,10 +225,12 @@ class PatrolGame:
         return False
 
     def undo(self) -> bool:
+        self.last_reject_parity = 0
         return self.path.undo() is not None
 
     def clear(self) -> None:
         self.path.clear()
+        self.last_reject_parity = 0
 
     def is_win(self) -> bool:
         last = self.path.last()
@@ -281,6 +337,97 @@ class PatrolRuleTests(unittest.TestCase):
         self.assertFalse(g.try_step(Cell(2, 2)))
         self.assertEqual(g.path.size(), 4)
         self.assertFalse(g.is_win())
+
+
+class ParityRuleTests(unittest.TestCase):
+    """奇偶闸: filled odd → require_odd; even → require_even (filled before push)."""
+
+    def level(self, edges: list[dict]) -> dict:
+        return {
+            "id": 98,
+            "name": "奇偶试驿",
+            "cols": 3,
+            "rows": 3,
+            "waypoints": [{"n": 1, "x": 0, "y": 0}, {"n": 2, "x": 2, "y": 2}],
+            "walls": [],
+            "parityEdges": edges,
+            "stepLimit": 0,
+        }
+
+    @staticmethod
+    def edge(x1: int, y1: int, x2: int, y2: int, odd: bool) -> dict:
+        return {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "requireOdd": odd, "requireEven": not odd}
+
+    def test_filled_is_laid_cells_including_standing(self) -> None:
+        g = PatrolGame(self.level([]))
+        self.assertEqual(g.filled(), 0)
+        g.try_step(Cell(0, 0))
+        self.assertEqual(g.filled(), 1)
+        g.try_step(Cell(0, 1))
+        self.assertEqual(g.filled(), 2)
+
+    def test_odd_edge_passes_on_odd_filled(self) -> None:
+        g = PatrolGame(self.level([self.edge(0, 0, 0, 1, True)]))
+        g.try_step(Cell(0, 0))
+        self.assertEqual(g.filled(), 1)
+        self.assertTrue(g.try_step(Cell(0, 1)))
+        self.assertEqual(g.last_reject_parity, 0)
+
+    def test_even_edge_rejects_odd_filled(self) -> None:
+        g = PatrolGame(self.level([self.edge(0, 0, 0, 1, False)]))
+        g.try_step(Cell(0, 0))
+        self.assertFalse(g.try_step(Cell(0, 1)))
+        self.assertEqual(g.last_reject_parity, 2)
+        self.assertEqual(g.filled(), 1)
+
+    def test_odd_edge_rejects_even_filled(self) -> None:
+        g = PatrolGame(self.level([self.edge(0, 1, 0, 2, True)]))
+        g.try_step(Cell(0, 0))
+        g.try_step(Cell(0, 1))
+        self.assertEqual(g.filled(), 2)
+        self.assertFalse(g.try_step(Cell(0, 2)))
+        self.assertEqual(g.last_reject_parity, 1)
+        self.assertEqual(g.filled(), 2)
+
+    def test_edge_matches_in_both_directions(self) -> None:
+        g = PatrolGame(self.level([self.edge(0, 1, 0, 2, True)]))
+        for cell in (Cell(0, 0), Cell(1, 0), Cell(1, 1), Cell(1, 2), Cell(0, 2)):
+            self.assertTrue(g.try_step(cell))
+        self.assertEqual(g.filled(), 4)
+        self.assertFalse(g.try_step(Cell(0, 1)))
+        self.assertEqual(g.last_reject_parity, 1)
+
+    def test_reject_code_clears_after_undo_clear_and_success(self) -> None:
+        g = PatrolGame(self.level([self.edge(0, 0, 0, 1, False)]))
+        g.try_step(Cell(0, 0))
+        self.assertFalse(g.try_step(Cell(0, 1)))
+        self.assertEqual(g.last_reject_parity, 2)
+        self.assertTrue(g.undo())
+        self.assertEqual(g.last_reject_parity, 0)
+        g.try_step(Cell(0, 0))
+        self.assertFalse(g.try_step(Cell(0, 1)))
+        g.clear()
+        self.assertEqual(g.last_reject_parity, 0)
+
+    def test_locked_shipped_paths_obey_parity(self) -> None:
+        """假绿 guard: every locked parity board's own solution must still play."""
+        from build_levels import LOCKED_DIR, LOCKED_FILES, convert_board
+
+        checked = 0
+        for ch_idx, fname in enumerate(LOCKED_FILES):
+            data = json.loads((LOCKED_DIR / fname).read_text(encoding="utf-8"))
+            for tip_idx, b in enumerate(data["boards"]):
+                if not b.get("parity_edges"):
+                    continue
+                game = PatrolGame(convert_board(b, ch_idx * 10 + tip_idx))
+                for r, c in b["path"]:
+                    self.assertTrue(
+                        game.try_step(Cell(c, r)),
+                        f"{b['name']} rejected ({r},{c}) at filled={game.filled()}",
+                    )
+                self.assertTrue(game.is_win(), f"{b['name']} did not win on its shipped path")
+                checked += 1
+        self.assertGreaterEqual(checked, 5)
 
 
 class SolverContractTests(unittest.TestCase):

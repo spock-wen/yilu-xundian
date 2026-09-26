@@ -30,6 +30,44 @@ class EntryView {
     @State var boardBack: Int64 = 0
     @State var tick: Int64 = 0
     @State var cleared: Int64 = 0
+    @State var parityRejectText: String = ""
+    @State var parityRejectFlash: Bool = false
+
+    func clearParityReject(): Unit {
+        this.parityRejectText = ""
+        this.parityRejectFlash = false
+    }
+
+    func showParityReject(): Unit {
+        let r = this.game.lastRejectParity
+        if (r == 1) {
+            this.parityRejectText = "此步须奇"
+        } else if (r == 2) {
+            this.parityRejectText = "此步须偶"
+        } else {
+            return
+        }
+        this.parityRejectFlash = true
+        // Fallback: clear on next success/undo/clear/leave interaction
+    }
+
+    func remainingSteps(): Int64 {
+        let lim = this.game.level.stepLimit
+        if (lim <= 0) { return 0 }
+        let taken = this.game.filled() - 1
+        if (taken < 0) { taken = 0 }
+        let left = lim - taken
+        if (left < 0) { return 0 }
+        return left
+    }
+
+    func hasParityBoard(): Bool {
+        return this.game.level.parityEdges.size > 0
+    }
+
+    func stepChipLabel(): String {
+        return "第 ${this.game.filled()} 步"
+    }
 
     func cellVp(): Int64 {
         let cols = this.game.level.cols
@@ -182,6 +220,7 @@ class EntryView {
     }
 
     func leaveBoard(): Unit {
+        this.clearParityReject()
         this.screen = this.boardBack
     }
 
@@ -230,12 +269,14 @@ class EntryView {
     }
 
     func doUndo(): Unit {
+        this.clearParityReject()
         if (this.game.undo()) {
             this.refresh()
         }
     }
 
     func doClear(): Unit {
+        this.clearParityReject()
         this.game.clear()
         this.refresh()
     }
@@ -295,6 +336,7 @@ class EntryView {
             case None => ()
             case Some(cell) =>
                 if (this.game.tryStep(cell)) {
+                    this.clearParityReject()
                     if (this.game.isWin()) {
                         if (this.levelIndex + 1 > this.cleared) {
                             this.cleared = this.levelIndex + 1
@@ -302,6 +344,11 @@ class EntryView {
                         this.screen = 2
                     }
                     this.refresh()
+                } else {
+                    if (this.game.lastRejectParity != 0) {
+                        this.showParityReject()
+                        this.refresh()
+                    }
                 }
         }
     }
@@ -492,6 +539,15 @@ class EntryView {
                 this.context.lineTo(Float64(ax + 1) * cs - 4.0, py)
                 this.context.stroke()
             }
+        }
+
+        this.context.fillStyle = Theme.inkMuted
+        this.context.font = "normal 11px serif"
+        for (pe in this.game.level.parityEdges) {
+            let mx = (Float64(pe.x1) + Float64(pe.x2) + 1.0) * cs * 0.5
+            let my = (Float64(pe.y1) + Float64(pe.y2) + 1.0) * cs * 0.5
+            let label = if (pe.requireOdd) { "奇" } else { "偶" }
+            this.context.fillText(label, mx - 5.5, my + 4.0)
         }
 
         if (this.game.path.size() >= 2) {
@@ -1353,6 +1409,49 @@ class EntryView {
                     .padding(left: Theme.inset, right: Theme.inset)
                     .margin(bottom: 4)
                     .width(100.percent)
+                if (this.hasParityBoard() || this.game.level.stepLimit > 0) {
+                    Row(space: 8) {
+                        if (this.hasParityBoard()) {
+                            Text(this.stepChipLabel())
+                                .fontSize(15)
+                                .fontWeight(FontWeight.Bold)
+                                .fontColor(Theme.ink)
+                                .fontFamily(Theme.serif)
+                                .padding(left: 12, right: 12)
+                                .height(28)
+                                .borderRadius(4)
+                                .border(width: 1, color: if (this.parityRejectFlash) { Theme.vermillion } else { Theme.paperLine })
+                                .backgroundColor(Theme.whitePaper)
+                        }
+                        if (this.game.level.stepLimit > 0) {
+                            Text("余步 · ${this.remainingSteps()}")
+                                .fontSize(15)
+                                .fontWeight(FontWeight.Bold)
+                                .fontColor(Theme.ink)
+                                .fontFamily(Theme.serif)
+                                .padding(left: 12, right: 12)
+                                .height(28)
+                                .borderRadius(4)
+                                .border(width: 1, color: Theme.paperLine)
+                                .backgroundColor(Theme.whitePaper)
+                        }
+                    }
+                    .justifyContent(FlexAlign.Center)
+                    .width(100.percent)
+                    .margin(bottom: 4)
+                }
+                if (this.parityRejectText.size > 0) {
+                    Text(this.parityRejectText)
+                        .fontSize(14)
+                        .fontFamily(Theme.serif)
+                        .fontColor(Theme.vermillion)
+                        .padding(left: 14, right: 14)
+                        .height(28)
+                        .borderRadius(4)
+                        .border(width: 1, color: Theme.vermillion)
+                        .backgroundColor(Theme.whitePaper)
+                        .margin(bottom: 4)
+                }
                 /* BANDS.md composite: 涿郡 0–9 / 平原 10–19.
                    Full-width 360×100 vp; Theme.bandClear keeps bust/flags
                    out of the Canvas grid (band.bottom ≤ board.top − 30px). */
