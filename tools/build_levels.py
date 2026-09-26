@@ -43,6 +43,20 @@ def convert_board(b: dict, global_id: int) -> dict:
         walls.append({"x1": int(c), "y1": int(r), "x2": int(c) + 1, "y2": int(r)})
     for r, c in b.get("walls", {}).get("v_between", []):
         walls.append({"x1": int(c), "y1": int(r), "x2": int(c), "y2": int(r) + 1})
+    # parity_edges.between is [[r, c], [r, c]] → cells are (x = c, y = r), like numbers_rc.
+    parity_edges = []
+    for e in b.get("parity_edges") or []:
+        (r1, c1), (r2, c2) = e["between"]
+        parity_edges.append(
+            {
+                "x1": int(c1),
+                "y1": int(r1),
+                "x2": int(c2),
+                "y2": int(r2),
+                "requireOdd": bool(e["require_odd"]),
+                "requireEven": bool(e["require_even"]),
+            }
+        )
     return {
         "id": global_id,
         "name": b["name"],
@@ -50,6 +64,8 @@ def convert_board(b: dict, global_id: int) -> dict:
         "rows": int(b["size"]),
         "waypoints": wps,
         "walls": walls,
+        "parityEdges": parity_edges,
+        "stepLimit": int(b.get("step_limit") or 0),
     }
 
 
@@ -74,6 +90,10 @@ def load_source_levels() -> list[dict]:
 EXPECTED_NAMES = tuple(lv["name"] for lv in load_source_levels())
 
 
+def _cj_bool(value: bool) -> str:
+    return "true" if value else "false"
+
+
 def emit(levels: list[dict]) -> str:
     lines = [
         "package ohos_app_cangjie_entry",
@@ -81,7 +101,7 @@ def emit(levels: list[dict]) -> str:
         "/* Generated from resources/rawfile/levels.json. Do not invent levels here. */",
         "import std.collection.ArrayList",
         "import ohos_app_cangjie_entry.engine.Wall",
-        "import ohos_app_cangjie_entry.game.{LevelDef, Waypoint}",
+        "import ohos_app_cangjie_entry.game.{LevelDef, ParityEdge, Waypoint}",
         "",
         "public class LevelCatalog {",
         "    public static func all(): ArrayList<LevelDef> {",
@@ -97,8 +117,14 @@ def emit(levels: list[dict]) -> str:
             lines.append(
                 f"        walls{key}.add(Wall({w['x1']}, {w['y1']}, {w['x2']}, {w['y2']}))"
             )
+        lines.append(f"        let parityEdges{key} = ArrayList<ParityEdge>()")
+        for pe in lv.get("parityEdges") or []:
+            lines.append(
+                f"        parityEdges{key}.add(ParityEdge({pe['x1']}, {pe['y1']}, {pe['x2']}, {pe['y2']}, {_cj_bool(pe['requireOdd'])}, {_cj_bool(pe['requireEven'])}))"
+            )
+        lines.append(f"        let stepLimit{key} = {int(lv.get('stepLimit') or 0)}")
         lines.append(
-            f"        levels.add(LevelDef({lv['id']}, \"{lv['name']}\", {lv['cols']}, {lv['rows']}, wps{key}, walls{key}))"
+            f"        levels.add(LevelDef({lv['id']}, \"{lv['name']}\", {lv['cols']}, {lv['rows']}, wps{key}, walls{key}, parityEdges{key}, stepLimit{key}))"
         )
         lines.append("")
     lines.extend(
@@ -126,6 +152,17 @@ def _wp_key(w: dict) -> tuple[int, int, int]:
 
 def _wall_key(w: dict) -> tuple[int, int, int, int]:
     return (int(w["x1"]), int(w["y1"]), int(w["x2"]), int(w["y2"]))
+
+
+def _parity_key(p: dict) -> tuple[int, int, int, int, bool, bool]:
+    return (
+        int(p["x1"]),
+        int(p["y1"]),
+        int(p["x2"]),
+        int(p["y2"]),
+        bool(p["requireOdd"]),
+        bool(p["requireEven"]),
+    )
 
 
 def load_verified() -> list[dict]:
@@ -160,6 +197,12 @@ def load_verified() -> list[dict]:
             _wall_key(w) for w in src_lv["walls"]
         ]:
             raise SystemExit(f"level {idx} walls mismatch with locked source")
+        if [_parity_key(p) for p in (lv.get("parityEdges") or [])] != [
+            _parity_key(p) for p in (src_lv.get("parityEdges") or [])
+        ]:
+            raise SystemExit(f"level {idx} parityEdges mismatch with locked source")
+        if int(lv.get("stepLimit") or 0) != int(src_lv.get("stepLimit") or 0):
+            raise SystemExit(f"level {idx} stepLimit mismatch with locked source")
     st01 = levels[0]
     if (
         st01["name"] != "涿郡·涿"

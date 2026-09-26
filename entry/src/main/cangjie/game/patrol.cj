@@ -7,6 +7,8 @@ public class PatrolGame {
     public var level: LevelDef
     public var grid: GridMap
     public var path: GridPath = GridPath()
+    /* 0 = none, 1 = needs odd step, 2 = needs even step; set on parity reject so UI can toast. */
+    public var lastRejectParity: Int64 = 0
 
     public init(level: LevelDef) {
         this.level = level
@@ -17,6 +19,12 @@ public class PatrolGame {
         this.level = level
         this.grid = GridMap(level.cols, level.rows, level.walls)
         this.path.clear()
+        this.lastRejectParity = 0
+    }
+
+    /* 已铺格数（含当前站立格），即顶栏「第 N 步」的 N。 */
+    public func filled(): Int64 {
+        return this.path.size()
     }
 
     public func numberAt(x: Int64, y: Int64): Int64 {
@@ -37,7 +45,26 @@ public class PatrolGame {
         return seen + 1
     }
 
+    /* SoT: filled odd → require_odd; even → require_even (filled = cells laid, standing cell counted, before push). */
+    func checkParity(last: Cell, cell: Cell): Bool {
+        let filled = this.filled()
+        for (pe in this.level.parityEdges) {
+            if (pe.matches(last, cell)) {
+                if (pe.requireOdd && filled % 2 == 0) {
+                    this.lastRejectParity = 1
+                    return false
+                }
+                if (pe.requireEven && filled % 2 == 1) {
+                    this.lastRejectParity = 2
+                    return false
+                }
+            }
+        }
+        return true
+    }
+
     func canEnter(cell: Cell): Bool {
+        this.lastRejectParity = 0
         if (!this.grid.inBounds(cell)) {
             return false
         }
@@ -50,6 +77,9 @@ public class PatrolGame {
                 return this.level.numberAt(cell.x, cell.y) == 1
             case Some(last) =>
                 if (this.grid.blocked(last, cell)) {
+                    return false
+                }
+                if (!this.checkParity(last, cell)) {
                     return false
                 }
                 let num = this.level.numberAt(cell.x, cell.y)
@@ -66,6 +96,7 @@ public class PatrolGame {
 
     /* Drag onto the previous cell undoes the last step (Zip-style). */
     public func tryStep(cell: Cell): Bool {
+        this.lastRejectParity = 0
         let prevOpt = this.path.prev()
         match (prevOpt) {
             case Some(prev) =>
@@ -83,6 +114,7 @@ public class PatrolGame {
     }
 
     public func undo(): Bool {
+        this.lastRejectParity = 0
         let removed = this.path.undo()
         match (removed) {
             case Some(cell) => return cell.equals(cell)
@@ -92,6 +124,7 @@ public class PatrolGame {
 
     public func clear(): Unit {
         this.path.clear()
+        this.lastRejectParity = 0
     }
 
     public func isWin(): Bool {

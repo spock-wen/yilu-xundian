@@ -1,0 +1,4 @@
+entry/src/main/cangjie/levels.cj
+entry/src/main/resources/rawfile/levels.json
+**/build/**
+**/.hvigor/**

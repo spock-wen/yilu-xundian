@@ -3,7 +3,7 @@ package ohos_app_cangjie_entry
 /* Generated from resources/rawfile/levels.json. Do not invent levels here. */
 import std.collection.ArrayList
 import ohos_app_cangjie_entry.engine.Wall
-import ohos_app_cangjie_entry.game.{LevelDef, Waypoint}
+import ohos_app_cangjie_entry.game.{LevelDef, ParityEdge, Waypoint}
 
 public class LevelCatalog {
     public static func all(): ArrayList<LevelDef> {
@@ -16,7 +16,9 @@ public class LevelCatalog {
         wps0.add(Waypoint(5, 4, 1))
         wps0.add(Waypoint(6, 0, 0))
         let walls0 = ArrayList<Wall>()
-        levels.add(LevelDef(0, "涿郡·涿", 6, 6, wps0, walls0))
+        let parityEdges0 = ArrayList<ParityEdge>()
+        let stepLimit0 = 0
+        levels.add(LevelDef(0, "涿郡·涿", 6, 6, wps0, walls0, parityEdges0, stepLimit0))
 
         let wps1 = ArrayList<Waypoint>()
         wps1.add(Waypoint(1, 3, 0))
@@ -28,7 +30,9 @@ public class LevelCatalog {
         let walls1 = ArrayList<Wall>()
         walls1.add(Wall(2, 4, 3, 4))
         walls1.add(Wall(2, 3, 2, 4))
-        levels.add(LevelDef(1, "涿郡·范阳", 6, 6, wps1, walls1))
+        let parityEdges1 = ArrayList<ParityEdge>()
+        let stepLimit1 = 0
+        levels.add(LevelDef(1, "涿郡·范阳", 6, 6, wps1, walls1, parityEdges1, stepLimit1))
 
         let wps2 = ArrayList<Waypoint>()
         wps2.add(Waypoint(1, 1, 0))
@@ -40,7 +44,9 @@ public class LevelCatalog {
         walls2.add(Wall(1, 0, 2, 0))
         walls2.add(Wall(4, 1, 5, 1))
         walls2.add(Wall(5, 1, 5, 2))
-        levels.add(LevelDef(2, "涿郡·故安", 6, 6, wps2, walls2))
+        let parityEdges2 = ArrayList<ParityEdge>()
+        let stepLimit2 = 0
+        levels.add(LevelDef(2, "涿郡·故安", 6, 6, wps2, walls2, parityEdges2, stepLimit2))
 
         let wps3 = ArrayList<Waypoint>()
         wps3.add(Waypoint(1, 4, 5))
@@ -52,7 +58,9 @@ public class LevelCatalog {
         walls3.add(Wall(4, 1, 5, 1))
         walls3.add(Wall(5, 1, 5, 2))
         walls3.add(Wall(5, 3, 5, 4))
-        levels.add(LevelDef(3, "涿郡·遒", 6, 6, wps3, walls3))
+        let parityEdges3 = ArrayList<ParityEdge>()
+        let stepLimit3 = 0
+        levels.add(LevelDef(3, "涿郡·遒", 6, 6, wps3, walls3, parityEdges3, stepLimit3))
 
         let wps4 = ArrayList<Waypoint>()
         wps4.add(Waypoint(1, 1, 3))
@@ -65,7 +73,9 @@ public class LevelCatalog {
         walls4.add(Wall(0, 4, 1, 4))
         walls4.add(Wall(1, 4, 1, 5))
         walls4.add(Wall(2, 4, 2, 5))
-        levels.add(LevelDef(4, "涿郡·中山", 6, 6, wps4, walls4))
+        let parityEdges4 = ArrayList<ParityEdge>()
+        let stepLimit4 = 0
+        levels.add(LevelDef(4, "涿郡·中山", 6, 6, wps4, walls4, parityEdges4, stepLimit4))
 
         let wps5 = ArrayList<Waypoint>()
         wps5.add(Waypoint(1, 4, 4))
@@ -77,7 +87,9 @@ public class LevelCatalog {
         walls5.add(Wall(3, 5, 4, 5))
         walls5.add(Wall(2, 3, 2, 4))
         walls5.add(Wall(1, 4, 1, 5))
-        levels.add(LevelDef(5, "涿郡·中山·第 2 驿", 6, 6, wps5, walls5))
+        let parityEdges5 = ArrayList<ParityEdge>()
+        let stepLimit5 = 0
+        levels.add(LevelDef(5, "涿郡·中山·第 2 驿", 6, 6, wps5, walls5, parityEdges5, stepLimit5))
 
         let wps6 = ArrayList<Waypoint>()
         wps6.add(Waypoint(1, 4, 2))
@@ -88,7 +100,9 @@ public class LevelCatalog {
         walls6.add(Wall(3, 5, 4, 5))
         walls6.add(Wall(5, 2, 5, 3))
         walls6.add(Wall(4, 4, 4, 5))
-        levels.add(LevelDef(6, "涿郡·卢奴", 6, 6, wps6, walls6))
+        let parityEdges6 = ArrayList<ParityEdge>()
+        let stepLimit6 = 0
+        levels.add(LevelDef(6, "涿郡·卢奴", 6, 6, wps6, walls6, parityEdges6, stepLimit6))
 
         let wps7 = ArrayList<Waypoint>()
         wps7.add(Waypoint(1, 5, 1))
@@ -100,7 +114,9 @@ public class LevelCatalog {
         walls7.add(Wall(1, 1, 2, 1))
         walls7.add(Wall(2, 1, 3, 1))
         walls7.add(Wall(2, 1, 2, 2))
-        levels.add(LevelDef(7, "涿郡·卢奴·第 2 驿", 6, 6, wps7, walls7))
+        let parityEdges7 = ArrayList<ParityEdge>()
+        let stepLimit7 = 0
+        levels.add(LevelDef(7, "涿郡·卢奴·第 2 驿", 6, 6, wps7, walls7, parityEdges7, stepLimit7))
 
         let wps8 = ArrayList<Waypoint>()
         wps8.add(Waypoint(1, 1, 0))
@@ -112,7 +128,9 @@ public class LevelCatalog {
         walls8.add(Wall(3, 4, 4, 4))
         walls8.add(Wall(3, 1, 3, 2))
         walls8.add(Wall(0, 3, 0, 4))
-        levels.add(LevelDef(8, "涿郡·安喜", 6, 6, wps8, walls8))
+        let parityEdges8 = ArrayList<ParityEdge>()
+        let stepLimit8 = 0
+        levels.add(LevelDef(8, "涿郡·安喜", 6, 6, wps8, walls8, parityEdges8, stepLimit8))
 
         let wps9 = ArrayList<Waypoint>()
         wps9.add(Waypoint(1, 1, 3))
@@ -124,7 +142,9 @@ public class LevelCatalog {
         walls9.add(Wall(3, 0, 4, 0))
         walls9.add(Wall(0, 1, 1, 1))
         walls9.add(Wall(0, 2, 0, 3))
-        levels.add(LevelDef(9, "涿郡·安喜·第 2 驿", 6, 6, wps9, walls9))
+        let parityEdges9 = ArrayList<ParityEdge>()
+        let stepLimit9 = 0
+        levels.add(LevelDef(9, "涿郡·安喜·第 2 驿", 6, 6, wps9, walls9, parityEdges9, stepLimit9))
 
         let wps10 = ArrayList<Waypoint>()
         wps10.add(Waypoint(1, 0, 4))
@@ -136,7 +156,9 @@ public class LevelCatalog {
         walls10.add(Wall(1, 3, 2, 3))
         walls10.add(Wall(3, 3, 4, 3))
         walls10.add(Wall(2, 2, 2, 3))
-        levels.add(LevelDef(10, "平原·高唐", 6, 6, wps10, walls10))
+        let parityEdges10 = ArrayList<ParityEdge>()
+        let stepLimit10 = 0
+        levels.add(LevelDef(10, "平原·高唐", 6, 6, wps10, walls10, parityEdges10, stepLimit10))
 
         let wps11 = ArrayList<Waypoint>()
         wps11.add(Waypoint(1, 2, 2))
@@ -148,7 +170,9 @@ public class LevelCatalog {
         walls11.add(Wall(2, 3, 3, 3))
         walls11.add(Wall(4, 0, 4, 1))
         walls11.add(Wall(3, 3, 3, 4))
-        levels.add(LevelDef(11, "平原·高唐·第 2 驿", 6, 6, wps11, walls11))
+        let parityEdges11 = ArrayList<ParityEdge>()
+        let stepLimit11 = 0
+        levels.add(LevelDef(11, "平原·高唐·第 2 驿", 6, 6, wps11, walls11, parityEdges11, stepLimit11))
 
         let wps12 = ArrayList<Waypoint>()
         wps12.add(Waypoint(1, 0, 3))
@@ -162,7 +186,9 @@ public class LevelCatalog {
         walls12.add(Wall(3, 5, 4, 5))
         walls12.add(Wall(3, 2, 3, 3))
         walls12.add(Wall(3, 4, 3, 5))
-        levels.add(LevelDef(12, "平原·郡治", 6, 6, wps12, walls12))
+        let parityEdges12 = ArrayList<ParityEdge>()
+        let stepLimit12 = 0
+        levels.add(LevelDef(12, "平原·郡治", 6, 6, wps12, walls12, parityEdges12, stepLimit12))
 
         let wps13 = ArrayList<Waypoint>()
         wps13.add(Waypoint(1, 1, 1))
@@ -176,7 +202,9 @@ public class LevelCatalog {
         walls13.add(Wall(1, 2, 2, 2))
         walls13.add(Wall(3, 3, 4, 3))
         walls13.add(Wall(3, 0, 3, 1))
-        levels.add(LevelDef(13, "平原·郡治·第 2 驿", 6, 6, wps13, walls13))
+        let parityEdges13 = ArrayList<ParityEdge>()
+        let stepLimit13 = 0
+        levels.add(LevelDef(13, "平原·郡治·第 2 驿", 6, 6, wps13, walls13, parityEdges13, stepLimit13))
 
         let wps14 = ArrayList<Waypoint>()
         wps14.add(Waypoint(1, 5, 2))
@@ -189,7 +217,9 @@ public class LevelCatalog {
         walls14.add(Wall(2, 1, 3, 1))
         walls14.add(Wall(1, 4, 2, 4))
         walls14.add(Wall(0, 0, 0, 1))
-        levels.add(LevelDef(14, "平原·安德", 6, 6, wps14, walls14))
+        let parityEdges14 = ArrayList<ParityEdge>()
+        let stepLimit14 = 0
+        levels.add(LevelDef(14, "平原·安德", 6, 6, wps14, walls14, parityEdges14, stepLimit14))
 
         let wps15 = ArrayList<Waypoint>()
         wps15.add(Waypoint(1, 4, 2))
@@ -202,7 +232,9 @@ public class LevelCatalog {
         walls15.add(Wall(5, 2, 5, 3))
         walls15.add(Wall(1, 3, 1, 4))
         walls15.add(Wall(3, 4, 3, 5))
-        levels.add(LevelDef(15, "平原·安德·第 2 驿", 6, 6, wps15, walls15))
+        let parityEdges15 = ArrayList<ParityEdge>()
+        let stepLimit15 = 0
+        levels.add(LevelDef(15, "平原·安德·第 2 驿", 6, 6, wps15, walls15, parityEdges15, stepLimit15))
 
         let wps16 = ArrayList<Waypoint>()
         wps16.add(Waypoint(1, 2, 5))
@@ -217,7 +249,9 @@ public class LevelCatalog {
         walls16.add(Wall(1, 3, 1, 4))
         walls16.add(Wall(2, 3, 2, 4))
         walls16.add(Wall(1, 4, 1, 5))
-        levels.add(LevelDef(16, "平原·鬲", 6, 6, wps16, walls16))
+        let parityEdges16 = ArrayList<ParityEdge>()
+        let stepLimit16 = 0
+        levels.add(LevelDef(16, "平原·鬲", 6, 6, wps16, walls16, parityEdges16, stepLimit16))
 
         let wps17 = ArrayList<Waypoint>()
         wps17.add(Waypoint(1, 4, 1))
@@ -232,7 +266,9 @@ public class LevelCatalog {
         walls17.add(Wall(1, 2, 2, 2))
         walls17.add(Wall(4, 3, 5, 3))
         walls17.add(Wall(1, 1, 1, 2))
-        levels.add(LevelDef(17, "平原·鬲·第 2 驿", 6, 6, wps17, walls17))
+        let parityEdges17 = ArrayList<ParityEdge>()
+        let stepLimit17 = 0
+        levels.add(LevelDef(17, "平原·鬲·第 2 驿", 6, 6, wps17, walls17, parityEdges17, stepLimit17))
 
         let wps18 = ArrayList<Waypoint>()
         wps18.add(Waypoint(1, 4, 4))
@@ -247,7 +283,9 @@ public class LevelCatalog {
         walls18.add(Wall(4, 0, 4, 1))
         walls18.add(Wall(4, 1, 4, 2))
         walls18.add(Wall(5, 3, 5, 4))
-        levels.add(LevelDef(18, "平原·祝阿", 6, 6, wps18, walls18))
+        let parityEdges18 = ArrayList<ParityEdge>()
+        let stepLimit18 = 0
+        levels.add(LevelDef(18, "平原·祝阿", 6, 6, wps18, walls18, parityEdges18, stepLimit18))
 
         let wps19 = ArrayList<Waypoint>()
         wps19.add(Waypoint(1, 1, 2))
@@ -263,7 +301,9 @@ public class LevelCatalog {
         walls19.add(Wall(2, 3, 2, 4))
         walls19.add(Wall(3, 3, 3, 4))
         walls19.add(Wall(4, 3, 4, 4))
-        levels.add(LevelDef(19, "平原·祝阿·第 2 驿", 6, 6, wps19, walls19))
+        let parityEdges19 = ArrayList<ParityEdge>()
+        let stepLimit19 = 0
+        levels.add(LevelDef(19, "平原·祝阿·第 2 驿", 6, 6, wps19, walls19, parityEdges19, stepLimit19))
 
         let wps20 = ArrayList<Waypoint>()
         wps20.add(Waypoint(1, 5, 2))
@@ -280,7 +320,9 @@ public class LevelCatalog {
         walls20.add(Wall(4, 2, 4, 3))
         walls20.add(Wall(5, 2, 5, 3))
         walls20.add(Wall(3, 4, 3, 5))
-        levels.add(LevelDef(20, "徐州·郯", 6, 6, wps20, walls20))
+        let parityEdges20 = ArrayList<ParityEdge>()
+        let stepLimit20 = 0
+        levels.add(LevelDef(20, "徐州·郯", 6, 6, wps20, walls20, parityEdges20, stepLimit20))
 
         let wps21 = ArrayList<Waypoint>()
         wps21.add(Waypoint(1, 0, 0))
@@ -297,7 +339,9 @@ public class LevelCatalog {
         walls21.add(Wall(3, 3, 3, 4))
         walls21.add(Wall(1, 4, 1, 5))
         walls21.add(Wall(3, 4, 3, 5))
-        levels.add(LevelDef(21, "徐州·彭城", 6, 6, wps21, walls21))
+        let parityEdges21 = ArrayList<ParityEdge>()
+        let stepLimit21 = 0
+        levels.add(LevelDef(21, "徐州·彭城", 6, 6, wps21, walls21, parityEdges21, stepLimit21))
 
         let wps22 = ArrayList<Waypoint>()
         wps22.add(Waypoint(1, 1, 0))
@@ -315,7 +359,9 @@ public class LevelCatalog {
         walls22.add(Wall(1, 0, 1, 1))
         walls22.add(Wall(4, 2, 4, 3))
         walls22.add(Wall(5, 3, 5, 4))
-        levels.add(LevelDef(22, "徐州·小沛", 6, 6, wps22, walls22))
+        let parityEdges22 = ArrayList<ParityEdge>()
+        let stepLimit22 = 0
+        levels.add(LevelDef(22, "徐州·小沛", 6, 6, wps22, walls22, parityEdges22, stepLimit22))
 
         let wps23 = ArrayList<Waypoint>()
         wps23.add(Waypoint(1, 3, 2))
@@ -333,7 +379,9 @@ public class LevelCatalog {
         walls23.add(Wall(3, 1, 3, 2))
         walls23.add(Wall(3, 2, 3, 3))
         walls23.add(Wall(5, 3, 5, 4))
-        levels.add(LevelDef(23, "徐州·下邳", 6, 6, wps23, walls23))
+        let parityEdges23 = ArrayList<ParityEdge>()
+        let stepLimit23 = 0
+        levels.add(LevelDef(23, "徐州·下邳", 6, 6, wps23, walls23, parityEdges23, stepLimit23))
 
         let wps24 = ArrayList<Waypoint>()
         wps24.add(Waypoint(1, 2, 2))
@@ -350,7 +398,9 @@ public class LevelCatalog {
         walls24.add(Wall(0, 3, 0, 4))
         walls24.add(Wall(1, 3, 1, 4))
         walls24.add(Wall(2, 3, 2, 4))
-        levels.add(LevelDef(24, "徐州·盱眙", 6, 6, wps24, walls24))
+        let parityEdges24 = ArrayList<ParityEdge>()
+        let stepLimit24 = 0
+        levels.add(LevelDef(24, "徐州·盱眙", 6, 6, wps24, walls24, parityEdges24, stepLimit24))
 
         let wps25 = ArrayList<Waypoint>()
         wps25.add(Waypoint(1, 5, 0))
@@ -368,7 +418,9 @@ public class LevelCatalog {
         walls25.add(Wall(3, 4, 4, 4))
         walls25.add(Wall(3, 5, 4, 5))
         walls25.add(Wall(0, 1, 0, 2))
-        levels.add(LevelDef(25, "徐州·淮阴", 6, 6, wps25, walls25))
+        let parityEdges25 = ArrayList<ParityEdge>()
+        let stepLimit25 = 0
+        levels.add(LevelDef(25, "徐州·淮阴", 6, 6, wps25, walls25, parityEdges25, stepLimit25))
 
         let wps26 = ArrayList<Waypoint>()
         wps26.add(Waypoint(1, 0, 2))
@@ -386,7 +438,9 @@ public class LevelCatalog {
         walls26.add(Wall(3, 3, 3, 4))
         walls26.add(Wall(5, 3, 5, 4))
         walls26.add(Wall(4, 4, 4, 5))
-        levels.add(LevelDef(26, "徐州·广陵", 6, 6, wps26, walls26))
+        let parityEdges26 = ArrayList<ParityEdge>()
+        let stepLimit26 = 0
+        levels.add(LevelDef(26, "徐州·广陵", 6, 6, wps26, walls26, parityEdges26, stepLimit26))
 
         let wps27 = ArrayList<Waypoint>()
         wps27.add(Waypoint(1, 5, 4))
@@ -405,7 +459,9 @@ public class LevelCatalog {
         walls27.add(Wall(1, 3, 1, 4))
         walls27.add(Wall(2, 3, 2, 4))
         walls27.add(Wall(5, 3, 5, 4))
-        levels.add(LevelDef(27, "徐州·广陵·第 2 驿", 6, 6, wps27, walls27))
+        let parityEdges27 = ArrayList<ParityEdge>()
+        let stepLimit27 = 0
+        levels.add(LevelDef(27, "徐州·广陵·第 2 驿", 6, 6, wps27, walls27, parityEdges27, stepLimit27))
 
         let wps28 = ArrayList<Waypoint>()
         wps28.add(Waypoint(1, 4, 1))
@@ -424,7 +480,9 @@ public class LevelCatalog {
         walls28.add(Wall(4, 1, 4, 2))
         walls28.add(Wall(5, 1, 5, 2))
         walls28.add(Wall(5, 3, 5, 4))
-        levels.add(LevelDef(28, "徐州·海西", 6, 6, wps28, walls28))
+        let parityEdges28 = ArrayList<ParityEdge>()
+        let stepLimit28 = 0
+        levels.add(LevelDef(28, "徐州·海西", 6, 6, wps28, walls28, parityEdges28, stepLimit28))
 
         let wps29 = ArrayList<Waypoint>()
         wps29.add(Waypoint(1, 5, 3))
@@ -444,7 +502,9 @@ public class LevelCatalog {
         walls29.add(Wall(1, 3, 1, 4))
         walls29.add(Wall(2, 3, 2, 4))
         walls29.add(Wall(3, 3, 3, 4))
-        levels.add(LevelDef(29, "徐州·海西·第 2 驿", 6, 6, wps29, walls29))
+        let parityEdges29 = ArrayList<ParityEdge>()
+        let stepLimit29 = 0
+        levels.add(LevelDef(29, "徐州·海西·第 2 驿", 6, 6, wps29, walls29, parityEdges29, stepLimit29))
 
         let wps30 = ArrayList<Waypoint>()
         wps30.add(Waypoint(1, 1, 5))
@@ -463,7 +523,9 @@ public class LevelCatalog {
         walls30.add(Wall(5, 2, 5, 3))
         walls30.add(Wall(2, 4, 2, 5))
         walls30.add(Wall(4, 5, 4, 6))
-        levels.add(LevelDef(30, "吕布·下邳·第 1 驿", 7, 7, wps30, walls30))
+        let parityEdges30 = ArrayList<ParityEdge>()
+        let stepLimit30 = 0
+        levels.add(LevelDef(30, "吕布·下邳·第 1 驿", 7, 7, wps30, walls30, parityEdges30, stepLimit30))
 
         let wps31 = ArrayList<Waypoint>()
         wps31.add(Waypoint(1, 0, 0))
@@ -483,7 +545,9 @@ public class LevelCatalog {
         walls31.add(Wall(2, 4, 2, 5))
         walls31.add(Wall(4, 4, 4, 5))
         walls31.add(Wall(5, 5, 5, 6))
-        levels.add(LevelDef(31, "吕布·小沛·第 1 驿", 7, 7, wps31, walls31))
+        let parityEdges31 = ArrayList<ParityEdge>()
+        let stepLimit31 = 0
+        levels.add(LevelDef(31, "吕布·小沛·第 1 驿", 7, 7, wps31, walls31, parityEdges31, stepLimit31))
 
         let wps32 = ArrayList<Waypoint>()
         wps32.add(Waypoint(1, 6, 0))
@@ -503,7 +567,9 @@ public class LevelCatalog {
         walls32.add(Wall(5, 2, 5, 3))
         walls32.add(Wall(3, 4, 3, 5))
         walls32.add(Wall(4, 4, 4, 5))
-        levels.add(LevelDef(32, "吕布·彭城·第 1 驿", 7, 7, wps32, walls32))
+        let parityEdges32 = ArrayList<ParityEdge>()
+        let stepLimit32 = 0
+        levels.add(LevelDef(32, "吕布·彭城·第 1 驿", 7, 7, wps32, walls32, parityEdges32, stepLimit32))
 
         let wps33 = ArrayList<Waypoint>()
         wps33.add(Waypoint(1, 5, 5))
@@ -522,7 +588,9 @@ public class LevelCatalog {
         walls33.add(Wall(3, 2, 3, 3))
         walls33.add(Wall(4, 4, 4, 5))
         walls33.add(Wall(2, 5, 2, 6))
-        levels.add(LevelDef(33, "吕布·下邳·第 2 驿", 7, 7, wps33, walls33))
+        let parityEdges33 = ArrayList<ParityEdge>()
+        let stepLimit33 = 0
+        levels.add(LevelDef(33, "吕布·下邳·第 2 驿", 7, 7, wps33, walls33, parityEdges33, stepLimit33))
 
         let wps34 = ArrayList<Waypoint>()
         wps34.add(Waypoint(1, 4, 0))
@@ -541,7 +609,9 @@ public class LevelCatalog {
         walls34.add(Wall(5, 3, 5, 4))
         walls34.add(Wall(0, 4, 0, 5))
         walls34.add(Wall(4, 5, 4, 6))
-        levels.add(LevelDef(34, "吕布·小沛·第 2 驿", 7, 7, wps34, walls34))
+        let parityEdges34 = ArrayList<ParityEdge>()
+        let stepLimit34 = 0
+        levels.add(LevelDef(34, "吕布·小沛·第 2 驿", 7, 7, wps34, walls34, parityEdges34, stepLimit34))
 
         let wps35 = ArrayList<Waypoint>()
         wps35.add(Waypoint(1, 2, 6))
@@ -562,7 +632,9 @@ public class LevelCatalog {
         walls35.add(Wall(3, 4, 3, 5))
         walls35.add(Wall(6, 4, 6, 5))
         walls35.add(Wall(2, 5, 2, 6))
-        levels.add(LevelDef(35, "吕布·彭城·第 2 驿", 7, 7, wps35, walls35))
+        let parityEdges35 = ArrayList<ParityEdge>()
+        let stepLimit35 = 0
+        levels.add(LevelDef(35, "吕布·彭城·第 2 驿", 7, 7, wps35, walls35, parityEdges35, stepLimit35))
 
         let wps36 = ArrayList<Waypoint>()
         wps36.add(Waypoint(1, 3, 3))
@@ -584,7 +656,9 @@ public class LevelCatalog {
         walls36.add(Wall(5, 2, 5, 3))
         walls36.add(Wall(2, 3, 2, 4))
         walls36.add(Wall(4, 4, 4, 5))
-        levels.add(LevelDef(36, "吕布·下邳·第 3 驿", 7, 7, wps36, walls36))
+        let parityEdges36 = ArrayList<ParityEdge>()
+        let stepLimit36 = 0
+        levels.add(LevelDef(36, "吕布·下邳·第 3 驿", 7, 7, wps36, walls36, parityEdges36, stepLimit36))
 
         let wps37 = ArrayList<Waypoint>()
         wps37.add(Waypoint(1, 5, 3))
@@ -606,7 +680,9 @@ public class LevelCatalog {
         walls37.add(Wall(0, 4, 0, 5))
         walls37.add(Wall(3, 4, 3, 5))
         walls37.add(Wall(3, 5, 3, 6))
-        levels.add(LevelDef(37, "吕布·小沛·第 3 驿", 7, 7, wps37, walls37))
+        let parityEdges37 = ArrayList<ParityEdge>()
+        let stepLimit37 = 0
+        levels.add(LevelDef(37, "吕布·小沛·第 3 驿", 7, 7, wps37, walls37, parityEdges37, stepLimit37))
 
         let wps38 = ArrayList<Waypoint>()
         wps38.add(Waypoint(1, 6, 6))
@@ -629,7 +705,9 @@ public class LevelCatalog {
         walls38.add(Wall(5, 4, 5, 5))
         walls38.add(Wall(1, 5, 1, 6))
         walls38.add(Wall(3, 5, 3, 6))
-        levels.add(LevelDef(38, "吕布·彭城·第 3 驿", 7, 7, wps38, walls38))
+        let parityEdges38 = ArrayList<ParityEdge>()
+        let stepLimit38 = 0
+        levels.add(LevelDef(38, "吕布·彭城·第 3 驿", 7, 7, wps38, walls38, parityEdges38, stepLimit38))
 
         let wps39 = ArrayList<Waypoint>()
         wps39.add(Waypoint(1, 0, 6))
@@ -653,7 +731,9 @@ public class LevelCatalog {
         walls39.add(Wall(2, 3, 2, 4))
         walls39.add(Wall(4, 3, 4, 4))
         walls39.add(Wall(4, 5, 4, 6))
-        levels.add(LevelDef(39, "吕布·下邳·第 4 驿", 7, 7, wps39, walls39))
+        let parityEdges39 = ArrayList<ParityEdge>()
+        let stepLimit39 = 0
+        levels.add(LevelDef(39, "吕布·下邳·第 4 驿", 7, 7, wps39, walls39, parityEdges39, stepLimit39))
 
         let wps40 = ArrayList<Waypoint>()
         wps40.add(Waypoint(1, 1, 5))
@@ -674,7 +754,9 @@ public class LevelCatalog {
         walls40.add(Wall(1, 4, 1, 5))
         walls40.add(Wall(2, 4, 2, 5))
         walls40.add(Wall(1, 5, 1, 6))
-        levels.add(LevelDef(40, "投袁·青州", 7, 7, wps40, walls40))
+        let parityEdges40 = ArrayList<ParityEdge>()
+        let stepLimit40 = 0
+        levels.add(LevelDef(40, "投袁·青州", 7, 7, wps40, walls40, parityEdges40, stepLimit40))
 
         let wps41 = ArrayList<Waypoint>()
         wps41.add(Waypoint(1, 6, 2))
@@ -695,7 +777,9 @@ public class LevelCatalog {
         walls41.add(Wall(3, 2, 3, 3))
         walls41.add(Wall(5, 2, 5, 3))
         walls41.add(Wall(0, 4, 0, 5))
-        levels.add(LevelDef(41, "投袁·平原", 7, 7, wps41, walls41))
+        let parityEdges41 = ArrayList<ParityEdge>()
+        let stepLimit41 = 0
+        levels.add(LevelDef(41, "投袁·平原", 7, 7, wps41, walls41, parityEdges41, stepLimit41))
 
         let wps42 = ArrayList<Waypoint>()
         wps42.add(Waypoint(1, 3, 5))
@@ -718,7 +802,9 @@ public class LevelCatalog {
         walls42.add(Wall(3, 2, 3, 3))
         walls42.add(Wall(2, 3, 2, 4))
         walls42.add(Wall(4, 3, 4, 4))
-        levels.add(LevelDef(42, "投袁·邺·第 1 驿", 7, 7, wps42, walls42))
+        let parityEdges42 = ArrayList<ParityEdge>()
+        let stepLimit42 = 0
+        levels.add(LevelDef(42, "投袁·邺·第 1 驿", 7, 7, wps42, walls42, parityEdges42, stepLimit42))
 
         let wps43 = ArrayList<Waypoint>()
         wps43.add(Waypoint(1, 3, 3))
@@ -738,7 +824,9 @@ public class LevelCatalog {
         walls43.add(Wall(4, 2, 4, 3))
         walls43.add(Wall(0, 3, 0, 4))
         walls43.add(Wall(3, 5, 3, 6))
-        levels.add(LevelDef(43, "投袁·黎阳·第 1 驿", 7, 7, wps43, walls43))
+        let parityEdges43 = ArrayList<ParityEdge>()
+        let stepLimit43 = 0
+        levels.add(LevelDef(43, "投袁·黎阳·第 1 驿", 7, 7, wps43, walls43, parityEdges43, stepLimit43))
 
         let wps44 = ArrayList<Waypoint>()
         wps44.add(Waypoint(1, 0, 2))
@@ -759,7 +847,9 @@ public class LevelCatalog {
         walls44.add(Wall(6, 3, 6, 4))
         walls44.add(Wall(2, 5, 2, 6))
         walls44.add(Wall(6, 5, 6, 6))
-        levels.add(LevelDef(44, "投袁·邺·第 2 驿", 7, 7, wps44, walls44))
+        let parityEdges44 = ArrayList<ParityEdge>()
+        let stepLimit44 = 0
+        levels.add(LevelDef(44, "投袁·邺·第 2 驿", 7, 7, wps44, walls44, parityEdges44, stepLimit44))
 
         let wps45 = ArrayList<Waypoint>()
         wps45.add(Waypoint(1, 0, 6))
@@ -782,7 +872,9 @@ public class LevelCatalog {
         walls45.add(Wall(0, 5, 0, 6))
         walls45.add(Wall(2, 5, 2, 6))
         walls45.add(Wall(6, 5, 6, 6))
-        levels.add(LevelDef(45, "投袁·黎阳·第 2 驿", 7, 7, wps45, walls45))
+        let parityEdges45 = ArrayList<ParityEdge>()
+        let stepLimit45 = 0
+        levels.add(LevelDef(45, "投袁·黎阳·第 2 驿", 7, 7, wps45, walls45, parityEdges45, stepLimit45))
 
         let wps46 = ArrayList<Waypoint>()
         wps46.add(Waypoint(1, 6, 4))
@@ -806,7 +898,9 @@ public class LevelCatalog {
         walls46.add(Wall(6, 4, 6, 5))
         walls46.add(Wall(3, 5, 3, 6))
         walls46.add(Wall(5, 5, 5, 6))
-        levels.add(LevelDef(46, "投袁·汝南·第 1 驿", 7, 7, wps46, walls46))
+        let parityEdges46 = ArrayList<ParityEdge>()
+        let stepLimit46 = 0
+        levels.add(LevelDef(46, "投袁·汝南·第 1 驿", 7, 7, wps46, walls46, parityEdges46, stepLimit46))
 
         let wps47 = ArrayList<Waypoint>()
         wps47.add(Waypoint(1, 6, 0))
@@ -830,7 +924,9 @@ public class LevelCatalog {
         walls47.add(Wall(5, 4, 5, 5))
         walls47.add(Wall(1, 5, 1, 6))
         walls47.add(Wall(5, 5, 5, 6))
-        levels.add(LevelDef(47, "投袁·㶏强·第 1 驿", 7, 7, wps47, walls47))
+        let parityEdges47 = ArrayList<ParityEdge>()
+        let stepLimit47 = 0
+        levels.add(LevelDef(47, "投袁·㶏强·第 1 驿", 7, 7, wps47, walls47, parityEdges47, stepLimit47))
 
         let wps48 = ArrayList<Waypoint>()
         wps48.add(Waypoint(1, 5, 1))
@@ -857,7 +953,9 @@ public class LevelCatalog {
         walls48.add(Wall(4, 4, 4, 5))
         walls48.add(Wall(5, 4, 5, 5))
         walls48.add(Wall(3, 5, 3, 6))
-        levels.add(LevelDef(48, "投袁·汝南·第 2 驿", 7, 7, wps48, walls48))
+        let parityEdges48 = ArrayList<ParityEdge>()
+        let stepLimit48 = 0
+        levels.add(LevelDef(48, "投袁·汝南·第 2 驿", 7, 7, wps48, walls48, parityEdges48, stepLimit48))
 
         let wps49 = ArrayList<Waypoint>()
         wps49.add(Waypoint(1, 6, 6))
@@ -884,7 +982,9 @@ public class LevelCatalog {
         walls49.add(Wall(6, 3, 6, 4))
         walls49.add(Wall(5, 4, 5, 5))
         walls49.add(Wall(3, 5, 3, 6))
-        levels.add(LevelDef(49, "投袁·㶏强·第 2 驿", 7, 7, wps49, walls49))
+        let parityEdges49 = ArrayList<ParityEdge>()
+        let stepLimit49 = 0
+        levels.add(LevelDef(49, "投袁·㶏强·第 2 驿", 7, 7, wps49, walls49, parityEdges49, stepLimit49))
 
         let wps50 = ArrayList<Waypoint>()
         wps50.add(Waypoint(1, 0, 6))
@@ -905,7 +1005,9 @@ public class LevelCatalog {
         walls50.add(Wall(4, 4, 4, 5))
         walls50.add(Wall(0, 5, 0, 6))
         walls50.add(Wall(2, 5, 2, 6))
-        levels.add(LevelDef(50, "荆州·新野", 7, 7, wps50, walls50))
+        let parityEdges50 = ArrayList<ParityEdge>()
+        let stepLimit50 = 0
+        levels.add(LevelDef(50, "荆州·新野", 7, 7, wps50, walls50, parityEdges50, stepLimit50))
 
         let wps51 = ArrayList<Waypoint>()
         wps51.add(Waypoint(1, 6, 4))
@@ -927,7 +1029,9 @@ public class LevelCatalog {
         walls51.add(Wall(6, 4, 6, 5))
         walls51.add(Wall(1, 5, 1, 6))
         walls51.add(Wall(3, 5, 3, 6))
-        levels.add(LevelDef(51, "荆州·邓", 7, 7, wps51, walls51))
+        let parityEdges51 = ArrayList<ParityEdge>()
+        let stepLimit51 = 0
+        levels.add(LevelDef(51, "荆州·邓", 7, 7, wps51, walls51, parityEdges51, stepLimit51))
 
         let wps52 = ArrayList<Waypoint>()
         wps52.add(Waypoint(1, 6, 6))
@@ -949,7 +1053,9 @@ public class LevelCatalog {
         walls52.add(Wall(5, 3, 5, 4))
         walls52.add(Wall(6, 4, 6, 5))
         walls52.add(Wall(2, 5, 2, 6))
-        levels.add(LevelDef(52, "荆州·樊城·第 1 驿", 7, 7, wps52, walls52))
+        let parityEdges52 = ArrayList<ParityEdge>()
+        let stepLimit52 = 0
+        levels.add(LevelDef(52, "荆州·樊城·第 1 驿", 7, 7, wps52, walls52, parityEdges52, stepLimit52))
 
         let wps53 = ArrayList<Waypoint>()
         wps53.add(Waypoint(1, 3, 5))
@@ -972,7 +1078,9 @@ public class LevelCatalog {
         walls53.add(Wall(3, 4, 3, 5))
         walls53.add(Wall(5, 4, 5, 5))
         walls53.add(Wall(3, 5, 3, 6))
-        levels.add(LevelDef(53, "荆州·襄阳·第 1 驿", 7, 7, wps53, walls53))
+        let parityEdges53 = ArrayList<ParityEdge>()
+        let stepLimit53 = 0
+        levels.add(LevelDef(53, "荆州·襄阳·第 1 驿", 7, 7, wps53, walls53, parityEdges53, stepLimit53))
 
         let wps54 = ArrayList<Waypoint>()
         wps54.add(Waypoint(1, 4, 4))
@@ -992,7 +1100,9 @@ public class LevelCatalog {
         walls54.add(Wall(1, 4, 1, 5))
         walls54.add(Wall(3, 4, 3, 5))
         walls54.add(Wall(1, 5, 1, 6))
-        levels.add(LevelDef(54, "荆州·宜城", 7, 7, wps54, walls54))
+        let parityEdges54 = ArrayList<ParityEdge>()
+        let stepLimit54 = 0
+        levels.add(LevelDef(54, "荆州·宜城", 7, 7, wps54, walls54, parityEdges54, stepLimit54))
 
         let wps55 = ArrayList<Waypoint>()
         wps55.add(Waypoint(1, 4, 2))
@@ -1015,7 +1125,9 @@ public class LevelCatalog {
         walls55.add(Wall(5, 4, 5, 5))
         walls55.add(Wall(2, 5, 2, 6))
         walls55.add(Wall(5, 5, 5, 6))
-        levels.add(LevelDef(55, "荆州·当阳·第 1 驿", 7, 7, wps55, walls55))
+        let parityEdges55 = ArrayList<ParityEdge>()
+        let stepLimit55 = 0
+        levels.add(LevelDef(55, "荆州·当阳·第 1 驿", 7, 7, wps55, walls55, parityEdges55, stepLimit55))
 
         let wps56 = ArrayList<Waypoint>()
         wps56.add(Waypoint(1, 4, 6))
@@ -1037,7 +1149,9 @@ public class LevelCatalog {
         walls56.add(Wall(3, 3, 3, 4))
         walls56.add(Wall(1, 5, 1, 6))
         walls56.add(Wall(4, 5, 4, 6))
-        levels.add(LevelDef(56, "荆州·江陵·第 1 驿", 7, 7, wps56, walls56))
+        let parityEdges56 = ArrayList<ParityEdge>()
+        let stepLimit56 = 0
+        levels.add(LevelDef(56, "荆州·江陵·第 1 驿", 7, 7, wps56, walls56, parityEdges56, stepLimit56))
 
         let wps57 = ArrayList<Waypoint>()
         wps57.add(Waypoint(1, 6, 0))
@@ -1061,7 +1175,9 @@ public class LevelCatalog {
         walls57.add(Wall(2, 0, 2, 1))
         walls57.add(Wall(3, 0, 3, 1))
         walls57.add(Wall(4, 3, 4, 4))
-        levels.add(LevelDef(57, "荆州·公安·第 1 驿", 7, 7, wps57, walls57))
+        let parityEdges57 = ArrayList<ParityEdge>()
+        let stepLimit57 = 0
+        levels.add(LevelDef(57, "荆州·公安·第 1 驿", 7, 7, wps57, walls57, parityEdges57, stepLimit57))
 
         let wps58 = ArrayList<Waypoint>()
         wps58.add(Waypoint(1, 5, 5))
@@ -1087,7 +1203,9 @@ public class LevelCatalog {
         walls58.add(Wall(6, 3, 6, 4))
         walls58.add(Wall(1, 4, 1, 5))
         walls58.add(Wall(2, 4, 2, 5))
-        levels.add(LevelDef(58, "荆州·江陵·第 2 驿", 7, 7, wps58, walls58))
+        let parityEdges58 = ArrayList<ParityEdge>()
+        let stepLimit58 = 0
+        levels.add(LevelDef(58, "荆州·江陵·第 2 驿", 7, 7, wps58, walls58, parityEdges58, stepLimit58))
 
         let wps59 = ArrayList<Waypoint>()
         wps59.add(Waypoint(1, 0, 1))
@@ -1115,7 +1233,9 @@ public class LevelCatalog {
         walls59.add(Wall(4, 4, 4, 5))
         walls59.add(Wall(5, 4, 5, 5))
         walls59.add(Wall(6, 4, 6, 5))
-        levels.add(LevelDef(59, "荆州·公安·第 2 驿", 7, 7, wps59, walls59))
+        let parityEdges59 = ArrayList<ParityEdge>()
+        let stepLimit59 = 0
+        levels.add(LevelDef(59, "荆州·公安·第 2 驿", 7, 7, wps59, walls59, parityEdges59, stepLimit59))
 
         let wps60 = ArrayList<Waypoint>()
         wps60.add(Waypoint(1, 6, 2))
@@ -1133,7 +1253,9 @@ public class LevelCatalog {
         walls60.add(Wall(4, 6, 5, 6))
         walls60.add(Wall(1, 1, 1, 2))
         walls60.add(Wall(6, 1, 6, 2))
-        levels.add(LevelDef(60, "赤壁·樊口", 7, 7, wps60, walls60))
+        let parityEdges60 = ArrayList<ParityEdge>()
+        let stepLimit60 = 0
+        levels.add(LevelDef(60, "赤壁·樊口", 7, 7, wps60, walls60, parityEdges60, stepLimit60))
 
         let wps61 = ArrayList<Waypoint>()
         wps61.add(Waypoint(1, 2, 6))
@@ -1152,7 +1274,9 @@ public class LevelCatalog {
         walls61.add(Wall(1, 4, 1, 5))
         walls61.add(Wall(2, 5, 2, 6))
         walls61.add(Wall(6, 5, 6, 6))
-        levels.add(LevelDef(61, "赤壁·鄂", 7, 7, wps61, walls61))
+        let parityEdges61 = ArrayList<ParityEdge>()
+        let stepLimit61 = 0
+        levels.add(LevelDef(61, "赤壁·鄂", 7, 7, wps61, walls61, parityEdges61, stepLimit61))
 
         let wps62 = ArrayList<Waypoint>()
         wps62.add(Waypoint(1, 3, 5))
@@ -1171,7 +1295,9 @@ public class LevelCatalog {
         walls62.add(Wall(4, 3, 4, 4))
         walls62.add(Wall(6, 3, 6, 4))
         walls62.add(Wall(5, 4, 5, 5))
-        levels.add(LevelDef(62, "赤壁·夏口·第 1 驿", 7, 7, wps62, walls62))
+        let parityEdges62 = ArrayList<ParityEdge>()
+        let stepLimit62 = 0
+        levels.add(LevelDef(62, "赤壁·夏口·第 1 驿", 7, 7, wps62, walls62, parityEdges62, stepLimit62))
 
         let wps63 = ArrayList<Waypoint>()
         wps63.add(Waypoint(1, 5, 5))
@@ -1192,7 +1318,9 @@ public class LevelCatalog {
         walls63.add(Wall(2, 4, 2, 5))
         walls63.add(Wall(5, 4, 5, 5))
         walls63.add(Wall(2, 5, 2, 6))
-        levels.add(LevelDef(63, "赤壁·陆口·第 1 驿", 7, 7, wps63, walls63))
+        let parityEdges63 = ArrayList<ParityEdge>()
+        let stepLimit63 = 0
+        levels.add(LevelDef(63, "赤壁·陆口·第 1 驿", 7, 7, wps63, walls63, parityEdges63, stepLimit63))
 
         let wps64 = ArrayList<Waypoint>()
         wps64.add(Waypoint(1, 3, 3))
@@ -1212,7 +1340,9 @@ public class LevelCatalog {
         walls64.add(Wall(6, 3, 6, 4))
         walls64.add(Wall(0, 4, 0, 5))
         walls64.add(Wall(4, 5, 4, 6))
-        levels.add(LevelDef(64, "赤壁·柴桑·第 1 驿", 7, 7, wps64, walls64))
+        let parityEdges64 = ArrayList<ParityEdge>()
+        let stepLimit64 = 0
+        levels.add(LevelDef(64, "赤壁·柴桑·第 1 驿", 7, 7, wps64, walls64, parityEdges64, stepLimit64))
 
         let wps65 = ArrayList<Waypoint>()
         wps65.add(Waypoint(1, 6, 6))
@@ -1234,7 +1364,9 @@ public class LevelCatalog {
         walls65.add(Wall(6, 2, 6, 3))
         walls65.add(Wall(2, 4, 2, 5))
         walls65.add(Wall(6, 5, 6, 6))
-        levels.add(LevelDef(65, "赤壁·夏口·第 2 驿", 7, 7, wps65, walls65))
+        let parityEdges65 = ArrayList<ParityEdge>()
+        let stepLimit65 = 0
+        levels.add(LevelDef(65, "赤壁·夏口·第 2 驿", 7, 7, wps65, walls65, parityEdges65, stepLimit65))
 
         let wps66 = ArrayList<Waypoint>()
         wps66.add(Waypoint(1, 2, 4))
@@ -1254,7 +1386,9 @@ public class LevelCatalog {
         walls66.add(Wall(2, 4, 2, 5))
         walls66.add(Wall(4, 4, 4, 5))
         walls66.add(Wall(2, 5, 2, 6))
-        levels.add(LevelDef(66, "赤壁·陆口·第 2 驿", 7, 7, wps66, walls66))
+        let parityEdges66 = ArrayList<ParityEdge>()
+        let stepLimit66 = 0
+        levels.add(LevelDef(66, "赤壁·陆口·第 2 驿", 7, 7, wps66, walls66, parityEdges66, stepLimit66))
 
         let wps67 = ArrayList<Waypoint>()
         wps67.add(Waypoint(1, 0, 1))
@@ -1274,7 +1408,9 @@ public class LevelCatalog {
         walls67.add(Wall(4, 2, 4, 3))
         walls67.add(Wall(5, 2, 5, 3))
         walls67.add(Wall(3, 4, 3, 5))
-        levels.add(LevelDef(67, "赤壁·柴桑·第 2 驿", 7, 7, wps67, walls67))
+        let parityEdges67 = ArrayList<ParityEdge>()
+        let stepLimit67 = 0
+        levels.add(LevelDef(67, "赤壁·柴桑·第 2 驿", 7, 7, wps67, walls67, parityEdges67, stepLimit67))
 
         let wps68 = ArrayList<Waypoint>()
         wps68.add(Waypoint(1, 1, 3))
@@ -1295,7 +1431,9 @@ public class LevelCatalog {
         walls68.add(Wall(2, 4, 2, 5))
         walls68.add(Wall(5, 4, 5, 5))
         walls68.add(Wall(1, 5, 1, 6))
-        levels.add(LevelDef(68, "赤壁·樊口·第 2 驿", 7, 7, wps68, walls68))
+        let parityEdges68 = ArrayList<ParityEdge>()
+        let stepLimit68 = 0
+        levels.add(LevelDef(68, "赤壁·樊口·第 2 驿", 7, 7, wps68, walls68, parityEdges68, stepLimit68))
 
         let wps69 = ArrayList<Waypoint>()
         wps69.add(Waypoint(1, 2, 0))
@@ -1317,7 +1455,9 @@ public class LevelCatalog {
         walls69.add(Wall(3, 2, 3, 3))
         walls69.add(Wall(0, 3, 0, 4))
         walls69.add(Wall(3, 4, 3, 5))
-        levels.add(LevelDef(69, "赤壁·鄂·第 2 驿", 7, 7, wps69, walls69))
+        let parityEdges69 = ArrayList<ParityEdge>()
+        let stepLimit69 = 0
+        levels.add(LevelDef(69, "赤壁·鄂·第 2 驿", 7, 7, wps69, walls69, parityEdges69, stepLimit69))
 
         let wps70 = ArrayList<Waypoint>()
         wps70.add(Waypoint(1, 6, 0))
@@ -1337,7 +1477,9 @@ public class LevelCatalog {
         walls70.add(Wall(4, 2, 4, 3))
         walls70.add(Wall(2, 3, 2, 4))
         walls70.add(Wall(2, 5, 2, 6))
-        levels.add(LevelDef(70, "入蜀·江州", 7, 7, wps70, walls70))
+        let parityEdges70 = ArrayList<ParityEdge>()
+        let stepLimit70 = 0
+        levels.add(LevelDef(70, "入蜀·江州", 7, 7, wps70, walls70, parityEdges70, stepLimit70))
 
         let wps71 = ArrayList<Waypoint>()
         wps71.add(Waypoint(1, 5, 5))
@@ -1358,7 +1500,9 @@ public class LevelCatalog {
         walls71.add(Wall(5, 3, 5, 4))
         walls71.add(Wall(0, 4, 0, 5))
         walls71.add(Wall(4, 4, 4, 5))
-        levels.add(LevelDef(71, "入蜀·垫江", 7, 7, wps71, walls71))
+        let parityEdges71 = ArrayList<ParityEdge>()
+        let stepLimit71 = 0
+        levels.add(LevelDef(71, "入蜀·垫江", 7, 7, wps71, walls71, parityEdges71, stepLimit71))
 
         let wps72 = ArrayList<Waypoint>()
         wps72.add(Waypoint(1, 4, 4))
@@ -1378,7 +1522,9 @@ public class LevelCatalog {
         walls72.add(Wall(4, 4, 4, 5))
         walls72.add(Wall(5, 4, 5, 5))
         walls72.add(Wall(3, 5, 3, 6))
-        levels.add(LevelDef(72, "入蜀·葭萌", 7, 7, wps72, walls72))
+        let parityEdges72 = ArrayList<ParityEdge>()
+        let stepLimit72 = 0
+        levels.add(LevelDef(72, "入蜀·葭萌", 7, 7, wps72, walls72, parityEdges72, stepLimit72))
 
         let wps73 = ArrayList<Waypoint>()
         wps73.add(Waypoint(1, 1, 5))
@@ -1398,7 +1544,9 @@ public class LevelCatalog {
         walls73.add(Wall(1, 3, 1, 4))
         walls73.add(Wall(4, 4, 4, 5))
         walls73.add(Wall(4, 5, 4, 6))
-        levels.add(LevelDef(73, "入蜀·白水关", 7, 7, wps73, walls73))
+        let parityEdges73 = ArrayList<ParityEdge>()
+        let stepLimit73 = 0
+        levels.add(LevelDef(73, "入蜀·白水关", 7, 7, wps73, walls73, parityEdges73, stepLimit73))
 
         let wps74 = ArrayList<Waypoint>()
         wps74.add(Waypoint(1, 2, 2))
@@ -1416,7 +1564,9 @@ public class LevelCatalog {
         walls74.add(Wall(2, 4, 2, 5))
         walls74.add(Wall(4, 4, 4, 5))
         walls74.add(Wall(2, 5, 2, 6))
-        levels.add(LevelDef(74, "入蜀·涪", 7, 7, wps74, walls74))
+        let parityEdges74 = ArrayList<ParityEdge>()
+        let stepLimit74 = 0
+        levels.add(LevelDef(74, "入蜀·涪", 7, 7, wps74, walls74, parityEdges74, stepLimit74))
 
         let wps75 = ArrayList<Waypoint>()
         wps75.add(Waypoint(1, 6, 2))
@@ -1438,7 +1588,9 @@ public class LevelCatalog {
         walls75.add(Wall(2, 3, 2, 4))
         walls75.add(Wall(2, 4, 2, 5))
         walls75.add(Wall(4, 4, 4, 5))
-        levels.add(LevelDef(75, "入蜀·绵竹", 7, 7, wps75, walls75))
+        let parityEdges75 = ArrayList<ParityEdge>()
+        let stepLimit75 = 0
+        levels.add(LevelDef(75, "入蜀·绵竹", 7, 7, wps75, walls75, parityEdges75, stepLimit75))
 
         let wps76 = ArrayList<Waypoint>()
         wps76.add(Waypoint(1, 1, 1))
@@ -1458,7 +1610,9 @@ public class LevelCatalog {
         walls76.add(Wall(2, 4, 2, 5))
         walls76.add(Wall(3, 5, 3, 6))
         walls76.add(Wall(6, 5, 6, 6))
-        levels.add(LevelDef(76, "入蜀·雒", 7, 7, wps76, walls76))
+        let parityEdges76 = ArrayList<ParityEdge>()
+        let stepLimit76 = 0
+        levels.add(LevelDef(76, "入蜀·雒", 7, 7, wps76, walls76, parityEdges76, stepLimit76))
 
         let wps77 = ArrayList<Waypoint>()
         wps77.add(Waypoint(1, 3, 5))
@@ -1479,7 +1633,9 @@ public class LevelCatalog {
         walls77.add(Wall(3, 4, 3, 5))
         walls77.add(Wall(5, 4, 5, 5))
         walls77.add(Wall(3, 5, 3, 6))
-        levels.add(LevelDef(77, "入蜀·成都", 7, 7, wps77, walls77))
+        let parityEdges77 = ArrayList<ParityEdge>()
+        let stepLimit77 = 0
+        levels.add(LevelDef(77, "入蜀·成都", 7, 7, wps77, walls77, parityEdges77, stepLimit77))
 
         let wps78 = ArrayList<Waypoint>()
         wps78.add(Waypoint(1, 4, 2))
@@ -1498,7 +1654,9 @@ public class LevelCatalog {
         walls78.add(Wall(4, 3, 4, 4))
         walls78.add(Wall(5, 4, 5, 5))
         walls78.add(Wall(3, 5, 3, 6))
-        levels.add(LevelDef(78, "入蜀·涪·第 2 驿", 7, 7, wps78, walls78))
+        let parityEdges78 = ArrayList<ParityEdge>()
+        let stepLimit78 = 0
+        levels.add(LevelDef(78, "入蜀·涪·第 2 驿", 7, 7, wps78, walls78, parityEdges78, stepLimit78))
 
         let wps79 = ArrayList<Waypoint>()
         wps79.add(Waypoint(1, 3, 3))
@@ -1517,7 +1675,9 @@ public class LevelCatalog {
         walls79.add(Wall(5, 3, 5, 4))
         walls79.add(Wall(2, 4, 2, 5))
         walls79.add(Wall(6, 4, 6, 5))
-        levels.add(LevelDef(79, "入蜀·成都·第 2 驿", 7, 7, wps79, walls79))
+        let parityEdges79 = ArrayList<ParityEdge>()
+        let stepLimit79 = 0
+        levels.add(LevelDef(79, "入蜀·成都·第 2 驿", 7, 7, wps79, walls79, parityEdges79, stepLimit79))
 
         let wps80 = ArrayList<Waypoint>()
         wps80.add(Waypoint(1, 6, 6))
@@ -1537,7 +1697,11 @@ public class LevelCatalog {
         walls80.add(Wall(6, 3, 6, 4))
         walls80.add(Wall(2, 4, 2, 5))
         walls80.add(Wall(6, 5, 6, 6))
-        levels.add(LevelDef(80, "汉中·阳平关", 7, 7, wps80, walls80))
+        let parityEdges80 = ArrayList<ParityEdge>()
+        parityEdges80.add(ParityEdge(2, 5, 2, 6, true, false))
+        parityEdges80.add(ParityEdge(2, 6, 3, 6, false, true))
+        let stepLimit80 = 12
+        levels.add(LevelDef(80, "汉中·阳平关", 7, 7, wps80, walls80, parityEdges80, stepLimit80))
 
         let wps81 = ArrayList<Waypoint>()
         wps81.add(Waypoint(1, 1, 5))
@@ -1557,7 +1721,9 @@ public class LevelCatalog {
         walls81.add(Wall(1, 4, 1, 5))
         walls81.add(Wall(1, 5, 1, 6))
         walls81.add(Wall(6, 5, 6, 6))
-        levels.add(LevelDef(81, "汉中·沔阳", 7, 7, wps81, walls81))
+        let parityEdges81 = ArrayList<ParityEdge>()
+        let stepLimit81 = 0
+        levels.add(LevelDef(81, "汉中·沔阳", 7, 7, wps81, walls81, parityEdges81, stepLimit81))
 
         let wps82 = ArrayList<Waypoint>()
         wps82.add(Waypoint(1, 3, 1))
@@ -1578,7 +1744,9 @@ public class LevelCatalog {
         walls82.add(Wall(5, 3, 5, 4))
         walls82.add(Wall(1, 4, 1, 5))
         walls82.add(Wall(3, 5, 3, 6))
-        levels.add(LevelDef(82, "汉中·成固", 7, 7, wps82, walls82))
+        let parityEdges82 = ArrayList<ParityEdge>()
+        let stepLimit82 = 0
+        levels.add(LevelDef(82, "汉中·成固", 7, 7, wps82, walls82, parityEdges82, stepLimit82))
 
         let wps83 = ArrayList<Waypoint>()
         wps83.add(Waypoint(1, 2, 4))
@@ -1598,7 +1766,11 @@ public class LevelCatalog {
         walls83.add(Wall(4, 3, 4, 4))
         walls83.add(Wall(6, 4, 6, 5))
         walls83.add(Wall(3, 5, 3, 6))
-        levels.add(LevelDef(83, "汉中·赤坂", 7, 7, wps83, walls83))
+        let parityEdges83 = ArrayList<ParityEdge>()
+        parityEdges83.add(ParityEdge(0, 1, 1, 1, true, false))
+        parityEdges83.add(ParityEdge(1, 1, 2, 1, false, true))
+        let stepLimit83 = 0
+        levels.add(LevelDef(83, "汉中·赤坂", 7, 7, wps83, walls83, parityEdges83, stepLimit83))
 
         let wps84 = ArrayList<Waypoint>()
         wps84.add(Waypoint(1, 2, 0))
@@ -1617,7 +1789,9 @@ public class LevelCatalog {
         walls84.add(Wall(3, 3, 3, 4))
         walls84.add(Wall(0, 4, 0, 5))
         walls84.add(Wall(5, 4, 5, 5))
-        levels.add(LevelDef(84, "汉中·南郑", 7, 7, wps84, walls84))
+        let parityEdges84 = ArrayList<ParityEdge>()
+        let stepLimit84 = 0
+        levels.add(LevelDef(84, "汉中·南郑", 7, 7, wps84, walls84, parityEdges84, stepLimit84))
 
         let wps85 = ArrayList<Waypoint>()
         wps85.add(Waypoint(1, 3, 5))
@@ -1638,7 +1812,11 @@ public class LevelCatalog {
         walls85.add(Wall(6, 4, 6, 5))
         walls85.add(Wall(1, 5, 1, 6))
         walls85.add(Wall(5, 5, 5, 6))
-        levels.add(LevelDef(85, "南中·邛都", 7, 7, wps85, walls85))
+        let parityEdges85 = ArrayList<ParityEdge>()
+        parityEdges85.add(ParityEdge(0, 0, 0, 1, false, true))
+        parityEdges85.add(ParityEdge(2, 3, 3, 3, true, false))
+        let stepLimit85 = 0
+        levels.add(LevelDef(85, "南中·邛都", 7, 7, wps85, walls85, parityEdges85, stepLimit85))
 
         let wps86 = ArrayList<Waypoint>()
         wps86.add(Waypoint(1, 2, 6))
@@ -1658,7 +1836,9 @@ public class LevelCatalog {
         walls86.add(Wall(4, 4, 4, 5))
         walls86.add(Wall(5, 4, 5, 5))
         walls86.add(Wall(5, 5, 5, 6))
-        levels.add(LevelDef(86, "南中·滇池", 7, 7, wps86, walls86))
+        let parityEdges86 = ArrayList<ParityEdge>()
+        let stepLimit86 = 0
+        levels.add(LevelDef(86, "南中·滇池", 7, 7, wps86, walls86, parityEdges86, stepLimit86))
 
         let wps87 = ArrayList<Waypoint>()
         wps87.add(Waypoint(1, 0, 4))
@@ -1679,7 +1859,11 @@ public class LevelCatalog {
         walls87.add(Wall(3, 4, 3, 5))
         walls87.add(Wall(5, 4, 5, 5))
         walls87.add(Wall(1, 5, 1, 6))
-        levels.add(LevelDef(87, "汉中·南郑·第 2 驿", 7, 7, wps87, walls87))
+        let parityEdges87 = ArrayList<ParityEdge>()
+        parityEdges87.add(ParityEdge(0, 0, 0, 1, false, true))
+        parityEdges87.add(ParityEdge(5, 6, 6, 6, true, false))
+        let stepLimit87 = 0
+        levels.add(LevelDef(87, "汉中·南郑·第 2 驿", 7, 7, wps87, walls87, parityEdges87, stepLimit87))
 
         let wps88 = ArrayList<Waypoint>()
         wps88.add(Waypoint(1, 0, 2))
@@ -1698,7 +1882,9 @@ public class LevelCatalog {
         walls88.add(Wall(2, 3, 2, 4))
         walls88.add(Wall(5, 3, 5, 4))
         walls88.add(Wall(5, 4, 5, 5))
-        levels.add(LevelDef(88, "南中·邛都·第 2 驿", 7, 7, wps88, walls88))
+        let parityEdges88 = ArrayList<ParityEdge>()
+        let stepLimit88 = 0
+        levels.add(LevelDef(88, "南中·邛都·第 2 驿", 7, 7, wps88, walls88, parityEdges88, stepLimit88))
 
         let wps89 = ArrayList<Waypoint>()
         wps89.add(Waypoint(1, 4, 3))
@@ -1717,7 +1903,11 @@ public class LevelCatalog {
         walls89.add(Wall(1, 4, 1, 5))
         walls89.add(Wall(4, 4, 4, 5))
         walls89.add(Wall(1, 5, 1, 6))
-        levels.add(LevelDef(89, "南中·滇池·第 2 驿", 7, 7, wps89, walls89))
+        let parityEdges89 = ArrayList<ParityEdge>()
+        parityEdges89.add(ParityEdge(5, 1, 5, 2, false, true))
+        parityEdges89.add(ParityEdge(5, 4, 6, 4, true, false))
+        let stepLimit89 = 0
+        levels.add(LevelDef(89, "南中·滇池·第 2 驿", 7, 7, wps89, walls89, parityEdges89, stepLimit89))
 
         let wps90 = ArrayList<Waypoint>()
         wps90.add(Waypoint(1, 6, 6))
@@ -1737,7 +1927,9 @@ public class LevelCatalog {
         walls90.add(Wall(6, 3, 6, 4))
         walls90.add(Wall(3, 4, 3, 5))
         walls90.add(Wall(6, 5, 6, 6))
-        levels.add(LevelDef(90, "北伐·箕谷", 7, 7, wps90, walls90))
+        let parityEdges90 = ArrayList<ParityEdge>()
+        let stepLimit90 = 0
+        levels.add(LevelDef(90, "北伐·箕谷", 7, 7, wps90, walls90, parityEdges90, stepLimit90))
 
         let wps91 = ArrayList<Waypoint>()
         wps91.add(Waypoint(1, 5, 1))
@@ -1757,7 +1949,9 @@ public class LevelCatalog {
         walls91.add(Wall(0, 4, 0, 5))
         walls91.add(Wall(2, 4, 2, 5))
         walls91.add(Wall(2, 5, 2, 6))
-        levels.add(LevelDef(91, "北伐·祁山", 7, 7, wps91, walls91))
+        let parityEdges91 = ArrayList<ParityEdge>()
+        let stepLimit91 = 0
+        levels.add(LevelDef(91, "北伐·祁山", 7, 7, wps91, walls91, parityEdges91, stepLimit91))
 
         let wps92 = ArrayList<Waypoint>()
         wps92.add(Waypoint(1, 3, 3))
@@ -1777,7 +1971,9 @@ public class LevelCatalog {
         walls92.add(Wall(1, 4, 1, 5))
         walls92.add(Wall(3, 5, 3, 6))
         walls92.add(Wall(6, 5, 6, 6))
-        levels.add(LevelDef(92, "北伐·街亭", 7, 7, wps92, walls92))
+        let parityEdges92 = ArrayList<ParityEdge>()
+        let stepLimit92 = 0
+        levels.add(LevelDef(92, "北伐·街亭", 7, 7, wps92, walls92, parityEdges92, stepLimit92))
 
         let wps93 = ArrayList<Waypoint>()
         wps93.add(Waypoint(1, 4, 2))
@@ -1798,7 +1994,9 @@ public class LevelCatalog {
         walls93.add(Wall(1, 3, 1, 4))
         walls93.add(Wall(3, 4, 3, 5))
         walls93.add(Wall(6, 4, 6, 5))
-        levels.add(LevelDef(93, "北伐·散关", 7, 7, wps93, walls93))
+        let parityEdges93 = ArrayList<ParityEdge>()
+        let stepLimit93 = 0
+        levels.add(LevelDef(93, "北伐·散关", 7, 7, wps93, walls93, parityEdges93, stepLimit93))
 
         let wps94 = ArrayList<Waypoint>()
         wps94.add(Waypoint(1, 4, 6))
@@ -1817,7 +2015,9 @@ public class LevelCatalog {
         walls94.add(Wall(0, 4, 0, 5))
         walls94.add(Wall(3, 4, 3, 5))
         walls94.add(Wall(4, 5, 4, 6))
-        levels.add(LevelDef(94, "北伐·陈仓", 7, 7, wps94, walls94))
+        let parityEdges94 = ArrayList<ParityEdge>()
+        let stepLimit94 = 0
+        levels.add(LevelDef(94, "北伐·陈仓", 7, 7, wps94, walls94, parityEdges94, stepLimit94))
 
         let wps95 = ArrayList<Waypoint>()
         wps95.add(Waypoint(1, 6, 2))
@@ -1837,7 +2037,9 @@ public class LevelCatalog {
         walls95.add(Wall(3, 3, 3, 4))
         walls95.add(Wall(4, 3, 4, 4))
         walls95.add(Wall(2, 5, 2, 6))
-        levels.add(LevelDef(95, "北伐·武都", 7, 7, wps95, walls95))
+        let parityEdges95 = ArrayList<ParityEdge>()
+        let stepLimit95 = 0
+        levels.add(LevelDef(95, "北伐·武都", 7, 7, wps95, walls95, parityEdges95, stepLimit95))
 
         let wps96 = ArrayList<Waypoint>()
         wps96.add(Waypoint(1, 1, 5))
@@ -1856,7 +2058,9 @@ public class LevelCatalog {
         walls96.add(Wall(5, 3, 5, 4))
         walls96.add(Wall(1, 4, 1, 5))
         walls96.add(Wall(4, 4, 4, 5))
-        levels.add(LevelDef(96, "北伐·阴平", 7, 7, wps96, walls96))
+        let parityEdges96 = ArrayList<ParityEdge>()
+        let stepLimit96 = 0
+        levels.add(LevelDef(96, "北伐·阴平", 7, 7, wps96, walls96, parityEdges96, stepLimit96))
 
         let wps97 = ArrayList<Waypoint>()
         wps97.add(Waypoint(1, 6, 0))
@@ -1877,7 +2081,9 @@ public class LevelCatalog {
         walls97.add(Wall(2, 3, 2, 4))
         walls97.add(Wall(1, 4, 1, 5))
         walls97.add(Wall(4, 4, 4, 5))
-        levels.add(LevelDef(97, "北伐·斜谷邸阁", 7, 7, wps97, walls97))
+        let parityEdges97 = ArrayList<ParityEdge>()
+        let stepLimit97 = 0
+        levels.add(LevelDef(97, "北伐·斜谷邸阁", 7, 7, wps97, walls97, parityEdges97, stepLimit97))
 
         let wps98 = ArrayList<Waypoint>()
         wps98.add(Waypoint(1, 1, 1))
@@ -1896,7 +2102,9 @@ public class LevelCatalog {
         walls98.add(Wall(1, 2, 1, 3))
         walls98.add(Wall(3, 4, 3, 5))
         walls98.add(Wall(6, 4, 6, 5))
-        levels.add(LevelDef(98, "北伐·郿", 7, 7, wps98, walls98))
+        let parityEdges98 = ArrayList<ParityEdge>()
+        let stepLimit98 = 0
+        levels.add(LevelDef(98, "北伐·郿", 7, 7, wps98, walls98, parityEdges98, stepLimit98))
 
         let wps99 = ArrayList<Waypoint>()
         wps99.add(Waypoint(1, 2, 6))
@@ -1915,7 +2123,9 @@ public class LevelCatalog {
         walls99.add(Wall(2, 1, 2, 2))
         walls99.add(Wall(4, 3, 4, 4))
         walls99.add(Wall(3, 4, 3, 5))
-        levels.add(LevelDef(99, "北伐·五丈原", 7, 7, wps99, walls99))
+        let parityEdges99 = ArrayList<ParityEdge>()
+        let stepLimit99 = 0
+        levels.add(LevelDef(99, "北伐·五丈原", 7, 7, wps99, walls99, parityEdges99, stepLimit99))
 
         return levels
     }
