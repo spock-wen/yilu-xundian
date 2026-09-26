@@ -3,9 +3,10 @@ package yilu_zip
 import yilu_zip.engine.{Cell, GridLayout, touchToCell}
 import yilu_zip.game.{PatrolGame, blankLevel, levelFromJson}
 
-/* C ABI for the Swift shell. @C exports keep the C names (no CJ_ prefix).
+/* C ABI for the iOS and Android shells. @C exports keep the C names (no CJ_ prefix).
    https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/FFI/cangjie-c.html
-   The iOS app must link cjstart.o so the runtime is up before these run.
+   iOS must link cjstart.o so the runtime is up before these run.
+   Android loads the Cangjie runtime .so files before libyilu_zip.so.
    https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/compile_and_build/cross_compilation.html */
 
 var gGame: PatrolGame = PatrolGame(blankLevel())

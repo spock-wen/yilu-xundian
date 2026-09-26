@@ -2,43 +2,36 @@
 
 这是鸿蒙应用之外的 **iOS 壳**：仓颉 Zip 引擎交叉编译成静态库，Swift/UIKit 只负责画格子和把手势交给引擎。不是鸿蒙 ArkUI 的移植，也不是用 Swift 重写 Zip 规则。
 
-本仓库的云环境是 Linux，没有 Xcode，也没有 `cjc`。这里**没有**在模拟器里编过或跑过。模拟器冒烟要在 Mac 上做。
+## SMOKE: BLOCKED
+
+模拟器冒烟**没有做**，也不能标成通过。目标 Mac 上还没有 **Xcode.app**。云主机是 Linux，没有 `xcodebuild`，也没有 `cjc`。下面的命令是 Xcode 装好之后的编译路径；`build_simulator.sh` 即使编完也不会启动 Simulator，更不会代替冒烟。
 
 ## 这一版接上的一关
 
 `entry/src/main/resources/rawfile/levels.json` 的 **id 1「涿郡·范阳」**（6×6，6 个驿站，2 堵墙，`parityEdges: []`，`stepLimit: 0`）。
 
-锁定目录里没有 5×5。id 0「涿郡·涿」是教程盘，但 `walls` 为空。id 1 是涿郡里最早一盘**既有驿站又有墙**、且没有奇偶边的纯 Zip。两份 JSON 必须和 `levels.json` 的这一条相同：
+锁定目录里没有 5×5。id 0「涿郡·涿」是教程盘，但 `walls` 为空。id 1 是涿郡里最早一盘**既有驿站又有墙**、且没有奇偶边的纯 Zip。引擎在 `mobile/shared/`，iOS 与 Android 共用。三份 JSON 必须和 `levels.json` 的这一条相同：
 
-- `ios/shared/levels/zhuojun-fanyang.json`
+- `mobile/shared/levels/zhuojun-fanyang.json`
 - `ios/app/YiluXundian/level.json`（打进 App bundle，启动时整段交给 `yilu_load_level_json`）
+- `android/app/src/main/assets/level.json`
 
 不依赖 Xcode 的检查：
 
 ```bash
-python3 ios/scripts/check_level.py
+python3 mobile/scripts/check_level.py
 ```
 
 ## 目录
 
 ```text
+mobile/shared/                    # 包名 yilu_zip，iOS 与 Android 共用，无 ohos / ArkUI
+mobile/include/yilu_zip.h         # 同一份 C ABI
 ios/
   README.md
-  ENGINE.md
-  shared/                         # 包名 yilu_zip，无 ohos / ArkUI
-    cjpm.toml                     # output-type = "static"
-    levels/zhuojun-fanyang.json
-    src/ffi.cj                    # @C 导出
-    src/engine/                   # 格子、墙、路径、撤销
-    src/game/                     # LevelDef、PatrolGame、JSON
-  app/
-    YiluXundian.xcodeproj
-    Config/Cangjie.defaults.xcconfig
-    YiluXundian/                  # UIKit 壳 + bundle 里的 level.json
-  scripts/
-    build_simulator.sh
-    check_level.py
-    xcode_precheck.sh
+  ENGINE.md                       # 指向 mobile/ENGINE.md
+  app/                            # Xcode + UIKit
+  scripts/build_simulator.sh
 ```
 
 CJMP / `keels create` **没有**生成这棵树。云环境没有 CJMP SDK，也不能在这里下载私有工具链。可选的 CJMP 前置条件写在文末，本 PR 走官方静态库路径。
@@ -74,8 +67,8 @@ ios/scripts/build_simulator.sh
 
 脚本依次做：
 
-1. `cjpm build --target aarch64-apple-ios-simulator -V`  
-   三元组来自交叉编译页的模拟器条目：`--target=aarch64-apple-ios-simulator`，再加 `--output-type=staticlib`（`cjpm.toml` 的 `output-type = "static"` 会走到静态库；`-V` 会打印实际 `cjc` 命令）。`cjpm --target` 见 [cjpm 手册](https://docs.cangjie-lang.cn/cjnative/user_manual/tools/source_zh_cn/tools/cjpm_manual_cjnative_community.html)。
+1. 在 `mobile/shared` 执行 `cjpm build --target aarch64-apple-ios-simulator -V`  
+   三元组来自交叉编译页的模拟器条目：`--target=aarch64-apple-ios-simulator`，再加 `--output-type=staticlib`（`mobile/shared/cjpm.toml` 的 `output-type = "static"` 会走到静态库；`-V` 会打印实际 `cjc` 命令）。`cjpm --target` 见 [cjpm 手册](https://docs.cangjie-lang.cn/cjnative/user_manual/tools/source_zh_cn/tools/cjpm_manual_cjnative_community.html)。
 2. 用 `/usr/bin/libtool -static` 把 `libyilu_zip*.a` 合成 `ios/app/YiluXundian/Cangjie/libyilu_zip.a`。
 3. 写下 `ios/app/Config/Cangjie.local.xcconfig`。链接顺序按交叉编译页：
    - `$CANGJIE_HOME/lib/ios_simulator_aarch64_cjnative/section.o`
@@ -86,7 +79,7 @@ ios/scripts/build_simulator.sh
    - `DEAD_CODE_STRIPPING = NO`
 4. `xcodebuild -project ios/app/YiluXundian.xcodeproj -scheme YiluXundian -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath ios/app/build CODE_SIGNING_ALLOWED=NO build`
 
-`generic/platform=iOS Simulator` 只保证能编出模拟器 App，不会启动模拟器。编完后用 Xcode 打开 `ios/app/YiluXundian.xcodeproj`，选一台 iOS Simulator，Run。棋盘应显示 **涿郡·范阳 · id 1**。从标了 1 的格子拖，正交一步交给 `yilu_try_step`；拖回上一格、点「撤销」「重绘驿道」都进仓颉引擎。
+`generic/platform=iOS Simulator` 只编出模拟器 App，不启动模拟器。**SMOKE: BLOCKED**——目标 Mac 还没有 Xcode.app，这一步没有跑过。Xcode 装好之后，打开 `ios/app/YiluXundian.xcodeproj`，选一台 iOS Simulator，Run。预期画面是 **涿郡·范阳 · id 1**。从标了 1 的格子拖，正交一步交给 `yilu_try_step`；拖回上一格、点「撤销」「重绘驿道」都进仓颉引擎。在那之前不要把冒烟标成通过。
 
 若 `cjc` 不接受默认的 `aarch64-apple-ios-simulator`，把 `YILU_IOS_TARGET` 设成 `cjc -v` 打印的 `Target` 再跑。交叉编译页的模拟器条目没有写 SDK 版本后缀；版本后缀出现在设备示例 `--target=aarch64-apple-ios17.5`（17.5 要换成 `xcrun --sdk iphoneos --show-sdk-version`）。
 
@@ -99,7 +92,7 @@ ios/scripts/build_simulator.sh
 
 这时脚本改用 `ios_aarch64_cjnative` 和 `xcodebuild -sdk iphoneos`。真机签名不在这一版里。
 
-产物 `libyilu_zip.a`、`Cangjie.local.xcconfig`、`ios/shared/target/`、`ios/app/build/` 都不提交。
+产物 `libyilu_zip.a`、`Cangjie.local.xcconfig`、`mobile/shared/target/`、`ios/app/build/` 都不提交。
 
 ## 可选：CJMP / keels
 
@@ -123,7 +116,7 @@ cd demo
 
 ## 已知限制
 
-- 云主机不能做模拟器冒烟，也不能证明 `cjc` 已经接受这些源文件。
+- **SMOKE: BLOCKED。** 目标 Mac 还没有 Xcode.app。云主机也不能证明 `cjc` 已经接受这些源文件。
 - v1 只加载一关。`parityEdges` 非空会拒绝加载。`stepLimit` 会写进 `LevelDef`，`PatrolGame` 不读它（和鸿蒙 `patrol.cj` 一样）。
 - JSON 加载器接受这一盘用到的对象/数组/字符串/整数，以及 `\"` `\\` `\/` `\b` `\f` `\n` `\r` `\t`。不接受 `\u` 转义；范阳这盘的站名是 UTF-8 原文。
 - `@C` 符号名按[仓颉-C 互操作](https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/FFI/cangjie-c.html)应为未改名的 `yilu_*`。本环境没有 `nm` 可对 iOS 静态库做验证。链接失败时在 Mac 上执行 `nm -g ios/app/YiluXundian/Cangjie/libyilu_zip.a | grep yilu_`。

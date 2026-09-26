@@ -6,7 +6,7 @@
 - UI：官方仓颉 ArkUI Canvas + `onTouch`
 - 无内购、无登录、无 Game Service
 - 本仓库 **没有** 在 CI / 云主机上编出 HAP：当前环境没有 DevEco / 仓颉鸿蒙工具链。请用本机 DevEco 打开后编译。
-- iOS 壳（仓颉静态库 + Swift/UIKit，不是鸿蒙界面移植）见 [ios/README.md](ios/README.md)。云主机没有 Xcode，模拟器冒烟在 Mac 上做。
+- iOS 壳见 [ios/README.md](ios/README.md)。Android 壳见 [android/README.md](android/README.md)。两边共用 [mobile/shared](mobile/shared) 里的仓颉 Zip 引擎，不是把规则重写成 Swift 或 Kotlin。**模拟器 / 真机冒烟都是 BLOCKED**（目标 Mac 还没有 Xcode.app；Android NDK 与仓颉 Android SDK 也还没在构建机上冒烟）。
 
 ## 玩法
 

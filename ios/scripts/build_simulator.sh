@@ -9,12 +9,13 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SHARED="$ROOT/shared"
+REPO="$(cd "$ROOT/.." && pwd)"
+SHARED="$REPO/mobile/shared"
 APP="$ROOT/app"
 
 if [ "$(uname -s)" != "Darwin" ]; then
+  echo "SMOKE BLOCKED: iOS simulator smoke needs Xcode.app on a Mac."
   echo "build_simulator.sh must run on macOS. This host is $(uname -s) $(uname -m)."
-  echo "This environment has no Xcode and cannot install cangjie-sdk-mac-aarch64-ios."
   exit 1
 fi
 
@@ -153,5 +154,6 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   build
 
-echo "xcodebuild finished. Run from Xcode on an iOS Simulator to smoke the board."
-echo "This script does not boot a simulator and does not claim a UI pass."
+echo "xcodebuild finished a simulator binary only."
+echo "SMOKE BLOCKED: this script does not boot Simulator and does not play the board."
+echo "Do not record a smoke pass from this output."
