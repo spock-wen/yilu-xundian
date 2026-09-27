@@ -12,7 +12,10 @@ import hashlib
 import io
 import json
 import math
+import os
+import shutil
 import subprocess
+import tempfile
 import sys
 import unittest
 from contextlib import redirect_stdout
@@ -956,14 +959,20 @@ def runtime_is_open(chapter_id: int, cleared: int) -> bool:
     return cleared >= ch["levelStart"]
 
 
-def runtime_cleared_count(chapter_id: int, cleared: int) -> int:
-    ch = runtime_chapter(chapter_id)
-    if ch["levelCount"] <= 0:
+def _real_cleared_count(level_start: int, level_count: int, cleared: int) -> int:
+    """Stations strictly before the normalized cursor, excluding 修缮中 ids."""
+    if level_count <= 0:
         return 0
     cursor = normalize_cleared(cleared)
-    if cursor <= ch["levelStart"]:
+    if cursor <= level_start:
         return 0
-    return min(cursor - ch["levelStart"], ch["levelCount"])
+    limit = min(cursor, level_start + level_count)
+    return sum(1 for i in range(level_start, limit) if not is_maintenance(i))
+
+
+def runtime_cleared_count(chapter_id: int, cleared: int) -> int:
+    ch = runtime_chapter(chapter_id)
+    return _real_cleared_count(ch["levelStart"], ch["levelCount"], cleared)
 
 
 def runtime_playable_remaining(chapter_id: int, cleared: int) -> int:
@@ -977,12 +986,7 @@ def runtime_playable_remaining(chapter_id: int, cleared: int) -> int:
 
 def chapter_cleared_count(chapter_id: int, cleared: int) -> int:
     ch = chapter_by_id(chapter_id)
-    if ch["levelCount"] <= 0:
-        return 0
-    cursor = normalize_cleared(cleared)
-    if cursor <= ch["levelStart"]:
-        return 0
-    return min(cursor - ch["levelStart"], ch["levelCount"])
+    return _real_cleared_count(ch["levelStart"], ch["levelCount"], cleared)
 
 
 def chapter_levels(levels: list[dict], chapter_id: int) -> list[dict]:
@@ -1877,20 +1881,22 @@ class MaintenanceDelistTests(unittest.TestCase):
             self.assertTrue(runtime_is_open(chapter_id, cleared), chapter_id)
 
     def test_chapter_counts_do_not_require_maintenance_clears(self) -> None:
-        # 荆州 (id 5) finishes when 58 is cleared; 52 and 59 are not required.
+        # 已通 N counts real clears only. 修缮中 ids are not counted.
+        # 荆州 ids 50..59 include maintenance 52 and 59. Clearing 58 sets the
+        # cursor to 61, so the chapter window [50, 60) has 8 real clears.
         done_jing = advance_on_clear(58, 58)
-        self.assertEqual(runtime_cleared_count(5, done_jing), 10)
+        self.assertEqual(runtime_cleared_count(5, done_jing), 8)
         self.assertEqual(runtime_playable_remaining(5, done_jing), 0)
-        self.assertEqual(runtime_cleared_count(5, 59), 10)
+        self.assertEqual(runtime_cleared_count(5, 59), 8)
         self.assertEqual(runtime_playable_remaining(5, 59), 0)
-        # 赤壁 (id 6) finishes on 69; 60/63/67 stay out of the requirement.
+        # 赤壁 ids 60..69 include maintenance 60, 63, 67. Cursor 70 → 7.
         done_chi = advance_on_clear(69, 69)
         self.assertEqual(done_chi, 70)
-        self.assertEqual(runtime_cleared_count(6, done_chi), 10)
+        self.assertEqual(runtime_cleared_count(6, done_chi), 7)
         self.assertEqual(runtime_playable_remaining(6, done_chi), 0)
         self.assertEqual(runtime_playable_remaining(6, 60), 7)
-        # 汉中南中 (id 8): stored 89 already counts the chapter complete.
-        self.assertEqual(runtime_cleared_count(8, 89), 10)
+        # 汉中南中 ids 80..89. Stored 89 normalizes to 90; 89 itself is not counted.
+        self.assertEqual(runtime_cleared_count(8, 89), 9)
         self.assertEqual(runtime_playable_remaining(8, 89), 0)
         self.assertEqual(runtime_cleared_count(0, 3), 3)
         self.assertEqual(chapter_cleared_count(0, 3), 3)
@@ -1906,7 +1912,9 @@ class MaintenanceDelistTests(unittest.TestCase):
         self.assertIn("cleared >= ch.levelStart", _func_body(chapter, "isOpen"))
         counted = _func_body(chapter, "clearedCount")
         self.assertIn("normalizeCleared", counted)
-        self.assertIn("cursor - ch.levelStart", counted)
+        self.assertIn("isMaintenance", counted)
+        self.assertNotIn("cursor - ch.levelStart", counted)
+        self.assertNotIn("return ch.levelCount", counted)
         yicheng = _screen_branch(ui, 3)
         stations = _screen_branch(ui, 5)
         self.assertIn('Text("修缮中")', yicheng)
@@ -1949,9 +1957,12 @@ class MacSmokeScriptTests(unittest.TestCase):
         self.assertIn("snapshot_display", text)
         self.assertIn('"$HDC" -t "$SERIAL"', text)
         self.assertIn("assembleHap", text)
+        self.assertIn("--mode module", text)
+        self.assertIn("-p module=entry@default", text)
         self.assertIn("-p product=default", text)
         self.assertIn("-p buildMode=debug", text)
         self.assertIn("--no-daemon", text)
+        self.assertIn("entry-default-unsigned.hap", text)
         self.assertIn("修缮中", text)
         self.assertIn("GIT_TERMINAL_PROMPT=0", text)
         syntax = subprocess.run(["bash", "-n", str(path)], text=True, capture_output=True)
@@ -1983,6 +1994,65 @@ class MacSmokeScriptTests(unittest.TestCase):
         )
         self.assertNotEqual(miss.returncode, 0)
         self.assertIn("MISS", miss.stdout)
+
+    def test_clean_shell_env_defaults_and_daemon_stop(self) -> None:
+        text = (ROOT / "tools/mac_smoke.sh").read_text(encoding="utf-8")
+        self.assertIn(
+            'DEVECO="${DEVECO:-/Applications/DevEco-Studio.app/Contents}"',
+            text,
+        )
+        self.assertIn(
+            'C="${DEVECO_CANGJIE_PATH:-$HOME/.cangjie-sdk/6.1/cangjie}"',
+            text,
+        )
+        self.assertIn('export DEVECO_SDK_HOME="${DEVECO_SDK_HOME:-$DEVECO/sdk}"', text)
+        self.assertIn("export DEVECO_CANGJIE_HOME=", text)
+        self.assertIn("export DEVECO_CANGJIE_PATH=", text)
+        self.assertIn("export DEVECO_CANGJIE_PLUGIN_ENABLED=true", text)
+        self.assertIn('export CANGJIE_HOME="$C/build-tools"', text)
+        self.assertIn("darwin_aarch64_cjnative", text)
+        self.assertIn("export LD_LIBRARY_PATH=", text)
+        self.assertIn("export DYLD_LIBRARY_PATH=", text)
+        self.assertIn("export DYLD_FALLBACK_LIBRARY_PATH=", text)
+        self.assertIn("oh-uni-package.json", text)
+        self.assertIn("hvigorw --stop-daemon", text)
+        self.assertIn("CangjiePreBuild", text)
+        self.assertIn("CompileCangjie", text)
+        self.assertLess(text.index("oh-uni-package.json"), text.index("git fetch"))
+        self.assertLess(
+            text.index('echo "# hvigorw --stop-daemon"'),
+            text.index('run_hvigor "${HVIGOR_ARGS[@]}"'),
+        )
+        for line in text.splitlines():
+            code = line.split("#", 1)[0]
+            self.assertNotIn("node_modules", code)
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("oh-uni-package.json", readme)
+        self.assertIn("hvigorw --stop-daemon", readme)
+        self.assertIn("entry-default-unsigned.hap", readme)
+        self.assertIn("#53", readme)
+        self.assertIn("#90", readme)
+
+    def test_missing_cangjie_sdk_fails_before_worktree(self) -> None:
+        script = str(ROOT / "tools/mac_smoke.sh")
+        root = Path(tempfile.mkdtemp(prefix="yilu-mac-smoke-"))
+        env = os.environ.copy()
+        env.pop("DEVECO_CANGJIE_PATH", None)
+        env["HOME"] = str(root / "home")
+        env["YILU_SMOKE_ROOT"] = str(root / "orca")
+        try:
+            result = subprocess.run(
+                ["bash", script, "aa095a6", "127.0.0.1:5555"],
+                text=True,
+                capture_output=True,
+                env=env,
+            )
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("oh-uni-package.json", result.stderr)
+        self.assertIn("RESULT: FAIL", result.stdout)
+        self.assertNotIn("git worktree add", result.stdout)
 
 
 if __name__ == "__main__":

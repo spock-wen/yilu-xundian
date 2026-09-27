@@ -303,14 +303,23 @@ public class ChapterCatalog {
         if (ch.levelCount <= 0) {
             return 0
         }
-        /* Maintenance stations are not required for the 已通 count. */
+        /* 已通 counts real clears only. A 修缮中 index in the window is skipped. */
         let cursor = LevelMaintenance.normalizeCleared(cleared)
         if (cursor <= ch.levelStart) {
             return 0
         }
-        let n = cursor - ch.levelStart
-        if (n >= ch.levelCount) {
-            return ch.levelCount
+        let end = ch.levelStart + ch.levelCount
+        var limit = cursor
+        if (limit > end) {
+            limit = end
+        }
+        var n: Int64 = 0
+        var i = ch.levelStart
+        while (i < limit) {
+            if (!LevelMaintenance.isMaintenance(i)) {
+                n = n + 1
+            }
+            i = i + 1
         }
         return n
     }

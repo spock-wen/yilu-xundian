@@ -9,8 +9,12 @@
 # Screenshots (hdc snapshot_display, fullscreen JPEG):
 #   ~/orca/yilu-xundian-smoke-out/<ref>/<utc>/
 #
-# Build is hvigorw assembleHap for product=default, buildMode=debug
-# (build-profile.json5). hdc is always `hdc -t <serial>`.
+# Build, from the worktree root, after `hvigorw --stop-daemon`:
+#   hvigorw --mode module -p module=entry@default -p product=default \
+#     -p buildMode=debug assembleHap --no-daemon
+# HAP: entry/build/default/outputs/default/entry-default-unsigned.hap
+# A clean shell gets the DevEco + Cangjie recipe below (already-set env wins).
+# hdc is always `hdc -t <serial>`.
 #
 # Optional: YILU_SMOKE_ROOT overrides ~/orca (tests only).
 
@@ -22,7 +26,8 @@ export GCM_INTERACTIVE=never
 BUNDLE="com.yilu.xundian"
 ABILITY="EntryAbility"
 # build-profile.json5: products[0].name=default, buildModeSet includes debug.
-HVIGOR_ARGS=(assembleHap --mode module -p product=default -p buildMode=debug --no-daemon)
+# assembleHap comes after the -p flags. --mode is a top-level hvigor flag.
+HVIGOR_ARGS=(--mode module -p module=entry@default -p product=default -p buildMode=debug assembleHap --no-daemon)
 
 RESULT="FAIL"
 STEPS=()
@@ -218,11 +223,27 @@ note "主检出=$REPO (不在这里 checkout / 编译)"
 note "worktree=$WT"
 note "截图目录=$OUT"
 
-# Tool discovery. DevEco.app on Mac is the usual install; PATH wins if set.
-DEVECO_CONTENTS="${DEVECO_HOME:-/Applications/DevEco-Studio.app/Contents}"
-if [[ -d "$DEVECO_CONTENTS/tools/node/bin" ]]; then
-  export PATH="${DEVECO_CONTENTS}/tools/node/bin:${DEVECO_CONTENTS}/tools/ohpm/bin:${DEVECO_CONTENTS}/tools/hvigor/bin:${DEVECO_CONTENTS}/sdk/default/openharmony/toolchains:${PATH}"
+# Clean-shell recipe. With exactly these variables exported, aa095a6 printed
+# RESULT: PASS on the Mac (5 shots; id 52 shown as #53 修缮中).
+# Already-exported DEVECO, DEVECO_CANGJIE_PATH, and DEVECO_SDK_HOME win.
+DEVECO="${DEVECO:-/Applications/DevEco-Studio.app/Contents}"
+C="${DEVECO_CANGJIE_PATH:-$HOME/.cangjie-sdk/6.1/cangjie}"
+if [[ ! -f "$C/oh-uni-package.json" ]]; then
+  fail "仓颉 SDK 目录没有 oh-uni-package.json: ${C}/oh-uni-package.json。设置 DEVECO_CANGJIE_PATH 指向含该文件的 cangjie 目录（未设置时用 \$HOME/.cangjie-sdk/6.1/cangjie）。没有它，新 worktree 里没有 @ohos/cangjie-build-support。"
 fi
+export DEVECO_SDK_HOME="${DEVECO_SDK_HOME:-$DEVECO/sdk}"
+export DEVECO_CANGJIE_HOME="$C"
+export DEVECO_CANGJIE_PATH="$C"
+export DEVECO_CANGJIE_PLUGIN_ENABLED=true
+export CANGJIE_HOME="$C/build-tools"
+export PATH="$C/build-tools/tools/bin:$C/build-tools/bin:$DEVECO/tools/node/bin:$DEVECO/tools/hvigor/bin:$DEVECO/sdk/default/openharmony/toolchains:${PATH}"
+CJ_LIB="$C/build-tools/runtime/lib/darwin_aarch64_cjnative:$C/build-tools/tools/lib"
+export LD_LIBRARY_PATH="$CJ_LIB"
+export DYLD_LIBRARY_PATH="$CJ_LIB"
+export DYLD_FALLBACK_LIBRARY_PATH="$CJ_LIB"
+note "DEVECO=$DEVECO"
+note "DEVECO_CANGJIE_PATH=$C"
+note "DEVECO_SDK_HOME=$DEVECO_SDK_HOME"
 
 pick_bin() {
   local name="$1"
@@ -242,12 +263,12 @@ pick_bin() {
 }
 
 HDC=$(pick_bin hdc \
-  "${DEVECO_CONTENTS}/sdk/default/openharmony/toolchains/hdc" \
-  "${DEVECO_CONTENTS}/sdk/default/hms/toolchains/hdc") || fail "找不到 hdc。把 DevEco toolchains 放到 PATH，或安装 DevEco Studio。"
+  "${DEVECO}/sdk/default/openharmony/toolchains/hdc" \
+  "${DEVECO}/sdk/default/hms/toolchains/hdc") || fail "找不到 hdc。把 DevEco toolchains 放到 PATH，或安装 DevEco Studio。"
 HVIGORW=$(pick_bin hvigorw \
-  "${DEVECO_CONTENTS}/tools/hvigor/bin/hvigorw") || fail "找不到 hvigorw。安装 DevEco Studio，或把 hvigor/bin 放到 PATH。"
+  "${DEVECO}/tools/hvigor/bin/hvigorw") || fail "找不到 hvigorw。安装 DevEco Studio，或把 hvigor/bin 放到 PATH。"
 OHPM=""
-if OHPM=$(pick_bin ohpm "${DEVECO_CONTENTS}/tools/ohpm/bin/ohpm"); then
+if OHPM=$(pick_bin ohpm "${DEVECO}/tools/ohpm/bin/ohpm"); then
   :
 else
   OHPM=""
@@ -302,14 +323,14 @@ if [[ ! -f "$WT/local.properties" ]]; then
     SDK_DIR=""
     if [[ -n "${DEVECO_SDK_HOME:-}" && -d "$DEVECO_SDK_HOME" ]]; then
       SDK_DIR="$DEVECO_SDK_HOME"
-    elif [[ -d "${DEVECO_CONTENTS}/sdk" ]]; then
-      SDK_DIR="${DEVECO_CONTENTS}/sdk"
+    elif [[ -d "${DEVECO}/sdk" ]]; then
+      SDK_DIR="${DEVECO}/sdk"
     fi
     [[ -n "$SDK_DIR" ]] || fail "worktree 没有 local.properties，也找不到 DevEco SDK。在主检出配好 local.properties，或设置 DEVECO_SDK_HOME。"
     {
       printf 'sdk.dir=%s\n' "$SDK_DIR"
-      if [[ -d "${DEVECO_CONTENTS}/tools/node" ]]; then
-        printf 'nodejs.dir=%s\n' "${DEVECO_CONTENTS}/tools/node"
+      if [[ -d "${DEVECO}/tools/node" ]]; then
+        printf 'nodejs.dir=%s\n' "${DEVECO}/tools/node"
       fi
     } >"$WT/local.properties"
     note "已在 worktree 写入 local.properties sdk.dir=$SDK_DIR"
@@ -322,21 +343,39 @@ if [[ -f "$WT/local.properties" ]]; then
   fi
 fi
 
-note "编译: ${HVIGORW} ${HVIGOR_ARGS[*]}"
+# hvigorw.js links @ohos/cangjie-build-support from DEVECO_CANGJIE_PATH.
+# Do not create a node_modules symlink in this script.
+HVIGOR_BIN="$DEVECO/tools/hvigor/bin"
+[[ -e "$HVIGOR_BIN/hvigorw" ]] || fail "找不到 $HVIGOR_BIN/hvigorw"
+[[ -e "$HVIGOR_BIN/hvigorw.js" ]] || fail "找不到 $HVIGOR_BIN/hvigorw.js"
+ln -sfn "$HVIGOR_BIN/hvigorw" "$WT/hvigorw"
+ln -sfn "$HVIGOR_BIN/hvigorw.js" "$WT/hvigorw.js"
+note "worktree 内 hvigorw -> $HVIGOR_BIN/hvigorw"
+
+# Cache hash uses cwd, and a stale daemon keeps the previous environment.
+run_hvigor() {
+  if [[ -x "$WT/hvigorw" ]]; then
+    (cd "$WT" && ./hvigorw "$@")
+  elif [[ -x "$HVIGORW" ]]; then
+    (cd "$WT" && "$HVIGORW" "$@")
+  else
+    (cd "$WT" && bash "$HVIGORW" "$@")
+  fi
+}
+
+note "编译: hvigorw ${HVIGOR_ARGS[*]}"
 {
   echo "# $(date -u +%Y-%m-%dT%H:%M:%SZ) commit=$COMMIT"
   if [[ -n "$OHPM" ]]; then
     echo "# ohpm install --all"
     (cd "$WT" && "$OHPM" install --all)
   else
-    echo "# ohpm 不在 PATH，跳过 install（依赖由 DevEco 插件提供）"
+    echo "# ohpm 不在 PATH，跳过 install（@ohos/cangjie-build-support 由 hvigorw.js 按 DEVECO_CANGJIE_PATH 链接）"
   fi
+  echo "# hvigorw --stop-daemon"
+  run_hvigor --stop-daemon
   echo "# hvigorw ${HVIGOR_ARGS[*]}"
-  if [[ -x "$HVIGORW" ]]; then
-    (cd "$WT" && "$HVIGORW" "${HVIGOR_ARGS[@]}")
-  else
-    (cd "$WT" && bash "$HVIGORW" "${HVIGOR_ARGS[@]}")
-  fi
+  run_hvigor "${HVIGOR_ARGS[@]}"
 } >"$OUT/build.log" 2>&1 || {
   echo "---- build.log 末尾 ----" >&2
   tail -n 40 "$OUT/build.log" >&2 || true
@@ -344,17 +383,11 @@ note "编译: ${HVIGORW} ${HVIGOR_ARGS[*]}"
 }
 note "编译结束，日志 $OUT/build.log"
 
-HAP=""
-while IFS= read -r f; do
-  case "$f" in
-    *unsigned*) ;;
-    *) HAP="$f"; break ;;
-  esac
-done < <(find "$WT/entry/build" -type f -name '*.hap' | sort)
-if [[ -z "$HAP" ]]; then
-  HAP=$(find "$WT/entry/build" -type f -name '*.hap' | head -1 || true)
-fi
-[[ -n "$HAP" && -f "$HAP" ]] || fail "编译结束但没有找到 .hap"
+grep -F -q "CangjiePreBuild" "$OUT/build.log" || fail "编译日志没有 CangjiePreBuild（仓颉 hvigor 插件未参与）。日志 $OUT/build.log"
+grep -F -q "CompileCangjie" "$OUT/build.log" || fail "编译日志没有 CompileCangjie。日志 $OUT/build.log"
+
+HAP="$WT/entry/build/default/outputs/default/entry-default-unsigned.hap"
+[[ -f "$HAP" ]] || fail "没有未签名 HAP: $HAP"
 note "hap=$HAP"
 
 TARGETS=$("$HDC" list targets 2>&1 || true)

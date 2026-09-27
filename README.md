@@ -191,8 +191,22 @@ bash tools/mac_smoke.sh 06adc4e 127.0.0.1:5555
 | --- | --- |
 | worktree | `~/orca/yilu-xundian-smoke-<ref>`（ref 里的 `/` 换成 `-`）。已存在则 `checkout --detach` 到该提交再编 |
 | 截图 | `~/orca/yilu-xundian-smoke-out/<ref>/<UTC时间>/`。`hdc shell snapshot_display -f …jpeg` 再 `hdc file recv` |
-| 编译 | 在 worktree 里执行 `hvigorw assembleHap --mode module -p product=default -p buildMode=debug --no-daemon`。`product=default` 与 `buildMode=debug` 对应仓库 `build-profile.json5`。`hvigorw` / `hdc` 优先用 PATH，否则用 `/Applications/DevEco-Studio.app` |
+| 编译 | 在 worktree 根目录先 `hvigorw --stop-daemon`（旧 daemon 留着上一次的环境，缓存哈希按 cwd 算），再 `hvigorw --mode module -p module=entry@default -p product=default -p buildMode=debug assembleHap --no-daemon`。产物固定为 `entry/build/default/outputs/default/entry-default-unsigned.hap`。日志里必须有 `CangjiePreBuild` 和 `CompileCangjie`，否则 `RESULT: FAIL` |
 | 设备 | 每条 `hdc` 都是 `hdc -t <serial>` |
+
+干净 shell 不用先手工 `export`。脚本写入下面这组变量；**已经导出的同名变量优先**（`aa095a6` 在 Mac 上按这组变量手工导出后得到 `RESULT: PASS`，5 张截图都在，id 52 显示为 #53 荆州·樊城·第 1 驿且标「修缮中」——配方以此为准）：
+
+```bash
+DEVECO=${DEVECO:-/Applications/DevEco-Studio.app/Contents}
+C=${DEVECO_CANGJIE_PATH:-$HOME/.cangjie-sdk/6.1/cangjie}   # 必须含 oh-uni-package.json
+export DEVECO_SDK_HOME=${DEVECO_SDK_HOME:-$DEVECO/sdk}
+export DEVECO_CANGJIE_HOME=$C DEVECO_CANGJIE_PATH=$C DEVECO_CANGJIE_PLUGIN_ENABLED=true
+export CANGJIE_HOME=$C/build-tools
+```
+
+`PATH` 前置 `$C/build-tools/tools/bin`、`$C/build-tools/bin`、`$DEVECO/tools/node/bin`、`$DEVECO/tools/hvigor/bin`、`$DEVECO/sdk/default/openharmony/toolchains`。`LD_LIBRARY_PATH`、`DYLD_LIBRARY_PATH`、`DYLD_FALLBACK_LIBRARY_PATH` 都是 `$C/build-tools/runtime/lib/darwin_aarch64_cjnative:$C/build-tools/tools/lib`。
+
+`$C/oh-uni-package.json` 不存在就立刻失败，并说明要设置 `DEVECO_CANGJIE_PATH`。不要自己做 `node_modules` 符号链接：`hvigorw.js` 会按 `DEVECO_CANGJIE_PATH` 链上 `@ohos/cangjie-build-support`。脚本会在 worktree 里把 `hvigorw` 和 `hvigorw.js` 链到 `$DEVECO/tools/hvigor/bin/`。主检出的 `local.properties` 仍只复制进 worktree。
 
 固定截图点（冷启动，`cleared` 在内存里从 0 开始；没有调试入口能改进度）：
 
@@ -201,6 +215,19 @@ bash tools/mac_smoke.sh 06adc4e 127.0.0.1:5555
 3. `03-chapters` 点「章节」，可见「选章入驿」
 4. `04-yicheng` 点「驿程」，可见「涿郡·涿」
 5. `05-maintenance` 在驿程里滚到可见的「修缮中」（并看到「樊城」）。这 6 关即使还没解锁也标「修缮中」，不必先打到第 51 关。第 7 章要 `cleared >= 60` 才开，这条命令不代替那条通关路径。
+
+关卡 id 从 0 起（`levels.cj` 的 `LevelDef` 第一个参数）。全局驿程（`index.cj` 屏 3，`ForEach(LevelCatalog.all())`）圆圈里的数字是 `index + 1`，所以界面序号 = id + 1。代码和测试仍用 id。临时下架的 6 关：
+
+| id | 全局驿程显示 | 驿名（`levels.cj`） |
+| --- | --- | --- |
+| 52 | #53 | 荆州·樊城·第 1 驿 |
+| 59 | #60 | 荆州·公安·第 2 驿 |
+| 60 | #61 | 赤壁·樊口 |
+| 63 | #64 | 赤壁·陆口·第 1 驿 |
+| 67 | #68 | 赤壁·柴桑·第 2 驿 |
+| 89 | #90 | 南中·滇池·第 2 驿 |
+
+章内「已通 N」（`ChapterCatalog.clearedCount`，屏 5 页脚）只数真正通关的驿。修缮中的 id 不计入。例如汉中南中（id 8，驿 80–89）在进度停在 89 时，归一化后光标到 90，已通是 9，不是 10。
 
 任一步失败：打印 `RESULT: FAIL`，退出码非 0。成功打印 `RESULT: PASS`。主检出的 HEAD 和工作区不应被改动。SDK 路径若只写在主检出的 `local.properties`（gitignore），脚本会把它**复制**进 worktree，不回写主检出。
 
