@@ -975,6 +975,11 @@ def runtime_cleared_count(chapter_id: int, cleared: int) -> int:
     return _real_cleared_count(ch["levelStart"], ch["levelCount"], cleared)
 
 
+def runtime_total_cleared_count(cleared: int) -> int:
+    """ChapterCatalog.totalClearedCount: sum of per-chapter clearedCount (驿程总表页脚)."""
+    return sum(runtime_cleared_count(ch["id"], cleared) for ch in RUNTIME_CHAPTERS)
+
+
 def runtime_playable_remaining(chapter_id: int, cleared: int) -> int:
     """Stations still required. Maintenance ids are not required."""
     ch = runtime_chapter(chapter_id)
@@ -1901,6 +1906,27 @@ class MaintenanceDelistTests(unittest.TestCase):
         self.assertEqual(runtime_cleared_count(0, 3), 3)
         self.assertEqual(chapter_cleared_count(0, 3), 3)
         self.assertEqual(chapter_cleared_count(1, 0), 0)
+
+    def test_yicheng_footer_total_excludes_maintenance(self) -> None:
+        # D1: 驿程总表页脚「已通 N」= 各章 clearedCount 之和，不是原始游标。
+        self.assertEqual(runtime_total_cleared_count(0), 0)
+        self.assertEqual(runtime_total_cleared_count(52), 52)
+        self.assertEqual(runtime_total_cleared_count(53), 52)
+        self.assertEqual(runtime_total_cleared_count(56), 55)
+        self.assertEqual(runtime_total_cleared_count(82), 77)
+        self.assertEqual(runtime_total_cleared_count(CATALOG_COUNT), 94)
+        cleared = 0
+        for level in range(CATALOG_COUNT):
+            if can_enter_level(level, normalize_cleared(cleared)):
+                cleared = advance_on_clear(level, cleared)
+        self.assertEqual(runtime_total_cleared_count(cleared), 94)
+        chapter = (ROOT / "entry/src/main/cangjie/chapter.cj").read_text(encoding="utf-8")
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        total = _func_body(chapter, "totalClearedCount")
+        self.assertIn("ChapterCatalog.clearedCount(i, cleared)", total)
+        yicheng = _screen_branch(ui, 3)
+        self.assertIn("已通 ${ChapterCatalog.totalClearedCount(this.cleared)}", yicheng)
+        self.assertNotIn("已通 ${this.cleared}", ui)
 
     def test_cangjie_ui_labels_repair_and_skips_on_clear(self) -> None:
         chapter = (ROOT / "entry/src/main/cangjie/chapter.cj").read_text(encoding="utf-8")

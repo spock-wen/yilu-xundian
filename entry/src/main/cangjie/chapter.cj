@@ -324,6 +324,17 @@ public class ChapterCatalog {
         return n
     }
 
+    /* 驿程总表页脚「已通 N」：各章 clearedCount 之和，与章内页脚同一口径（不含修缮中）。 */
+    public static func totalClearedCount(cleared: Int64): Int64 {
+        var n: Int64 = 0
+        var i: Int64 = 0
+        while (i < ChapterCatalog.count()) {
+            n = n + ChapterCatalog.clearedCount(i, cleared)
+            i = i + 1
+        }
+        return n
+    }
+
     public static func chapterIdForLevel(levelIndex: Int64): Int64 {
         var i: Int64 = 0
         while (i < ChapterCatalog.count()) {

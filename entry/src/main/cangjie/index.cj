@@ -885,7 +885,7 @@ class EntryView {
                 }
                 .width(100.percent)
                 .layoutWeight(1)
-                Text("已通 ${this.cleared} · 当前 ${this.currentName()}")
+                Text("已通 ${ChapterCatalog.totalClearedCount(this.cleared)} · 当前 ${this.currentName()}")
                     .fontSize(13)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(Theme.sans)
