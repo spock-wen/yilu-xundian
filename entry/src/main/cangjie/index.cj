@@ -115,10 +115,24 @@ class EntryView {
     }
 
     func currentName(): String {
-        if (this.cleared >= LevelCatalog.count()) {
+        let cursor = LevelMaintenance.normalizeCleared(this.cleared)
+        if (cursor >= LevelCatalog.count()) {
             return "已通"
         }
-        return LevelCatalog.byIndex(this.cleared).name
+        return LevelCatalog.byIndex(cursor).name
+    }
+
+    /* Stored `cleared` may sit on a 修缮中 index (in-memory progress at
+       launch). Move it to the next playable station before the first paint. */
+    func normalizeSavedProgress(): Unit {
+        let cursor = LevelMaintenance.normalizeCleared(this.cleared)
+        if (cursor != this.cleared) {
+            this.cleared = cursor
+        }
+    }
+
+    protected override func aboutToAppear(): Unit {
+        this.normalizeSavedProgress()
     }
 
     func refresh(): Unit {
@@ -137,6 +151,7 @@ class EntryView {
 
     func startPlay(): Unit {
         this.boardBack = 0
+        this.normalizeSavedProgress()
         if (this.cleared >= LevelCatalog.count()) {
             this.openLevel(LevelCatalog.count() - 1)
             return
@@ -145,6 +160,9 @@ class EntryView {
     }
 
     func openFromList(index: Int64): Unit {
+        if (LevelMaintenance.isMaintenance(index)) {
+            return
+        }
         if (index > this.cleared) {
             return
         }
@@ -217,13 +235,14 @@ class EntryView {
         if (!ChapterCatalog.isOpen(ch.id, this.cleared)) {
             return "未开"
         }
-        if (this.cleared >= ch.levelStart + ch.levelCount) {
+        let cursor = LevelMaintenance.normalizeCleared(this.cleared)
+        if (cursor >= ch.levelStart + ch.levelCount) {
             return "已通"
         }
-        if (this.cleared < ch.levelStart) {
+        if (cursor < ch.levelStart) {
             return LevelCatalog.byIndex(ch.levelStart).name
         }
-        return LevelCatalog.byIndex(this.cleared).name
+        return LevelCatalog.byIndex(cursor).name
     }
 
     func chapterListFooter(): String {
@@ -281,7 +300,7 @@ class EntryView {
     }
 
     func nextLevel(): Unit {
-        let nxt = this.levelIndex + 1
+        let nxt = LevelMaintenance.skipMaintenance(this.levelIndex + 1)
         if (nxt >= LevelCatalog.count()) {
             this.screen = 0
             return
@@ -359,8 +378,9 @@ class EntryView {
                 if (this.game.tryStep(cell)) {
                     this.clearParityReject()
                     if (this.game.isWin()) {
-                        if (this.levelIndex + 1 > this.cleared) {
-                            this.cleared = this.levelIndex + 1
+                        let nxt = LevelMaintenance.skipMaintenance(this.levelIndex + 1)
+                        if (nxt > this.cleared) {
+                            this.cleared = nxt
                         }
                         this.screen = 2
                     }
@@ -375,6 +395,9 @@ class EntryView {
     }
 
     func rowBorder(index: Int64): Int64 {
+        if (LevelMaintenance.isMaintenance(index)) {
+            return Theme.whitePaper
+        }
         if (index == this.cleared) {
             return Theme.ink
         }
@@ -765,7 +788,27 @@ class EntryView {
                             LevelCatalog.all(),
                             itemGeneratorFunc: {item: LevelDef, index: Int64 =>
                                 Row {
-                                    if (index < this.cleared) {
+                                    if (LevelMaintenance.isMaintenance(index)) {
+                                        Text("${index + 1}")
+                                            .fontSize(16)
+                                            .fontColor(Theme.locked)
+                                            .fontFamily(Theme.serif)
+                                            .width(36)
+                                            .height(36)
+                                            .border(width: 1, color: Theme.locked)
+                                            .borderRadius(18)
+                                            .textAlign(TextAlign.Center)
+                                        Text(item.name)
+                                            .fontSize(18)
+                                            .fontColor(Theme.locked)
+                                            .fontFamily(Theme.serif)
+                                            .margin(left: 12)
+                                        Blank()
+                                        Text("修缮中")
+                                            .fontSize(14)
+                                            .fontColor(Theme.locked)
+                                            .fontFamily(Theme.sans)
+                                    } else if (index < this.cleared) {
                                         Text("通")
                                             .fontSize(14)
                                             .fontColor(Theme.success)
@@ -1140,7 +1183,45 @@ class EntryView {
                             ChapterCatalog.levelsOf(this.chapterIndex),
                             itemGeneratorFunc: {item: LevelDef, index: Int64 =>
                                 Row {
-                                    if (item.id < this.cleared) {
+                                    if (LevelMaintenance.isMaintenance(item.id)) {
+                                        Text("${index + 1}")
+                                            .fontSize(14)
+                                            .fontColor(Theme.locked)
+                                            .fontFamily(Theme.serif)
+                                            .width(32)
+                                            .height(32)
+                                            .border(width: 1, color: Theme.locked)
+                                            .borderRadius(16)
+                                            .textAlign(TextAlign.Center)
+                                        Column {
+                                            Row(space: 6) {
+                                                Text(item.name)
+                                                    .fontSize(16)
+                                                    .fontColor(Theme.locked)
+                                                    .fontFamily(Theme.serif)
+                                                if (ChapterCatalog.isDessert(item.id)) {
+                                                    Text("点心")
+                                                        .fontSize(10)
+                                                        .fontColor(Theme.locked)
+                                                        .fontFamily(Theme.sans)
+                                                        .padding(left: 4, right: 4)
+                                                        .border(width: 1, color: Theme.locked)
+                                                        .borderRadius(4)
+                                                }
+                                            }
+                                            Text("${item.cols}×${item.rows}")
+                                                .fontSize(12)
+                                                .fontColor(Theme.locked)
+                                                .fontFamily(Theme.sans)
+                                        }
+                                        .margin(left: 10)
+                                        .alignItems(HorizontalAlign.Start)
+                                        Blank()
+                                        Text("修缮中")
+                                            .fontSize(13)
+                                            .fontColor(Theme.locked)
+                                            .fontFamily(Theme.sans)
+                                    } else if (item.id < this.cleared) {
                                         Text("通")
                                             .fontSize(14)
                                             .fontColor(Theme.success)

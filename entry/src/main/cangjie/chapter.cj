@@ -12,6 +12,41 @@ package ohos_app_cangjie_entry
 import std.collection.ArrayList
 import ohos_app_cangjie_entry.game.LevelDef
 
+/* Option B: ferry boards were dropped, so these ids are unsolvable.
+   Catalog ids and geometry stay; progress skips them. */
+public class LevelMaintenance {
+    public static let MAINTENANCE_IDS: Array<Int64> = [52, 59, 60, 63, 67, 89]
+
+    public static func isMaintenance(index: Int64): Bool {
+        var i: Int64 = 0
+        while (i < LevelMaintenance.MAINTENANCE_IDS.size) {
+            if (LevelMaintenance.MAINTENANCE_IDS[i] == index) {
+                return true
+            }
+            i = i + 1
+        }
+        return false
+    }
+
+    /* Next playable index at or after `index`. Equal to LevelCatalog.count()
+       when nothing playable remains. */
+    public static func skipMaintenance(index: Int64): Int64 {
+        var i = index
+        let count = LevelCatalog.count()
+        while (i < count && LevelMaintenance.isMaintenance(i)) {
+            i = i + 1
+        }
+        return i
+    }
+
+    public static func normalizeCleared(cleared: Int64): Int64 {
+        if (cleared < 0) {
+            return 0
+        }
+        return LevelMaintenance.skipMaintenance(cleared)
+    }
+}
+
 public class ChapterDef {
     public var id: Int64
     public var name: String
@@ -268,10 +303,12 @@ public class ChapterCatalog {
         if (ch.levelCount <= 0) {
             return 0
         }
-        if (cleared <= ch.levelStart) {
+        /* Maintenance stations are not required for the 已通 count. */
+        let cursor = LevelMaintenance.normalizeCleared(cleared)
+        if (cursor <= ch.levelStart) {
             return 0
         }
-        let n = cleared - ch.levelStart
+        let n = cursor - ch.levelStart
         if (n >= ch.levelCount) {
             return ch.levelCount
         }

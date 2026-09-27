@@ -902,13 +902,86 @@ def chapter_current_label(chapter_id: int, cleared: int, levels: list[dict]) -> 
     return next(lv["name"] for lv in levels if int(lv["id"]) == idx)
 
 
+# Option B temporary delist. Ids stay in the 100-board catalog; unlock skips them.
+# Mirrors LevelMaintenance in entry/src/main/cangjie/chapter.cj.
+MAINTENANCE_IDS = (52, 59, 60, 63, 67, 89)
+CATALOG_COUNT = 100
+# chapter.cj: 10 chapters × 10 boards, open when cleared >= levelStart.
+# Distinct from SHIP_CHAPTERS, whose later cards are still flagged skin-only.
+RUNTIME_CHAPTERS = tuple(
+    {"id": i, "levelStart": i * 10, "levelCount": 10, "open": True} for i in range(10)
+)
+
+
+def is_maintenance(index: int) -> bool:
+    return index in MAINTENANCE_IDS
+
+
+def skip_maintenance(index: int, count: int = CATALOG_COUNT) -> int:
+    while index < count and is_maintenance(index):
+        index += 1
+    return index
+
+
+def normalize_cleared(cleared: int, count: int = CATALOG_COUNT) -> int:
+    """If stored progress points at a maintenance index, move to the next playable."""
+    if cleared < 0:
+        return 0
+    return skip_maintenance(cleared, count)
+
+
+def advance_on_clear(level_index: int, cleared: int, count: int = CATALOG_COUNT) -> int:
+    nxt = skip_maintenance(level_index + 1, count)
+    if nxt > cleared:
+        return nxt
+    return cleared
+
+
+def can_enter_level(index: int, cleared: int) -> bool:
+    if is_maintenance(index):
+        return False
+    return index <= cleared
+
+
+def runtime_chapter(chapter_id: int) -> dict:
+    return RUNTIME_CHAPTERS[chapter_id]
+
+
+def runtime_is_open(chapter_id: int, cleared: int) -> bool:
+    """ChapterCatalog.isOpen: catalog flag, then cleared >= levelStart. Does not skip."""
+    ch = runtime_chapter(chapter_id)
+    if not ch["open"] or ch["levelCount"] <= 0:
+        return False
+    return cleared >= ch["levelStart"]
+
+
+def runtime_cleared_count(chapter_id: int, cleared: int) -> int:
+    ch = runtime_chapter(chapter_id)
+    if ch["levelCount"] <= 0:
+        return 0
+    cursor = normalize_cleared(cleared)
+    if cursor <= ch["levelStart"]:
+        return 0
+    return min(cursor - ch["levelStart"], ch["levelCount"])
+
+
+def runtime_playable_remaining(chapter_id: int, cleared: int) -> int:
+    """Stations still required. Maintenance ids are not required."""
+    ch = runtime_chapter(chapter_id)
+    start = ch["levelStart"]
+    end = start + ch["levelCount"]
+    cursor = normalize_cleared(cleared)
+    return sum(1 for i in range(max(cursor, start), end) if not is_maintenance(i))
+
+
 def chapter_cleared_count(chapter_id: int, cleared: int) -> int:
     ch = chapter_by_id(chapter_id)
     if ch["levelCount"] <= 0:
         return 0
-    if cleared <= ch["levelStart"]:
+    cursor = normalize_cleared(cleared)
+    if cursor <= ch["levelStart"]:
         return 0
-    return min(cleared - ch["levelStart"], ch["levelCount"])
+    return min(cursor - ch["levelStart"], ch["levelCount"])
 
 
 def chapter_levels(levels: list[dict], chapter_id: int) -> list[dict]:
@@ -1713,6 +1786,149 @@ class StationNumberSkinTests(unittest.TestCase):
         self.assertRegex(names, r"Bold|SemiBold", "thin Regular/ExtraLight is not enough contrast")
         ofl = list(ROOT.rglob("OFL.txt")) + list(ROOT.rglob("**/OFL-NotoSerifSC*"))
         self.assertTrue(ofl, "SIL Open Font License file must be in the repo")
+
+
+class MaintenanceDelistTests(unittest.TestCase):
+    """Option B: six unsolvable ferry boards stay in the catalog but are not required."""
+
+    def test_ids_and_names_stay_in_the_catalog(self) -> None:
+        levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
+        self.assertEqual(len(levels), 100)
+        expected = {
+            52: "荆州·樊城·第 1 驿",
+            59: "荆州·公安·第 2 驿",
+            60: "赤壁·樊口",
+            63: "赤壁·陆口·第 1 驿",
+            67: "赤壁·柴桑·第 2 驿",
+            89: "南中·滇池·第 2 驿",
+        }
+        self.assertEqual(MAINTENANCE_IDS, tuple(expected))
+        for level_id, name in expected.items():
+            level = levels[level_id]
+            self.assertEqual(int(level["id"]), level_id)
+            self.assertEqual(level["name"], name)
+            self.assertGreater(len(level["waypoints"]), 0)
+
+    def test_clear_skips_maintenance_and_replay_does_not_rewind(self) -> None:
+        self.assertEqual(advance_on_clear(51, 51), 53)
+        self.assertEqual(advance_on_clear(58, 58), 61)
+        self.assertEqual(advance_on_clear(62, 62), 64)
+        self.assertEqual(advance_on_clear(66, 66), 68)
+        self.assertEqual(advance_on_clear(88, 88), 90)
+        self.assertEqual(advance_on_clear(9, 9), 10)
+        self.assertEqual(advance_on_clear(99, 99), 100)
+        self.assertEqual(advance_on_clear(51, 53), 53)
+
+    def test_migration_moves_a_stored_maintenance_cursor_forward(self) -> None:
+        self.assertEqual(normalize_cleared(52), 53)
+        self.assertEqual(normalize_cleared(59), 61)
+        self.assertEqual(normalize_cleared(60), 61)
+        self.assertEqual(normalize_cleared(63), 64)
+        self.assertEqual(normalize_cleared(67), 68)
+        self.assertEqual(normalize_cleared(89), 90)
+        self.assertEqual(normalize_cleared(0), 0)
+        self.assertEqual(normalize_cleared(51), 51)
+        self.assertEqual(normalize_cleared(61), 61)
+        self.assertEqual(normalize_cleared(100), 100)
+        self.assertEqual(normalize_cleared(-1), 0)
+        # Chapter 10 (id 9, levelStart 90) stays closed on raw 89 and opens after migration.
+        self.assertFalse(runtime_is_open(9, 89))
+        self.assertTrue(runtime_is_open(9, normalize_cleared(89)))
+
+    def test_maintenance_levels_are_not_enterable(self) -> None:
+        for level_id in MAINTENANCE_IDS:
+            for cleared in (0, level_id - 1, level_id, level_id + 1, 100):
+                self.assertFalse(can_enter_level(level_id, cleared), (level_id, cleared))
+        self.assertTrue(can_enter_level(51, 53))
+        self.assertTrue(can_enter_level(53, 53))
+        self.assertFalse(can_enter_level(54, 53))
+
+    def test_chapters_7_through_10_open_without_clearing_maintenance(self) -> None:
+        """第7章 赤壁 levelStart 60 opens after clearing 58 (skip 59 and 60)."""
+        self.assertFalse(runtime_is_open(6, 58))
+        opened = advance_on_clear(58, 58)
+        self.assertEqual(opened, 61)
+        self.assertTrue(runtime_is_open(6, opened))
+        self.assertFalse(can_enter_level(59, opened))
+        self.assertFalse(can_enter_level(60, opened))
+        self.assertTrue(can_enter_level(61, opened))
+
+        self.assertFalse(runtime_is_open(7, 69))
+        self.assertTrue(runtime_is_open(7, advance_on_clear(69, 69)))
+        self.assertFalse(runtime_is_open(8, 79))
+        self.assertTrue(runtime_is_open(8, advance_on_clear(79, 79)))
+        self.assertFalse(runtime_is_open(9, 88))
+        self.assertTrue(runtime_is_open(9, advance_on_clear(88, 88)))
+
+        cleared = 0
+        entered: list[int] = []
+        for level in range(CATALOG_COUNT):
+            cleared = normalize_cleared(cleared)
+            if not can_enter_level(level, cleared):
+                continue
+            entered.append(level)
+            cleared = advance_on_clear(level, cleared)
+        self.assertEqual(entered, [i for i in range(CATALOG_COUNT) if i not in MAINTENANCE_IDS])
+        self.assertEqual(cleared, CATALOG_COUNT)
+        for chapter_id in range(7):
+            self.assertTrue(runtime_is_open(chapter_id, cleared), chapter_id)
+        for chapter_id in (6, 7, 8, 9):
+            self.assertTrue(runtime_is_open(chapter_id, cleared), chapter_id)
+
+    def test_chapter_counts_do_not_require_maintenance_clears(self) -> None:
+        # 荆州 (id 5) finishes when 58 is cleared; 52 and 59 are not required.
+        done_jing = advance_on_clear(58, 58)
+        self.assertEqual(runtime_cleared_count(5, done_jing), 10)
+        self.assertEqual(runtime_playable_remaining(5, done_jing), 0)
+        self.assertEqual(runtime_cleared_count(5, 59), 10)
+        self.assertEqual(runtime_playable_remaining(5, 59), 0)
+        # 赤壁 (id 6) finishes on 69; 60/63/67 stay out of the requirement.
+        done_chi = advance_on_clear(69, 69)
+        self.assertEqual(done_chi, 70)
+        self.assertEqual(runtime_cleared_count(6, done_chi), 10)
+        self.assertEqual(runtime_playable_remaining(6, done_chi), 0)
+        self.assertEqual(runtime_playable_remaining(6, 60), 7)
+        # 汉中南中 (id 8): stored 89 already counts the chapter complete.
+        self.assertEqual(runtime_cleared_count(8, 89), 10)
+        self.assertEqual(runtime_playable_remaining(8, 89), 0)
+        self.assertEqual(runtime_cleared_count(0, 3), 3)
+        self.assertEqual(chapter_cleared_count(0, 3), 3)
+        self.assertEqual(chapter_cleared_count(1, 0), 0)
+
+    def test_cangjie_ui_labels_repair_and_skips_on_clear(self) -> None:
+        chapter = (ROOT / "entry/src/main/cangjie/chapter.cj").read_text(encoding="utf-8")
+        ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
+        self.assertIn(
+            "public static let MAINTENANCE_IDS: Array<Int64> = [52, 59, 60, 63, 67, 89]",
+            chapter,
+        )
+        self.assertIn("cleared >= ch.levelStart", _func_body(chapter, "isOpen"))
+        counted = _func_body(chapter, "clearedCount")
+        self.assertIn("normalizeCleared", counted)
+        self.assertIn("cursor - ch.levelStart", counted)
+        yicheng = _screen_branch(ui, 3)
+        stations = _screen_branch(ui, 5)
+        self.assertIn('Text("修缮中")', yicheng)
+        self.assertIn('Text("修缮中")', stations)
+        self.assertIn("Theme.locked", yicheng)
+        self.assertIn("Theme.locked", stations)
+        self.assertIn("Theme.serif", yicheng)
+        self.assertIn("Theme.sans", yicheng)
+        self.assertNotIn("SymbolGlyph", yicheng)
+        self.assertNotIn("SymbolGlyph", stations)
+        self.assertNotIn("Image(", yicheng)
+        self.assertEqual(ui.count('Text("修缮中")'), 2)
+        opened = _func_body(ui, "openFromList")
+        self.assertLess(opened.index("isMaintenance"), opened.index("index > this.cleared"))
+        self.assertLess(opened.index("return"), opened.index("this.openLevel"))
+        self.assertIn("skipMaintenance", _func_body(ui, "handleDrag"))
+        self.assertNotIn("this.cleared = this.levelIndex + 1", ui)
+        self.assertIn("skipMaintenance", _func_body(ui, "nextLevel"))
+        self.assertIn("normalizeSavedProgress", _func_body(ui, "aboutToAppear"))
+        self.assertIn("normalizeSavedProgress", _func_body(ui, "startPlay"))
+        # 赤壁 still starts at global index 60 in the Cangjie catalog.
+        self.assertIn("赤壁·柴桑", chapter)
+        self.assertRegex(chapter, r"柴桑\",\s*60,\s*10,")
 
 
 if __name__ == "__main__":
