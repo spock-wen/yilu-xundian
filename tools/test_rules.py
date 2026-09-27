@@ -12,6 +12,7 @@ import hashlib
 import io
 import json
 import math
+import subprocess
 import sys
 import unittest
 from contextlib import redirect_stdout
@@ -1929,6 +1930,59 @@ class MaintenanceDelistTests(unittest.TestCase):
         # 赤壁 still starts at global index 60 in the Cangjie catalog.
         self.assertIn("赤壁·柴桑", chapter)
         self.assertRegex(chapter, r"柴桑\",\s*60,\s*10,")
+
+
+class MacSmokeScriptTests(unittest.TestCase):
+    """tools/mac_smoke.sh is the single Mac emulator command. Cloud cannot run hdc."""
+
+    def test_script_is_noninteractive_and_names_the_build(self) -> None:
+        path = ROOT / "tools/mac_smoke.sh"
+        text = path.read_text(encoding="utf-8")
+        self.assertTrue(path.is_file())
+        for line in text.splitlines():
+            code = line.split("#", 1)[0]
+            self.assertNotRegex(code, r"(^|\s)sudo(\s|$)")
+            self.assertNotIn("read -p", code)
+        self.assertNotIn('git -C "$REPO" checkout', text)
+        self.assertIn("git worktree add --detach", text)
+        self.assertIn("yilu-xundian-smoke-", text)
+        self.assertIn("snapshot_display", text)
+        self.assertIn('"$HDC" -t "$SERIAL"', text)
+        self.assertIn("assembleHap", text)
+        self.assertIn("-p product=default", text)
+        self.assertIn("-p buildMode=debug", text)
+        self.assertIn("--no-daemon", text)
+        self.assertIn("修缮中", text)
+        self.assertIn("GIT_TERMINAL_PROMPT=0", text)
+        syntax = subprocess.run(["bash", "-n", str(path)], text=True, capture_output=True)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+        usage = subprocess.run(["bash", str(path)], text=True, capture_output=True)
+        self.assertEqual(usage.returncode, 2)
+        self.assertIn("用法", usage.stderr)
+        self.assertNotIn("RESULT:", usage.stdout)
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("bash tools/mac_smoke.sh <git-ref> <hdc-serial>", readme)
+        self.assertIn("snapshot_display", readme)
+        self.assertIn("assembleHap", readme)
+
+    def test_probe_reads_shipped_uitest_dump(self) -> None:
+        """Bounds live under attributes in the 2026-09-16 proof dump."""
+        layout = ROOT / "_ship/verify-proof/20260916T092315Z/home-start.layout.json"
+        script = str(ROOT / "tools/mac_smoke.sh")
+        hit = subprocess.run(
+            ["bash", script, "--probe-layout", str(layout), "撤销"],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(hit.returncode, 0, hit.stderr)
+        self.assertTrue(hit.stdout.startswith("IN "), hit.stdout)
+        miss = subprocess.run(
+            ["bash", script, "--probe-layout", str(layout), "修缮中"],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(miss.returncode, 0)
+        self.assertIn("MISS", miss.stdout)
 
 
 if __name__ == "__main__":

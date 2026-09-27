@@ -173,6 +173,37 @@ entry/
 
 这些文件因本机插件而异，不要从网上抄一个对不上的 `cangjie-build-support-*.tgz` 版本。仓颉插件会在本机提供 `@ohos/cangjie-build-support`，该本机路径不要提交进 `hvigor/hvigor-config.json5`（仓库里保持 `dependencies: {}`）。
 
+### Mac 模拟器一条命令冒烟
+
+云主机没有 DevEco / `hdc`，编不出 HAP，也截不了模拟器。Mac 上用一条命令完成：单独 worktree、编译、按指定设备安装启动、全屏截图。脚本不 `sudo`、不问交互问题。不要在主检出里切分支或编译。
+
+```bash
+bash tools/mac_smoke.sh <git-ref> <hdc-serial>
+```
+
+例（序列号来自 `hdc list targets`，多开模拟器时必须带上，避免装到别人的会话）：
+
+```bash
+bash tools/mac_smoke.sh 06adc4e 127.0.0.1:5555
+```
+
+| 项 | 位置 |
+| --- | --- |
+| worktree | `~/orca/yilu-xundian-smoke-<ref>`（ref 里的 `/` 换成 `-`）。已存在则 `checkout --detach` 到该提交再编 |
+| 截图 | `~/orca/yilu-xundian-smoke-out/<ref>/<UTC时间>/`。`hdc shell snapshot_display -f …jpeg` 再 `hdc file recv` |
+| 编译 | 在 worktree 里执行 `hvigorw assembleHap --mode module -p product=default -p buildMode=debug --no-daemon`。`product=default` 与 `buildMode=debug` 对应仓库 `build-profile.json5`。`hvigorw` / `hdc` 优先用 PATH，否则用 `/Applications/DevEco-Studio.app` |
+| 设备 | 每条 `hdc` 都是 `hdc -t <serial>` |
+
+固定截图点（冷启动，`cleared` 在内存里从 0 开始；没有调试入口能改进度）：
+
+1. `01-home` 首页，可见「开始传书」
+2. `02-board` 点「开始传书」后的棋盘，可见「撤销」（新装是涿郡·涿）
+3. `03-chapters` 点「章节」，可见「选章入驿」
+4. `04-yicheng` 点「驿程」，可见「涿郡·涿」
+5. `05-maintenance` 在驿程里滚到可见的「修缮中」（并看到「樊城」）。这 6 关即使还没解锁也标「修缮中」，不必先打到第 51 关。第 7 章要 `cleared >= 60` 才开，这条命令不代替那条通关路径。
+
+任一步失败：打印 `RESULT: FAIL`，退出码非 0。成功打印 `RESULT: PASS`。主检出的 HEAD 和工作区不应被改动。SDK 路径若只写在主检出的 `local.properties`（gitignore），脚本会把它**复制**进 worktree，不回写主检出。
+
 ## API 依据（未编造 `@ohos.*` / ArkTS-only）
 
 全部对照 [openharmony/docs_cangjie](https://gitcode.com/openharmony/docs_cangjie) 的仓颉文档，**不是** ArkTS 文档。
