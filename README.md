@@ -7,6 +7,7 @@
 - 无内购、无登录、无 Game Service
 - 本仓库 **没有** 在 CI / 云主机上编出 HAP：当前环境没有 DevEco / 仓颉鸿蒙工具链。请用本机 DevEco 打开后编译。
 - iOS 壳见 [ios/README.md](ios/README.md)。Android 壳见 [android/README.md](android/README.md)。两边共用 [mobile/shared](mobile/shared) 里的仓颉 Zip 引擎，不是把规则重写成 Swift 或 Kotlin。**iOS 模拟器冒烟 PASSED**（tip `eaf7aed`，进入涿郡·范阳 id 1；截图目录 `qa-shots/ios-shell-eaf7aed-gate`，本检出不含该目录）。**Android** 把程序员 Mac 冒烟和测试门禁分开记，都在 tip `f25f813`（`f25f813d81388b550fd336f3b819b93117f214c5`）。**程序员 Mac 冒烟 PASSED**（AVD `grokdump`，进入涿郡·范阳 id 1，6×6 可见；目录 `_smoke/android-fanyang-f25f813-resmoke-*`、`qa-shots/android-shell-f25f813-gate/`，本检出可不含）。**测试门禁 PASS**（全屏目录 `qa-shots/android-shell-f25f813-tester`，本检出可不含）。更早 tip `4986524` 因缺少 `CJ_MRT_CjRuntimeInit` 为 FAIL。见 [android/README.md](android/README.md)。
+- **关卡范围**（PM 2026-09-27 定）：iOS / Android / HarmonyOS 三端上架**同一份锁定关卡数据**，即 `levels.json` 的 100 关（10 章 × 10 关，ids 0..99）。HarmonyOS 应用内已接好这 100 关（`levels.cj` + `chapter.cj`）；iOS / Android 壳目前只接了涿郡·范阳一关（`mobile/shared/levels/zhuojun-fanyang.json`），100 关**尚未**在 iOS / Android 上接入或上架。
 
 ## 玩法
 
@@ -28,11 +29,11 @@
 
 视觉 token 只来自手稿，写在 `entry/src/main/cangjie/theme.cj`。禁止熊猫、红包、灯笼堆、龙兔贴图、宪法海报风。金只作发丝线，朱砂只作关防 / 文书到印。
 
-## 关卡 JSON（20/20 已由求解器验证）
+## 关卡 JSON（锁定 100 关，三端共用）
 
 路径：`entry/src/main/resources/rawfile/levels.json`（给求解器用）。应用内用同内容的仓颉字面量 `entry/src/main/cangjie/levels.cj`——**未采用** rawfile 读取 API，因为仓颉 1.1.3 的资源读取绑定未在官方文档里核对到可安全使用的写法。
 
-可玩目录是锁定的 **涿郡 10 + 平原 10**（ids 0..19，全 6×6）。盘名原文上架，禁止再发明关卡或改驿站坐标。平原在 `cleared >= 10` 后可入；徐州 / 吕布 / 投袁…北伐只有章节卡或皮肤预览，**没有**棋盘。
+可玩目录是锁定的 **10 章 × 10 关 = 100 关**（ids 0..99；ids 0..29 为 6×6，ids 30..99 为 7×7），源自 `boards-locked/ch1..ch10`，iOS / Android / HarmonyOS 共用同一份。盘名原文上架，禁止再发明关卡或改驿站坐标。涿郡始终可入，其后各章在 `cleared >= levelStart` 后可入（平原即 `cleared >= 10`）。`levels.json` 目前只带驿站、墙、奇偶边（`parityEdges`）和 `stepLimit`；`boards-locked` 里的其余机关字段尚未进入 `levels.json` 与引擎。下表只摘涿郡 + 平原前 20 关。
 
 ```json
 {"id":0,"name":"涿郡·涿","cols":6,"rows":6,"waypoints":[{"n":1,"x":3,"y":2},{"n":2,"x":3,"y":5},{"n":3,"x":0,"y":1},{"n":4,"x":4,"y":4},{"n":5,"x":4,"y":1},{"n":6,"x":0,"y":0}],"walls":[]}
@@ -73,7 +74,7 @@
 
 依据：
 
-- 目录本身：`entry/src/main/resources/rawfile/levels.json` ids 0..19；测试锁在 `tools/test_rules.py` 的 `VerifiedCatalogTests` / `ChapterFlowV13Tests`。
+- 目录本身：`entry/src/main/resources/rawfile/levels.json` ids 0..99（与 `boards-locked/ch1..ch10` 同源）。`tools/test_rules.py` 的 `VerifiedCatalogTests` / `ChapterFlowV13Tests` 和 `tools/solve_levels.py` 仍按旧的 20 关目录写死，当前 main 上对 100 关 JSON 会失败，尚未更新。
 - 涿、范阳、故安、遒：西汉涿郡属县。班固《汉书·地理志下》涿郡「县二十九：涿，迺，…故安，…范阳，…」（维基文库 [漢書/卷028](https://zh.wikisource.org/wiki/%E6%BC%A2%E6%9B%B8/%E5%8D%B7028%E4%B8%8B)）。志文作「迺」，后世常写「遒」，本关用「遒」。
 - 中山、卢奴、安喜：中山国有卢奴（《汉书·地理志》中山国）；刘备「涿郡涿县人」「除安喜尉」，裴注《典略》作「中山安喜尉」（《三国志·蜀书·先主传》，维基文库 [三國志/卷32](https://zh.wikisource.org/wiki/%E4%B8%89%E5%9C%8B%E5%BF%97/%E5%8D%B732)）。
 - 高唐、安德、鬲、祝阿：西汉平原郡属县。《汉书·地理志上》平原郡「县十九：…鬲，高唐，…祝阿，…安德，…」（同上卷028）。刘备后为高唐尉、试守平原令、领平原相（同上先主传）。
@@ -84,7 +85,7 @@
 | --- | --- | --- |
 | 可复用网格引擎 | `entry/src/main/cangjie/engine/` | 格子、墙、触摸落格、撤销栈、路径。无 Canvas、无本关规则。 |
 | 本游戏规则 | `entry/src/main/cangjie/game/` | 升序驿站 + 填满网格 + 终点最高号。 |
-| 关卡数据 | `levels.json` + `levels.cj` | 同一套已验证 20 关（涿郡+平原）。 |
+| 关卡数据 | `levels.json` + `levels.cj` | 同一份锁定 100 关（10 章，ids 0..99），三端共用。 |
 | 设计师皮肤 | `theme.cj` + Canvas 描线 | 手稿 token：纸底、已访底、墨环、青填已过、金发丝下一驿、朱印。 |
 
 引擎可以在没有 Canvas 的情况下被推理 / 用 Python 镜像单测（`tools/test_rules.py`）。仓颉侧目前没有在本机跑 `cjpm test`（无 `cjc`）。
@@ -96,7 +97,7 @@ python3 tools/solve_levels.py
 python3 tools/test_rules.py
 ```
 
-`solve_levels.py` 与应用代码无关，用回溯证明每关至少一条解。未通过的关不得入库。本机已跑通 **20/20**（涿郡+平原，无 6×8 教程）。若以后 DFS 超时：关卡仍保留、驿站坐标不改，求解器打印 `TIMEOUT` 且退出码为 0。
+`solve_levels.py` 与应用代码无关，用回溯证明每关至少一条解。未通过的关不得入库。本机曾跑通 **20/20**（旧的涿郡+平原目录，无 6×8 教程）；目录扩到 100 关后求解器尚未更新，当前 main 上会以 `need exactly 20 locked 涿郡+平原 levels, found 100` 退出。若以后 DFS 超时：关卡仍保留、驿站坐标不改，求解器打印 `TIMEOUT` 且退出码为 0。
 
 `tools/build_levels.py` **只**把已验证的 `levels.json` 抄成仓颉字面量，不生成路径、不发明关卡。改关后必须先改 JSON，再：
 
