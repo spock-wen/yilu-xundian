@@ -22,9 +22,12 @@ mechanics that boards-locked actually stores and this solver can check:
   Source: boards-locked slide_rule ("Stop before wall/edge/filled/numbered").
   Straight-line sliding onto non-slide cells rejects the stored paths of
   locked boards 43 and 49, so the continuation stays on the slide strip.
-- seal_gates / token_cells / burden / collapse have prose in the locked files
-  but no implementation in the engine or this solver. Those levels are reported
-  as "UNSUPPORTED mechanic — not verified" and never counted as a pass.
+- seal_gates / token_cells: a gate edge stays closed until the path has stepped
+  on a token cell. Source: boards-locked seal_rule.
+- burden: stepping the load cell sets laden; stepping the unload cell clears it.
+  While laden, forbidden cells cannot be entered. Source: boards-locked burden_rule.
+- collapse: after the path steps on the trigger cell, the collapse edge is a wall.
+  Source: boards-locked collapse_rule (schema step_on_trigger).
 
 Coordinates: boards-locked cells are [row, col]. This solver and levels.json
 use x=col, y=row.
@@ -32,8 +35,7 @@ use x=col, y=row.
 The default CLI checks every locked board against the shipped levels.json.
 It does not hard-code a level count. It exits non-zero when a shipped level
 has 0 solutions, when uniqueness is lost against the locked board, when a
-mechanic is unsupported, when a stored path is illegal, or when a search
-times out. It does not rewrite boards.
+stored path is illegal, or when a search times out. It does not rewrite boards.
 
 Usage (from repo root):
     python3 tools/solve_levels.py
@@ -50,7 +52,10 @@ from typing import Iterable
 
 
 DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1))
-UNSUPPORTED_FIELDS = ("seal_gates", "token_cells", "burden", "collapse")
+# Search state, packed so the DFS signature stays numeric.
+_TOKEN = 1
+_LADEN = 2
+_COLLAPSED = 4
 
 
 def cell_key(x: int, y: int) -> int:
@@ -141,6 +146,37 @@ class Compiled:
         else:
             self.jia = None
             self.yi = None
+        self.seal_edges: set[tuple[int, int]] = set()
+        for edge in level.get("sealGates") or []:
+            self.seal_edges.add(
+                wall_key(int(edge["x1"]), int(edge["y1"]), int(edge["x2"]), int(edge["y2"]))
+            )
+        self.token_mask = 0
+        for cell in level.get("tokenCells") or []:
+            self.token_mask |= self.bit(int(cell["x"]), int(cell["y"]))
+        burden = level.get("burden")
+        self.forbidden_mask = 0
+        self.load_bit = 0
+        self.unload_bit = 0
+        self.start_laden = False
+        if burden:
+            for cell in burden.get("forbidden") or []:
+                self.forbidden_mask |= self.bit(int(cell["x"]), int(cell["y"]))
+            load = burden["load"]
+            unload = burden["unload"]
+            self.load_bit = self.bit(int(load["x"]), int(load["y"]))
+            self.unload_bit = self.bit(int(unload["x"]), int(unload["y"]))
+            self.start_laden = bool(burden.get("startLaden"))
+        collapse = level.get("collapse")
+        self.collapse_edge: tuple[int, int] | None = None
+        self.trigger_bit = 0
+        if collapse:
+            edge = collapse["edge"]
+            self.collapse_edge = wall_key(
+                int(edge["x1"]), int(edge["y1"]), int(edge["x2"]), int(edge["y2"])
+            )
+            trig = collapse["trigger"]
+            self.trigger_bit = self.bit(int(trig["x"]), int(trig["y"]))
         self.yi_bit = 0 if self.yi is None else self.bit(self.yi[0], self.yi[1])
         self.jia_idx = None if self.jia is None else self.index(self.jia[0], self.jia[1])
         self.neigh: list[list[tuple[int, int, int, int, int]]] = [[] for _ in range(self.total)]
@@ -166,12 +202,49 @@ class Compiled:
     def bit(self, x: int, y: int) -> int:
         return 1 << self.index(x, y)
 
-    def can_step(self, x: int, y: int, nx: int, ny: int, nbit: int, filled: int) -> bool:
+    def initial_state(self) -> int:
+        """State after standing on cell 1, before any move."""
+        state = _LADEN if self.start_laden else 0
+        return self.after_enter(self.start[0], self.start[1], state)
+
+    def after_enter(self, x: int, y: int, state: int) -> int:
+        """Token, load/unload, then collapse. Matches the locked rule order."""
+        bit = self.bit(x, y)
+        if self.token_mask & bit:
+            state |= _TOKEN
+        if self.load_bit and bit == self.load_bit:
+            state |= _LADEN
+        if self.unload_bit and bit == self.unload_bit:
+            state &= ~_LADEN
+        if self.trigger_bit and bit == self.trigger_bit:
+            state |= _COLLAPSED
+        return state
+
+    def can_enter(self, x: int, y: int, state: int) -> bool:
+        if self.forbidden_mask and (state & _LADEN) and (self.forbidden_mask & self.bit(x, y)):
+            return False
+        return True
+
+    def can_step(
+        self,
+        x: int,
+        y: int,
+        nx: int,
+        ny: int,
+        nbit: int,
+        filled: int,
+        state: int = 0,
+    ) -> bool:
         if (self.neigh_mask[self.index(x, y)] & nbit) == 0:
+            return False
+        edge = wall_key(x, y, nx, ny)
+        if self.seal_edges and edge in self.seal_edges and (state & _TOKEN) == 0:
+            return False
+        if self.collapse_edge is not None and (state & _COLLAPSED) and edge == self.collapse_edge:
             return False
         if not self.parity:
             return True
-        kind = self.parity.get(wall_key(x, y, nx, ny))
+        kind = self.parity.get(edge)
         if kind == "odd" and filled % 2 == 0:
             return False
         if kind == "even" and filled % 2 == 1:
@@ -186,8 +259,14 @@ class Compiled:
         dy: int,
         visited: int,
         filled0: int,
-    ) -> list[tuple[int, int]]:
-        """Cells after the slide cell (x, y). filled0 is the path length before (x, y)."""
+        state: int,
+    ) -> tuple[list[tuple[int, int]], int]:
+        """Cells after the slide cell (x, y). filled0 is the path length before (x, y).
+
+        `state` is the state after entering (x, y). Continuation stays on contiguous
+        slide cells and stops before a non-slide cell, wall, edge, filled cell, or
+        numbered cell. Seal, burden, and collapse apply to those same steps.
+        """
         extras: list[tuple[int, int]] = []
         cx, cy = x, y
         seen = visited | self.bit(x, y)
@@ -201,15 +280,18 @@ class Compiled:
                 break
             if (nx, ny) in self.wps:
                 break
-            if not self.can_step(cx, cy, nx, ny, nbit, filled):
+            if not self.can_step(cx, cy, nx, ny, nbit, filled, state):
                 break
             if (nx, ny) not in self.slides:
+                break
+            if not self.can_enter(nx, ny, state):
                 break
             extras.append((nx, ny))
             seen |= nbit
             filled += 1
+            state = self.after_enter(nx, ny, state)
             cx, cy = nx, ny
-        return extras
+        return extras, state
 
     def legal_moves(
         self,
@@ -219,11 +301,13 @@ class Compiled:
         next_n: int,
         arrived_by_walk: bool,
         path_len: int,
-    ) -> list[tuple[list[tuple[int, int]], bool]]:
-        """Return (cells, next_arrived_by_walk) options from the standing cell.
+        state: int,
+    ) -> list[tuple[list[tuple[int, int]], bool, int]]:
+        """Return (cells, next_arrived_by_walk, state_after) from the standing cell.
 
         next_arrived_by_walk is true only for a one-cell orthogonal step. A ferry
-        jump and a multi-cell slide both land with it false.
+        jump and a multi-cell slide both land with it false. `state` is the state
+        after entering the standing cell.
         """
         if self.jia is not None and arrived_by_walk and (x, y) == self.jia:
             assert self.yi is not None
@@ -233,23 +317,29 @@ class Compiled:
             num = self.wps.get((yx, yy), 0)
             if num != 0 and num != next_n:
                 return []
+            if not self.can_enter(yx, yy, state):
+                return []
             if (yx, yy) == self.end and path_len + 1 != self.total:
                 return []
-            return [([(yx, yy)], False)]
+            return [([(yx, yy)], False, self.after_enter(yx, yy, state))]
 
-        moves: list[tuple[int, int, int, list[tuple[int, int]], bool]] = []
+        moves: list[tuple[int, int, int, list[tuple[int, int]], bool, int]] = []
         idx = self.index(x, y)
         for nx, ny, nbit, dx, dy in self.neigh[idx]:
             if visited & nbit:
                 continue
-            if not self.can_step(x, y, nx, ny, nbit, path_len):
+            if not self.can_step(x, y, nx, ny, nbit, path_len, state):
                 continue
             num = self.wps.get((nx, ny), 0)
             if num != 0 and num != next_n:
                 continue
+            if not self.can_enter(nx, ny, state):
+                continue
+            step_state = self.after_enter(nx, ny, state)
             cells = [(nx, ny)]
             if (nx, ny) in self.slides:
-                cells.extend(self.slide_extra(nx, ny, dx, dy, visited, path_len))
+                extra, step_state = self.slide_extra(nx, ny, dx, dy, visited, path_len, step_state)
+                cells.extend(extra)
             if any(cell == self.end for cell in cells[:-1]):
                 continue
             if cells[-1] == self.end and path_len + len(cells) != self.total:
@@ -268,9 +358,9 @@ class Compiled:
                 continue
             deg = (self.neigh_mask[self.index(nx, ny)] & ~visited).bit_count()
             arrived = len(cells) == 1
-            moves.append((deg, ny, nx, cells, arrived))
+            moves.append((deg, ny, nx, cells, arrived, step_state))
         moves.sort()
-        return [(cells, arrived) for _, _, _, cells, arrived in moves]
+        return [(cells, arrived, step_state) for _, _, _, cells, arrived, step_state in moves]
 
     def reachable(self, visited: int, x: int, y: int, must_jump: bool) -> bool:
         unvisited = self.full_mask ^ visited
@@ -309,12 +399,12 @@ def solve(
     *,
     connectivity: bool = True,
 ) -> list[list[tuple[int, int]]]:
-    """DFS Hamiltonian path with waypoint order, ferry, one-ways, slides, parity.
+    """DFS Hamiltonian path with waypoint order and the locked mechanics.
 
     find_all=False stops at the first solution. limit caps how many are kept.
     connectivity prunes positions that cannot reach every unvisited cell
-    (walls, one-ways, and the forced ferry jump; parity and slides stay
-    conservative so a legal path is not discarded).
+    (walls, one-ways, and the forced ferry jump; parity, slides, seal, burden,
+    and collapse stay conservative so a legal path is not discarded).
     """
     comp = Compiled(level)
     solutions: list[list[tuple[int, int]]] = []
@@ -324,7 +414,7 @@ def solve(
     deadline = None if timeout_s is None else time.monotonic() + timeout_s
     ticks = 0
 
-    def dfs(x: int, y: int, visited: int, next_n: int, arrived_by_walk: bool) -> None:
+    def dfs(x: int, y: int, visited: int, next_n: int, arrived_by_walk: bool, state: int) -> None:
         nonlocal ticks
         if solutions and not find_all:
             return
@@ -341,7 +431,9 @@ def solve(
         must_jump = comp.jia is not None and arrived_by_walk and (x, y) == comp.jia
         if connectivity and not comp.reachable(visited, x, y, must_jump):
             return
-        for cells, arrived in comp.legal_moves(x, y, visited, next_n, arrived_by_walk, path_len):
+        for cells, arrived, new_state in comp.legal_moves(
+            x, y, visited, next_n, arrived_by_walk, path_len, state
+        ):
             new_visited = visited
             nn = next_n
             for cx, cy in cells:
@@ -350,14 +442,14 @@ def solve(
                 num = comp.wps.get((cx, cy), 0)
                 if num == nn:
                     nn += 1
-            dfs(cells[-1][0], cells[-1][1], new_visited, nn, arrived)
+            dfs(cells[-1][0], cells[-1][1], new_visited, nn, arrived, new_state)
             del path[-len(cells) :]
             if solutions and not find_all:
                 return
             if len(solutions) >= limit:
                 return
 
-    dfs(start[0], start[1], start_mask, 2, False)
+    dfs(start[0], start[1], start_mask, 2, False, comp.initial_state())
     return solutions
 
 
@@ -371,19 +463,20 @@ def verify_path(level: dict, path: list[tuple[int, int]]) -> tuple[bool, str]:
     visited = comp.bit(path[0][0], path[0][1])
     next_n = 2
     arrived = False
+    state = comp.initial_state()
     index = 0
     while index < comp.total - 1:
         x, y = path[index]
-        options = comp.legal_moves(x, y, visited, next_n, arrived, index + 1)
-        matched: tuple[list[tuple[int, int]], bool] | None = None
-        for cells, next_arrived in options:
+        options = comp.legal_moves(x, y, visited, next_n, arrived, index + 1, state)
+        matched: tuple[list[tuple[int, int]], bool, int] | None = None
+        for cells, next_arrived, next_state in options:
             if path[index + 1 : index + 1 + len(cells)] == cells:
-                matched = (cells, next_arrived)
+                matched = (cells, next_arrived, next_state)
                 break
         if matched is None:
             nxt = path[index + 1] if index + 1 < len(path) else None
             return False, f"illegal step at index {index}: {path[index]} -> {nxt}"
-        cells, arrived = matched
+        cells, arrived, state = matched
         for cx, cy in cells:
             num = comp.wps.get((cx, cy), 0)
             if num and num != next_n:
@@ -451,8 +544,8 @@ def load_locked_levels() -> list[dict]:
     """Locked boards as solver levels, including mechanics levels.json drops.
 
     Uses convert_board only as the lossy waypoint/wall/parity projection, then
-    reattaches one_ways, ferry, and slide cells. Seal, burden, and collapse are
-    recorded as unsupported and are not given invented rules.
+    reattaches one_ways, ferry, slide cells, seal gates, burden, and collapse.
+    Coordinates in boards-locked are [row, col]; the solver uses x=col, y=row.
     """
     from build_levels import convert_board, dropped_mechanic_fields, iter_locked_boards
 
@@ -478,11 +571,46 @@ def load_locked_levels() -> list[dict]:
         level["slideCells"] = [
             {"x": int(c), "y": int(r)} for r, c in (board.get("slide_cells") or [])
         ]
+        level["sealGates"] = []
+        for gate in board.get("seal_gates") or []:
+            between = gate.get("between")
+            if not between:
+                continue
+            (r1, c1), (r2, c2) = between
+            level["sealGates"].append(
+                {"x1": int(c1), "y1": int(r1), "x2": int(c2), "y2": int(r2)}
+            )
+        level["tokenCells"] = [
+            {"x": int(c), "y": int(r)} for r, c in (board.get("token_cells") or [])
+        ]
+        burden = board.get("burden")
+        if burden:
+            lr, lc = burden["load_cell"]
+            ur, uc = burden["unload_cell"]
+            level["burden"] = {
+                "forbidden": [
+                    {"x": int(c), "y": int(r)} for r, c in (burden.get("forbidden_cells") or [])
+                ],
+                "load": {"x": int(lc), "y": int(lr)},
+                "unload": {"x": int(uc), "y": int(ur)},
+                "startLaden": bool(burden.get("start_laden")),
+            }
+        else:
+            level["burden"] = None
+        collapse = board.get("collapse")
+        if collapse:
+            (r1, c1), (r2, c2) = collapse["collapse_edge"]["between"]
+            tr, tc = collapse["trigger_rc"]
+            level["collapse"] = {
+                "trigger": {"x": int(tc), "y": int(tr)},
+                "edge": {"x1": int(c1), "y1": int(r1), "x2": int(c2), "y2": int(r2)},
+            }
+        else:
+            level["collapse"] = None
         level["storedPath"] = [(int(c), int(r)) for r, c in (board.get("path") or [])]
         raw_meta = board.get("sols_no_ferry")
         level["solsNoFerry"] = int(raw_meta) if isinstance(raw_meta, int) else None
         level["droppedFields"] = dropped_mechanic_fields(board)
-        level["unsupported"] = [name for name in UNSUPPORTED_FIELDS if name in level["droppedFields"]]
         levels.append(level)
     return levels
 
@@ -513,36 +641,35 @@ def run_gate(shipped_path: Path, *, timeout_s: float, cap: int = 2) -> int:
         return 2
 
     print(f"GATE locked+shipped levels={len(locked)} cap={cap} timeout={timeout_s}s")
-    print("Rules: ferry=forced one-way jump 甲→乙; one_ways reverse blocked; "
-          "slide=contiguous slide cells in the entry direction; parity on filled-before-step.")
+    print(
+        "Rules: ferry=forced one-way jump 甲→乙; one_ways reverse blocked; "
+        "slide=contiguous slide cells in the entry direction; parity on filled-before-step; "
+        "seal=gate edge opens after stepping a token cell; "
+        "burden=load→laden, unload→empty, laden blocks forbidden cells; "
+        "collapse=after the trigger cell the collapse edge is a wall."
+    )
     print("-" * 72)
 
     unsolvable: list[int] = []
     non_unique: list[int] = []
     still_unique: list[int] = []
-    unsupported_ids: list[int] = []
     stored_invalid: list[int] = []
     timed_out: list[int] = []
     meta_notes: list[str] = []
+    locked_eq = 0
 
     shipped_by_id = {int(level["id"]): level for level in shipped}
     for locked_level in locked:
         lid = int(locked_level["id"])
         shipped_level = shipped_by_id[lid]
         name = locked_level["name"]
-        unsupported = list(locked_level.get("unsupported") or [])
         dropped = list(locked_level.get("droppedFields") or [])
         stored = list(locked_level.get("storedPath") or [])
 
-        if unsupported:
-            unsupported_ids.append(lid)
-
         stored_ok, stored_reason = verify_path(locked_level, stored) if stored else (False, "missing stored path")
-        if not stored_ok and not unsupported:
+        if not stored_ok:
             stored_invalid.append(lid)
         stored_label = "OK" if stored_ok else "INVALID"
-        if unsupported:
-            stored_label = ("PARTIAL:" + stored_label)
 
         locked_sols, locked_state = _solve_capped(locked_level, cap, timeout_s)
         ship_sols, ship_state = _solve_capped(shipped_level, cap, timeout_s)
@@ -554,6 +681,8 @@ def run_gate(shipped_path: Path, *, timeout_s: float, cap: int = 2) -> int:
             ship_n = "TIMEOUT" if ship_sols is None else len(ship_sols)
         else:
             assert locked_sols is not None and ship_sols is not None
+            if stored_ok and len(locked_sols) == 1 and locked_sols[0] == stored:
+                locked_eq += 1
             locked_n = len(locked_sols)
             ship_n = len(ship_sols)
             if stored_ok and locked_n == 1 and locked_sols[0] != stored:
@@ -569,14 +698,10 @@ def run_gate(shipped_path: Path, *, timeout_s: float, cap: int = 2) -> int:
                 still_unique.append(lid)
 
         flags = [bucket]
-        if unsupported:
-            flags.append(
-                "UNSUPPORTED mechanic — not verified: " + ",".join(unsupported)
-            )
-        if not stored_ok and not unsupported:
+        if not stored_ok:
             flags.append(f"stored {stored_reason}")
         dropped_text = ",".join(dropped) if dropped else "-"
-        locked_text = f"{locked_n}" + (" partial" if unsupported else "")
+        locked_text = f"{locked_n}"
         print(
             f"#{lid} {name}  locked={locked_text} shipped={ship_n} "
             f"stored={stored_label}  {'  '.join(flags)}  dropped={dropped_text}",
@@ -608,7 +733,7 @@ def run_gate(shipped_path: Path, *, timeout_s: float, cap: int = 2) -> int:
     print(f"UNSOLVABLE: {_id_list(unsolvable)}")
     print(f"NON_UNIQUE: {_id_list(non_unique)}")
     print(f"STILL_UNIQUE: {_id_list(still_unique)}")
-    print(f"UNSUPPORTED: {_id_list(unsupported_ids)}")
+    print(f"LOCKED_UNIQUE_EQ_STORED: {locked_eq}/{len(locked)}")
     if meta_notes:
         print("META sols_no_ferry mismatches (reported, boards not modified):")
         for note in meta_notes:
@@ -623,7 +748,6 @@ def run_gate(shipped_path: Path, *, timeout_s: float, cap: int = 2) -> int:
         unsolvable=len(unsolvable),
         timed_out=len(timed_out),
         non_unique=len(non_unique),
-        unsupported=len(unsupported_ids),
         stored_invalid=len(stored_invalid),
         total=len(locked),
     )

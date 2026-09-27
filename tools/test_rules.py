@@ -460,12 +460,10 @@ class ShippedLevelPlaythroughTests(unittest.TestCase):
     def test_supported_locked_paths_replay(self) -> None:
         checked = 0
         for level in load_locked_levels():
-            if level["unsupported"]:
-                continue
             ok, why = verify_path(level, level["storedPath"])
             self.assertTrue(ok, f"#{level['id']} {level['name']} {why}")
             checked += 1
-        self.assertGreater(checked, 20)
+        self.assertEqual(checked, 100)
 
     def test_first_two_have_unique_solutions(self) -> None:
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
@@ -496,6 +494,30 @@ class FerryMechanicTests(unittest.TestCase):
         shipped_ok, shipped_why = verify_path(ship, locked["storedPath"])
         self.assertFalse(shipped_ok)
         self.assertIn("illegal step", shipped_why)
+
+
+class SealBurdenCollapseTests(unittest.TestCase):
+    """Locked seal, burden, and collapse: the stored path is the unique solution.
+
+    Rules match boards-locked seal_rule / burden_rule / collapse_rule:
+    a seal edge opens only after a token cell, load/unload toggles laden,
+    and the collapse edge becomes a wall after the trigger cell.
+    """
+
+    def test_locked_boards_stored_path_is_the_unique_solution(self) -> None:
+        wanted = (70, 79, 90, 93, 95, 97, 99)
+        locked = {int(level["id"]): level for level in load_locked_levels()}
+        for lid in wanted:
+            level = locked[lid]
+            self.assertTrue(
+                level.get("sealGates") or level.get("burden") or level.get("collapse"),
+                lid,
+            )
+            ok, why = verify_path(level, level["storedPath"])
+            self.assertTrue(ok, f"#{lid} {level['name']} {why}")
+            found = solve(level, find_all=True, limit=2, timeout_s=30)
+            self.assertEqual(len(found), 1, f"#{lid} {level['name']}")
+            self.assertEqual(found[0], level["storedPath"], lid)
 
 
 class VerifiedCatalogTests(unittest.TestCase):
@@ -559,7 +581,8 @@ class VerifiedCatalogTests(unittest.TestCase):
         self.assertIn("52,59,60,63,67,89", readme)
         self.assertIn("30,33,35,37,40,43,45,47,49,50,55,57,65,73,77,83,87,93,95,97,99", readme)
         self.assertIn("39,70,75,79,85,90", readme)
-        self.assertIn("UNSUPPORTED mechanic — not verified", readme)
+        self.assertIn("LOCKED_UNIQUE_EQ_STORED: 100/100", readme)
+        self.assertNotIn("UNSUPPORTED mechanic — not verified", readme)
         self.assertIn("sols_no_ferry", readme)
 
     def test_theme_tokens_match_handoff(self) -> None:
@@ -602,7 +625,9 @@ class VerifiedCatalogTests(unittest.TestCase):
         self.assertIn("bandClear: Int64 = 10", theme)
 
 
-# chapter-flow v1.3 + ch05-10-SHIP. Locked cards (徐州…北伐) are skin-only — no boards.
+# Mirror of chapter.cj ChapterCatalog. Every chapter is open with 10 boards:
+# levelStart = id * 10, levelCount = 10. isOpen is cleared >= levelStart.
+# Chapters 4–9 also have a skin preview (hasSkinPreview); that is separate from unlock.
 SHIP_CHAPTERS = (
     {
         "id": 0,
@@ -659,9 +684,9 @@ SHIP_CHAPTERS = (
         "friend": "刘备",
         "tension": "淮泗争粮",
         "city": "徐州·下邳",
-        "open": False,
+        "open": True,
         "levelStart": 20,
-        "levelCount": 0,
+        "levelCount": 10,
         "leftBust": "bust_p05_liubei",
         "leftFlag": "flag_p05_liu",
         "rightBust": "bust_p06_caocao",
@@ -680,9 +705,9 @@ SHIP_CHAPTERS = (
         "friend": "吕布",
         "tension": "下邳同仓",
         "city": "下邳",
-        "open": False,
-        "levelStart": 20,
-        "levelCount": 0,
+        "open": True,
+        "levelStart": 30,
+        "levelCount": 10,
         "leftBust": "bust_p07_lvbu",
         "leftFlag": "flag_p07_lv",
         "rightBust": "bust_p06_caocao",
@@ -701,9 +726,9 @@ SHIP_CHAPTERS = (
         "friend": "袁→备",
         "tension": "乌巢仓破、半印失散；北不可回",
         "city": "邺（乌巢仓影可辅）",
-        "open": False,
-        "levelStart": 20,
-        "levelCount": 0,
+        "open": True,
+        "levelStart": 40,
+        "levelCount": 10,
         "leftBust": "bust_p04_yuanshao",
         "leftFlag": "flag_p04_yuan",
         "rightBust": "bust_p06_caocao",
@@ -724,9 +749,9 @@ SHIP_CHAPTERS = (
         "friend": "刘表",
         "tension": "刘表辖下友道；不给曹营送",
         "city": "襄阳",
-        "open": False,
-        "levelStart": 20,
-        "levelCount": 0,
+        "open": True,
+        "levelStart": 50,
+        "levelCount": 10,
         "leftBust": "bust_p05_liubei",
         "leftFlag": "flag_p05_liu",
         "rightBust": "bust_p06_caocao",
@@ -747,9 +772,9 @@ SHIP_CHAPTERS = (
         "friend": "孙刘",
         "tension": "孙刘联军岸；不往乌林送曹营",
         "city": "柴桑",
-        "open": False,
-        "levelStart": 20,
-        "levelCount": 0,
+        "open": True,
+        "levelStart": 60,
+        "levelCount": 10,
         "leftBust": "bust_p08_sunquan",
         "leftFlag": "flag_p08_sun",
         "rightBust": "bust_p06_caocao",
@@ -770,9 +795,9 @@ SHIP_CHAPTERS = (
         "friend": "蜀",
         "tension": "峡江入川关隘递进；非曹粮道，勿挂曹脸",
         "city": "白水关（辅成都）",
-        "open": False,
-        "levelStart": 20,
-        "levelCount": 0,
+        "open": True,
+        "levelStart": 70,
+        "levelCount": 10,
         "leftBust": "bust_p05_liubei",
         "leftFlag": "flag_p05_liu",
         "rightBust": "bust_s01_guanai",
@@ -793,9 +818,9 @@ SHIP_CHAPTERS = (
         "friend": "诸葛",
         "tension": "两道分运：汉中关城 vs 南中北运",
         "city": "阳平关",
-        "open": False,
-        "levelStart": 20,
-        "levelCount": 0,
+        "open": True,
+        "levelStart": 80,
+        "levelCount": 10,
         "leftBust": "bust_p09_zhugeliang",
         "leftFlag": "flag_p09_zhuge",
         "rightBust": "bust_p06_caocao",
@@ -816,9 +841,9 @@ SHIP_CHAPTERS = (
         "friend": "诸葛",
         "tension": "对魏远征；街亭/空仓余韵",
         "city": "五丈原",
-        "open": False,
-        "levelStart": 20,
-        "levelCount": 0,
+        "open": True,
+        "levelStart": 90,
+        "levelCount": 10,
         "leftBust": "bust_p09_zhugeliang",
         "leftFlag": "flag_p09_zhuge",
         "rightBust": "bust_p10_simayi",
@@ -1023,17 +1048,27 @@ class ChapterFlowV13Tests(unittest.TestCase):
             "第9章 汉中南中",
             "第10章 北伐",
         ])
-        # Catalog.open = has boards / designed as openable, not current unlock.
+        # chapter.cj: every chapter is open, levelStart = id * 10, levelCount = 10.
+        # isOpen is cleared >= levelStart. 平原 at 10, 徐州 at 20, 吕布 at 30, …, 北伐 at 90.
+        self.assertEqual([ch["open"] for ch in SHIP_CHAPTERS], [True] * 10)
         self.assertEqual(
-            [ch["open"] for ch in SHIP_CHAPTERS],
-            [True, True, False, False, False, False, False, False, False, False],
+            [(ch["levelStart"], ch["levelCount"]) for ch in SHIP_CHAPTERS],
+            [(i * 10, 10) for i in range(10)],
         )
         self.assertTrue(chapter_selectable(0, 0))
         self.assertFalse(chapter_selectable(1, 0))
+        self.assertTrue(chapter_selectable(1, 10))
         self.assertFalse(chapter_selectable(2, 0))
+        self.assertFalse(chapter_selectable(2, 10))
+        self.assertTrue(chapter_selectable(2, 20))
         self.assertFalse(chapter_selectable(3, 0))
+        self.assertFalse(chapter_selectable(3, 20))
+        self.assertTrue(chapter_selectable(3, 30))
         self.assertFalse(chapter_selectable(4, 20))
+        self.assertTrue(chapter_selectable(4, 40))
         self.assertFalse(chapter_selectable(9, 20))
+        self.assertFalse(chapter_selectable(9, 80))
+        self.assertTrue(chapter_selectable(9, 90))
         self.assertEqual(chapter_by_id(7)["rightFlag"], "flag_gate_pattern")
         self.assertNotEqual(chapter_by_id(7)["rightFlag"], "flag_s01_guan")
         self.assertEqual(chapter_by_id(8)["leftFlag"], "flag_p09_zhuge")
@@ -1042,7 +1077,7 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertIn("司马", chapter_by_id(9)["listSubtitle"])
 
     def test_pingyuan_opens_only_after_zhuojun_cleared(self) -> None:
-        """平原 可入 iff 涿郡 10 驿 cleared; later chapters stay locked."""
+        """平原 opens at cleared >= 10; 徐州 at >= 20; each chapter at id * 10."""
         for cleared in (0, 3, 9):
             self.assertTrue(chapter_is_open(0, cleared), cleared)
             self.assertFalse(chapter_is_open(1, cleared), cleared)
@@ -1054,10 +1089,15 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertEqual(chapter_open_count(10), 2)
         self.assertEqual(chapter_open_footer(10), "已开 2 · 未启 8 · 点开章入驿程")
         self.assertFalse(chapter_is_open(2, 10))
-        self.assertFalse(chapter_is_open(2, 20))
+        self.assertTrue(chapter_is_open(2, 20))
+        self.assertEqual(chapter_open_count(20), 3)
         self.assertFalse(chapter_is_open(3, 20))
+        self.assertTrue(chapter_is_open(3, 30))
         for chapter_id in range(4, 10):
+            start = chapter_id * 10
             self.assertFalse(chapter_is_open(chapter_id, 20), chapter_id)
+            self.assertFalse(chapter_is_open(chapter_id, start - 1), chapter_id)
+            self.assertTrue(chapter_is_open(chapter_id, start), chapter_id)
             self.assertTrue(chapter_has_skin_preview(chapter_id), chapter_id)
         self.assertFalse(chapter_has_skin_preview(2))
         self.assertFalse(chapter_has_skin_preview(3))
@@ -1069,14 +1109,16 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertNotIn("平原", chapter_current_label(0, 0, levels))
         self.assertEqual(chapter_current_label(1, 10, levels), levels[10]["name"])
 
-    def test_locked_chapters_have_no_boards(self) -> None:
+    def test_each_chapter_has_ten_boards(self) -> None:
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
-        for chapter_id in range(2, 10):
-            self.assertEqual(chapter_levels(levels, chapter_id), [])
-        self.assertEqual(len(chapter_levels(levels, 0)), 10)
-        self.assertEqual(len(chapter_levels(levels, 1)), 10)
-        # The helper above follows the chapter-flow fixture (levelCount 0 after 平原).
-        # levels.json itself is the full locked catalog.
+        for chapter_id in range(10):
+            start = chapter_id * 10
+            boards = chapter_levels(levels, chapter_id)
+            self.assertEqual(
+                [int(lv["id"]) for lv in boards],
+                list(range(start, start + 10)),
+                chapter_id,
+            )
         from build_levels import EXPECTED_NAMES
 
         self.assertEqual(len(levels), len(EXPECTED_NAMES))
@@ -1335,17 +1377,21 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertLess(drag.index("return"), drag.index("tryStep"))
 
     def test_progress_lock_intact_after_bands(self) -> None:
-        """PR #15: 平原 locked while cleared<10; 徐州/吕布 stay closed."""
+        """平原 opens at cleared >= 10; 徐州 at >= 20; each later chapter at id * 10."""
         for cleared in (0, 3, 9):
             self.assertTrue(chapter_is_open(0, cleared), cleared)
             self.assertFalse(chapter_is_open(1, cleared), cleared)
             self.assertFalse(chapter_selectable(1, cleared), cleared)
         self.assertTrue(chapter_is_open(1, 10))
-        self.assertFalse(chapter_is_open(2, 20))
+        self.assertFalse(chapter_is_open(2, 10))
+        self.assertTrue(chapter_is_open(2, 20))
         self.assertFalse(chapter_is_open(3, 20))
+        self.assertTrue(chapter_is_open(3, 30))
         for chapter_id in range(4, 10):
+            start = chapter_id * 10
             self.assertFalse(chapter_is_open(chapter_id, 9), chapter_id)
             self.assertFalse(chapter_is_open(chapter_id, 20), chapter_id)
+            self.assertTrue(chapter_is_open(chapter_id, start), chapter_id)
         src = (ROOT / "entry/src/main/cangjie/chapter.cj").read_text(encoding="utf-8")
         self.assertIn("func isOpen(", src)
         self.assertIn("cleared >= ch.levelStart", _func_body(src, "isOpen"))
