@@ -34,8 +34,77 @@ ST02_WALLS = [
     {"x1": 2, "y1": 3, "x2": 2, "y2": 4},
 ]
 
+# Mechanic fields the lossy levels.json projection does not emit.
+# parity_edges and step_limit are kept (parityEdges / stepLimit).
+DROPPED_MECHANIC_FIELDS = (
+    "one_ways",
+    "ferry",
+    "slide_cells",
+    "seal_gates",
+    "token_cells",
+    "burden",
+    "collapse",
+)
 
-def convert_board(b: dict, global_id: int) -> dict:
+
+class DroppedMechanicsError(Exception):
+    """convert_board refused to silently omit mechanic fields."""
+
+    def __init__(self, rows: list[tuple[int, str, list[str]]]) -> None:
+        self.rows = rows
+        super().__init__(format_dropped_mechanics(rows))
+
+
+def mechanic_value_present(value: object) -> bool:
+    """True when a locked-board field carries a mechanic, not an empty placeholder."""
+    if value is None:
+        return False
+    if isinstance(value, (list, tuple, dict)) and len(value) == 0:
+        return False
+    return True
+
+
+def dropped_mechanic_fields(board: dict) -> list[str]:
+    return [
+        name
+        for name in DROPPED_MECHANIC_FIELDS
+        if mechanic_value_present(board.get(name))
+    ]
+
+
+def format_dropped_mechanics(rows: list[tuple[int, str, list[str]]]) -> str:
+    lines = ["convert_board would drop mechanic fields:"]
+    for gid, name, fields in rows:
+        lines.append(f"  id={gid} {name} dropped={','.join(fields)}")
+    return "\n".join(lines)
+
+
+def iter_locked_boards() -> list[tuple[int, dict]]:
+    missing = [fname for fname in LOCKED_FILES if not (LOCKED_DIR / fname).is_file()]
+    if missing:
+        print(
+            f"error: missing locked board file(s) under {LOCKED_DIR}: {', '.join(missing)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    boards: list[tuple[int, dict]] = []
+    for ch_idx, fname in enumerate(LOCKED_FILES):
+        data = json.loads((LOCKED_DIR / fname).read_text(encoding="utf-8"))
+        for tip_idx, board in enumerate(data["boards"]):
+            boards.append((ch_idx * 10 + tip_idx, board))
+    return boards
+
+
+def convert_board(b: dict, global_id: int, *, allow_dropped_mechanics: bool = False) -> dict:
+    """Project one locked board into the levels.json object.
+
+    Fails by default when mechanic fields would be omitted. The returned object
+    stays the historical lossy shape (no one_ways/ferry/slide/seal/burden/collapse)
+    so an allowed projection remains byte-identical to the shipped catalog.
+    """
+    dropped = dropped_mechanic_fields(b)
+    if dropped and not allow_dropped_mechanics:
+        raise DroppedMechanicsError([(global_id, str(b.get("name", "")), dropped)])
     wps = [{"n": int(n), "x": int(c), "y": int(r)} for r, c, n in b["numbers_rc"]]
     wps.sort(key=lambda item: item["n"])
     walls = []
@@ -69,25 +138,27 @@ def convert_board(b: dict, global_id: int) -> dict:
     }
 
 
-def load_source_levels() -> list[dict]:
-    missing = [fname for fname in LOCKED_FILES if not (LOCKED_DIR / fname).is_file()]
-    if missing:
-        print(
-            f"error: missing locked board file(s) under {LOCKED_DIR}: {', '.join(missing)}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    levels = []
-    for ch_idx, fname in enumerate(LOCKED_FILES):
-        fpath = LOCKED_DIR / fname
-        data = json.loads(fpath.read_text(encoding="utf-8"))
-        for tip_idx, b in enumerate(data["boards"]):
-            global_id = ch_idx * 10 + tip_idx
-            levels.append(convert_board(b, global_id))
+def load_source_levels(*, allow_dropped_mechanics: bool = False) -> list[dict]:
+    """Project boards-locked into the levels.json shape.
+
+    Default refuses when a mechanic field would be omitted. Pass
+    allow_dropped_mechanics=True only to reproduce the current lossy snapshot.
+    """
+    dropped_rows: list[tuple[int, str, list[str]]] = []
+    levels: list[dict] = []
+    for global_id, board in iter_locked_boards():
+        dropped = dropped_mechanic_fields(board)
+        if dropped:
+            dropped_rows.append((global_id, str(board.get("name", "")), dropped))
+        if dropped and not allow_dropped_mechanics:
+            continue
+        levels.append(convert_board(board, global_id, allow_dropped_mechanics=True))
+    if dropped_rows and not allow_dropped_mechanics:
+        raise DroppedMechanicsError(dropped_rows)
     return levels
 
 
-EXPECTED_NAMES = tuple(lv["name"] for lv in load_source_levels())
+EXPECTED_NAMES = tuple(board["name"] for _, board in iter_locked_boards())
 
 
 def _cj_bool(value: bool) -> str:
@@ -181,7 +252,9 @@ def load_verified() -> list[dict]:
         raise SystemExit("refusing to emit: levels.json must not contain _src fields")
     if any(lv["name"] == "汽梁" for lv in levels):
         raise SystemExit("refusing to emit: 汽梁 is a typo; use 汴梁")
-    source_levels = load_source_levels()
+    # Byte-compare against the lossy projection. Regeneration itself is refused
+    # in main() unless --allow-dropped-mechanics is set.
+    source_levels = load_source_levels(allow_dropped_mechanics=True)
     for idx, (lv, src_lv) in enumerate(zip(levels, source_levels)):
         if lv["name"] != src_lv["name"]:
             raise SystemExit(
@@ -220,6 +293,23 @@ def load_verified() -> list[dict]:
     return levels
 
 
+def _print_dropped(rows: list[tuple[int, str, list[str]]], *, allowed: bool) -> None:
+    header = (
+        "WARNING: dropping mechanic fields because --allow-dropped-mechanics was set:"
+        if allowed
+        else "FAIL: convert_board would drop mechanic fields (refusing to emit):"
+    )
+    stream = sys.stdout if allowed else sys.stderr
+    print(header, file=stream)
+    for gid, name, fields in rows:
+        print(f"  id={gid} {name} dropped={','.join(fields)}", file=stream)
+    if not allowed:
+        print(
+            "Pass --allow-dropped-mechanics to project the current lossy catalog anyway.",
+            file=stream,
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Emit Cangjie LevelCatalog from levels.json.")
     parser.add_argument(
@@ -227,9 +317,24 @@ def main() -> None:
         action="store_true",
         help="Rebuild entry/src/main/resources/rawfile/levels.json from boards-locked/",
     )
+    parser.add_argument(
+        "--allow-dropped-mechanics",
+        action="store_true",
+        help="Permit converting boards while omitting mechanic fields that levels.json does not store. Prints every omitted field. Without this flag the command exits non-zero and writes nothing.",
+    )
     args = parser.parse_args()
+    dropped_rows: list[tuple[int, str, list[str]]] = []
+    for global_id, board in iter_locked_boards():
+        dropped = dropped_mechanic_fields(board)
+        if dropped:
+            dropped_rows.append((global_id, str(board.get("name", "")), dropped))
+    if dropped_rows and not args.allow_dropped_mechanics:
+        _print_dropped(dropped_rows, allowed=False)
+        sys.exit(1)
+    if dropped_rows and args.allow_dropped_mechanics:
+        _print_dropped(dropped_rows, allowed=True)
     if args.sync_json:
-        source_levels = load_source_levels()
+        source_levels = load_source_levels(allow_dropped_mechanics=True)
         JSON_PATH.write_text(
             json.dumps(source_levels, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",

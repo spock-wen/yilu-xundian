@@ -19,7 +19,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from solve_levels import load_levels, report_solve_exit, solve, wall_key  # noqa: E402
+from solve_levels import (  # noqa: E402
+    load_levels,
+    load_locked_levels,
+    report_solve_exit,
+    solve,
+    verify_path,
+    wall_key,
+)
 
 
 class Cell:
@@ -390,12 +397,17 @@ class ParityRuleTests(unittest.TestCase):
         self.assertEqual(g.filled(), 2)
 
     def test_edge_matches_in_both_directions(self) -> None:
+        """(0,0) and (0,2) are the same chessboard color, so a simple path arrives with odd filled.
+
+        require_odd therefore allows the reverse step (0,2) -> (0,1). The edge
+        was stored as (0,1)-(0,2); acceptance shows ParityEdge.matches both orders.
+        """
         g = PatrolGame(self.level([self.edge(0, 1, 0, 2, True)]))
         for cell in (Cell(0, 0), Cell(1, 0), Cell(1, 1), Cell(1, 2), Cell(0, 2)):
             self.assertTrue(g.try_step(cell))
-        self.assertEqual(g.filled(), 4)
-        self.assertFalse(g.try_step(Cell(0, 1)))
-        self.assertEqual(g.last_reject_parity, 1)
+        self.assertEqual(g.filled(), 5)
+        self.assertTrue(g.try_step(Cell(0, 1)))
+        self.assertEqual(g.last_reject_parity, 0)
 
     def test_reject_code_clears_after_undo_clear_and_success(self) -> None:
         g = PatrolGame(self.level([self.edge(0, 0, 0, 1, False)]))
@@ -410,51 +422,50 @@ class ParityRuleTests(unittest.TestCase):
         self.assertEqual(g.last_reject_parity, 0)
 
     def test_locked_shipped_paths_obey_parity(self) -> None:
-        """假绿 guard: every locked parity board's own solution must still play."""
-        from build_levels import LOCKED_DIR, LOCKED_FILES, convert_board
-
+        """Stored locked paths, including ferry jumps, still satisfy parity edges."""
         checked = 0
-        for ch_idx, fname in enumerate(LOCKED_FILES):
-            data = json.loads((LOCKED_DIR / fname).read_text(encoding="utf-8"))
-            for tip_idx, b in enumerate(data["boards"]):
-                if not b.get("parity_edges"):
-                    continue
-                game = PatrolGame(convert_board(b, ch_idx * 10 + tip_idx))
-                for r, c in b["path"]:
-                    self.assertTrue(
-                        game.try_step(Cell(c, r)),
-                        f"{b['name']} rejected ({r},{c}) at filled={game.filled()}",
-                    )
-                self.assertTrue(game.is_win(), f"{b['name']} did not win on its shipped path")
-                checked += 1
+        for level in load_locked_levels():
+            if not level.get("parityEdges"):
+                continue
+            ok, why = verify_path(level, level["storedPath"])
+            self.assertTrue(ok, f"{level['name']} {why}")
+            checked += 1
         self.assertGreaterEqual(checked, 5)
 
 
 class SolverContractTests(unittest.TestCase):
-    def test_timeout_is_not_a_ship_failure(self) -> None:
-        """README: TIMEOUT keeps the board; only a proven no-solution fails."""
+    def test_timeout_and_unverified_mechanics_fail_the_gate(self) -> None:
+        """Timeout keeps the board file, but it is not a pass. Unsupported mechanics are not a pass."""
         with redirect_stdout(io.StringIO()):
-            self.assertEqual(report_solve_exit(20, 0, 0), 0)
-            self.assertEqual(report_solve_exit(20, 0, 1), 0)
-            self.assertEqual(report_solve_exit(20, 1, 0), 1)
-            self.assertEqual(report_solve_exit(20, 1, 2), 1)
+            self.assertEqual(report_solve_exit(0, 0), 0)
+            self.assertEqual(report_solve_exit(0, 1), 1)
+            self.assertEqual(report_solve_exit(1, 0), 1)
+            self.assertEqual(report_solve_exit(0, 0, non_unique=1), 1)
+            self.assertEqual(report_solve_exit(0, 0, unsupported=1), 1)
+            self.assertEqual(report_solve_exit(0, 0, stored_invalid=1), 1)
 
 
 class ShippedLevelPlaythroughTests(unittest.TestCase):
-    def test_solver_path_wins_every_solvable_shipped_level(self) -> None:
+    def test_catalog_is_the_full_locked_set(self) -> None:
+        from build_levels import EXPECTED_NAMES
+
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
-        self.assertEqual(len(levels), 20)
-        for level in levels:
-            found = solve(level, timeout_s=8.0)
-            self.assertTrue(found, f"{level['name']} has no solution")
-            path = found[0]
-            game = PatrolGame(level)
-            for x, y in path:
-                self.assertTrue(
-                    game.try_step(Cell(x, y)),
-                    f"{level['name']} rejected ({x},{y}) at size={game.path.size()}",
-                )
-            self.assertTrue(game.is_win(), f"{level['name']} did not win after solver path")
+        locked = load_locked_levels()
+        self.assertEqual(len(levels), len(EXPECTED_NAMES))
+        self.assertEqual(len(levels), len(locked))
+        self.assertGreater(len(levels), 20)
+        self.assertEqual([int(lv["id"]) for lv in levels], list(range(len(levels))))
+        self.assertEqual([lv["name"] for lv in levels], [lv["name"] for lv in locked])
+
+    def test_supported_locked_paths_replay(self) -> None:
+        checked = 0
+        for level in load_locked_levels():
+            if level["unsupported"]:
+                continue
+            ok, why = verify_path(level, level["storedPath"])
+            self.assertTrue(ok, f"#{level['id']} {level['name']} {why}")
+            checked += 1
+        self.assertGreater(checked, 20)
 
     def test_first_two_have_unique_solutions(self) -> None:
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
@@ -463,15 +474,39 @@ class ShippedLevelPlaythroughTests(unittest.TestCase):
             self.assertEqual(len(found), 1, f"{level['name']} should have a unique solution")
 
 
+class FerryMechanicTests(unittest.TestCase):
+    """Ferry is a forced one-way jump: stepping on 甲 must continue on 乙."""
+
+    def test_locked_52_stored_path_is_the_unique_solution_shipped_has_none(self) -> None:
+        locked = next(level for level in load_locked_levels() if int(level["id"]) == 52)
+        self.assertEqual(locked["name"], "荆州·樊城·第 1 驿")
+        self.assertIsNotNone(locked["ferry"])
+        self.assertEqual(locked["droppedFields"], ["ferry"])
+        ok, why = verify_path(locked, locked["storedPath"])
+        self.assertTrue(ok, why)
+        found = solve(locked, find_all=True, limit=2, timeout_s=30)
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0], locked["storedPath"])
+
+        shipped = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
+        ship = next(level for level in shipped if int(level["id"]) == 52)
+        self.assertEqual(ship["name"], locked["name"])
+        self.assertFalse(ship.get("ferry"))
+        self.assertEqual(solve(ship, find_all=True, limit=2, timeout_s=30), [])
+        shipped_ok, shipped_why = verify_path(ship, locked["storedPath"])
+        self.assertFalse(shipped_ok)
+        self.assertIn("illegal step", shipped_why)
+
+
 class VerifiedCatalogTests(unittest.TestCase):
-    """Lock the 20-board 涿郡+平原 catalog (ids 0..19)."""
+    """Lock the full ch1..ch10 catalog (ids follow boards-locked, not a hard-coded 20)."""
 
     def test_json_is_the_verified_table(self) -> None:
         from build_levels import EXPECTED_NAMES, ST02_WALLS, emit, load_verified
 
         levels = load_verified()
-        self.assertEqual(len(levels), 20)
-        self.assertEqual([int(lv["id"]) for lv in levels], list(range(20)))
+        self.assertEqual(len(levels), len(EXPECTED_NAMES))
+        self.assertEqual([int(lv["id"]) for lv in levels], list(range(len(levels))))
         self.assertEqual([lv["name"] for lv in levels], list(EXPECTED_NAMES))
         self.assertNotIn("长安", [lv["name"] for lv in levels])
         self.assertNotIn("洛阳", [lv["name"] for lv in levels])
@@ -510,21 +545,22 @@ class VerifiedCatalogTests(unittest.TestCase):
         self.assertNotIn("文书达驿", ui)
 
     def test_readme_tracks_locked_catalog(self) -> None:
-        """README must describe the 20-board 涿郡+平原 catalog, not the retired prototype."""
+        """README names the full-catalog gate failure, not a 20/20 pass."""
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("涿郡·涿", readme)
         self.assertIn("平原·祝阿·第 2 驿", readme)
-        self.assertIn("20/20", readme)
         self.assertIn("cleared >= 10", readme)
+        self.assertNotIn("20/20", readme)
         self.assertNotIn("12/12", readme)
         self.assertNotIn("13/13", readme)
         self.assertNotIn("{驿名}·第 N 驿", readme)
         self.assertNotIn("| 0 | 长安（教程） |", readme)
         self.assertNotIn("汽梁", readme)
-        from build_levels import EXPECTED_NAMES
-
-        for name in EXPECTED_NAMES:
-            self.assertIn(name, readme)
+        self.assertIn("52,59,60,63,67,89", readme)
+        self.assertIn("30,33,35,37,40,43,45,47,49,50,55,57,65,73,77,83,87,93,95,97,99", readme)
+        self.assertIn("39,70,75,79,85,90", readme)
+        self.assertIn("UNSUPPORTED mechanic — not verified", readme)
+        self.assertIn("sols_no_ferry", readme)
 
     def test_theme_tokens_match_handoff(self) -> None:
         theme = (ROOT / "entry/src/main/cangjie/theme.cj").read_text(encoding="utf-8")
@@ -1039,9 +1075,14 @@ class ChapterFlowV13Tests(unittest.TestCase):
             self.assertEqual(chapter_levels(levels, chapter_id), [])
         self.assertEqual(len(chapter_levels(levels, 0)), 10)
         self.assertEqual(len(chapter_levels(levels, 1)), 10)
+        # The helper above follows the chapter-flow fixture (levelCount 0 after 平原).
+        # levels.json itself is the full locked catalog.
+        from build_levels import EXPECTED_NAMES
+
+        self.assertEqual(len(levels), len(EXPECTED_NAMES))
         names = [lv["name"] for lv in levels]
-        prefixes = ("徐州", "吕布", "投袁", "荆州", "赤壁", "入蜀", "汉中", "北伐", "五丈原")
-        self.assertFalse(any(n.startswith(prefix) for n in names for prefix in prefixes))
+        for prefix in ("徐州", "吕布", "投袁", "荆州", "赤壁", "入蜀", "汉中", "北伐"):
+            self.assertTrue(any(n.startswith(prefix) for n in names), prefix)
 
     def test_station_names_and_sizes_come_from_json_only(self) -> None:
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
@@ -1058,7 +1099,12 @@ class ChapterFlowV13Tests(unittest.TestCase):
             "涿郡·安喜",
             "涿郡·安喜·第 2 驿",
         ])
-        self.assertTrue(all((int(lv["cols"]), int(lv["rows"])) == (6, 6) for lv in levels))
+        self.assertTrue(
+            all((int(lv["cols"]), int(lv["rows"])) == (6, 6) for lv in levels if int(lv["id"]) < 30)
+        )
+        self.assertTrue(
+            all((int(lv["cols"]), int(lv["rows"])) == (7, 7) for lv in levels if int(lv["id"]) >= 30)
+        )
         self.assertTrue(all(is_dessert_level(lv) is (int(lv["id"]) == 4) for lv in zhuo))
         self.assertTrue(is_dessert_level(zhuo[4]))
         self.assertFalse(is_dessert_level(zhuo[5]))
@@ -1383,20 +1429,61 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertNotIn("flag-s01-guan.png", media_names)
         self.assertNotIn("flag_s01_guan.png", media_names)
 
-    def test_levels_json_unchanged_twenty_boards(self) -> None:
+    def test_levels_json_matches_locked_names(self) -> None:
         from build_levels import EXPECTED_NAMES, load_verified
 
         levels = load_verified()
         self.assertEqual([lv["name"] for lv in levels], list(EXPECTED_NAMES))
+        self.assertEqual(len(levels), len(EXPECTED_NAMES))
         blob = (ROOT / "entry/src/main/resources/rawfile/levels.json").read_text(encoding="utf-8")
         self.assertNotIn("dessert", blob)
-        self.assertNotIn("徐州", blob)
-        self.assertNotIn("吕布", blob)
-        self.assertNotIn("投袁", blob)
-        self.assertNotIn("襄阳", blob)
-        self.assertNotIn("赤壁", blob)
-        self.assertNotIn("白水关", blob)
-        self.assertNotIn("五丈原", blob)
+        self.assertIn("徐州·郯", blob)
+        self.assertIn("北伐·五丈原", blob)
+
+
+class DroppedMechanicTests(unittest.TestCase):
+    def test_convert_board_refuses_ferry_unless_allowed(self) -> None:
+        from build_levels import DroppedMechanicsError, convert_board, iter_locked_boards
+
+        board = next(b for gid, b in iter_locked_boards() if gid == 52)
+        with self.assertRaises(DroppedMechanicsError) as caught:
+            convert_board(board, 52)
+        self.assertEqual(caught.exception.rows, [(52, "荆州·樊城·第 1 驿", ["ferry"])])
+        projected = convert_board(board, 52, allow_dropped_mechanics=True)
+        self.assertNotIn("ferry", projected)
+        self.assertNotIn("oneWays", projected)
+
+    def test_build_cli_refuses_without_flag_and_allow_keeps_bytes(self) -> None:
+        import hashlib
+        import subprocess
+
+        paths = [
+            ROOT / "entry/src/main/resources/rawfile/levels.json",
+            ROOT / "entry/src/main/cangjie/levels.cj",
+        ]
+        before = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+        refused = subprocess.run(
+            ["python3", "tools/build_levels.py"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("id=52", refused.stderr)
+        self.assertIn("dropped=ferry", refused.stderr)
+        self.assertGreaterEqual(refused.stderr.count("\n  id="), 33)
+        allowed = subprocess.run(
+            ["python3", "tools/build_levels.py", "--allow-dropped-mechanics"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(allowed.returncode, 0, allowed.stderr)
+        self.assertIn("id=52", allowed.stdout)
+        after = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+        self.assertEqual(before, after)
 
 
 def play_paper(screen: int, level_index: int, chapter_index: int) -> str:
