@@ -59,15 +59,14 @@ public func registerYiluFonts(): Int64 {
             LibC.free(nameB)
             LibC.free(srcB)
 
-            // PENDING: YiluSans subsets are delivered by design; build scripts fail if the files are missing.
-            let nameC = LibC.mallocCString(Theme.sansRegular)
-            let srcC = LibC.mallocCString("resource://RAWFILE/YiluSans-Regular.otf")
+            let nameC = LibC.mallocCString(Theme.sans)
+            let srcC = LibC.mallocCString("resource://RAWFILE/YiluSans-Regular.ttf")
             regFont(nameC, srcC)
             LibC.free(nameC)
             LibC.free(srcC)
 
             let nameD = LibC.mallocCString(Theme.sansMedium)
-            let srcD = LibC.mallocCString("resource://RAWFILE/YiluSans-Medium.otf")
+            let srcD = LibC.mallocCString("resource://RAWFILE/YiluSans-Medium.ttf")
             regFont(nameD, srcD)
             LibC.free(nameD)
             LibC.free(srcD)

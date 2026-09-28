@@ -7,11 +7,11 @@
 ## 目录结构
 
 - `lib/`：应用源码与模块逻辑。包含页面入口、关卡数据加载及与引擎交互的逻辑。
-- `fonts/`：精简后的字形子集字体文件（`YiluSerif-Regular.otf`、`YiluSerif-Bold.otf`；`YiluSans-Regular.otf`、`YiluSans-Medium.otf` 待设计交付，见 `fonts/PENDING_SANS.md`）、字表定义（`charset.txt`；`charset_serif.txt` / `charset_sans.txt` 由 `check_fonts.py` 自动生成）与开源许可（`OFL.txt`）。
+- `fonts/`：精简后的字形子集字体文件（`YiluSerif-Regular.otf`、`YiluSerif-Bold.otf`；`YiluSans-Regular.ttf`、`YiluSans-Medium.ttf`）、字表定义（`charset.txt`；`charset_serif.txt` / `yilu_sans_chars.txt` 由 `check_fonts.py` 自动生成）与开源许可（`OFL.txt`）。
 - `scripts/`：工具脚本。
   - `build_from_repo.sh`：**唯一文档化的构建命令**（见下文）。
   - `sync_to_keels.sh`：将源码、共用引擎、关卡 JSON 与资源同步至 Keels 工程（仅拷贝代码引用到的 PNG，并清除 rawfile 目录中过期的未引用 PNG）。
-  - `check_fonts.py`：逐字族（serif/sans）严格字形覆盖检查，无任何回退；写出生成 `charset_serif.txt` / `charset_sans.txt`。
+  - `check_fonts.py`：逐字族（serif/sans）严格字形覆盖检查，无任何回退；写出生成 `charset_serif.txt` / `yilu_sans_chars.txt`。
   - `subset_fonts.py`：基于实际关卡与代码文本提取字符集并子集化 Noto Serif SC 字体。
 
 ## 环境准备
@@ -28,13 +28,13 @@
 在任意工作目录运行：
 
 ```bash
-mobile/cjmp/scripts/build_from_repo.sh [--out DIR] [--android] [--ios] [--pending-sans-ok]
+mobile/cjmp/scripts/build_from_repo.sh [--out DIR] [--android] [--ios] 
 ```
 
 - 默认同时构建双平台；`--android` / `--ios` 只构建对应平台。
 - 默认输出目录为 `<仓库>/mobile/cjmp/.host/`（已被 `.gitignore` 忽略），可用 `--out` 覆盖。
 - 脚本会自动完成：创建 Keels 工程 → **打两个已知模板补丁**（见下）→ 同步源码与资源 → `check_level.py` 与 `check_fonts.py` 校验 → `keels build apk` / `keels build ios-sim` → 打印产物路径、SHA-256 与包名。
-- 最终输出 `BUILD_FROM_REPO OK`；若带了 `--pending-sans-ok` 且两个 sans 字体仍缺失，则输出带 PENDING 横幅的 `BUILD_FROM_REPO OK (PENDING SANS)`，**不可用于发布**。
+- 最终输出 `BUILD_FROM_REPO OK`。
 
 ## 已知 Keels 模板补丁（脚本自动处理）
 
@@ -63,11 +63,9 @@ SVG 图标（`icon-undo`、`icon-reset`）与字体的同步行为不变。
 ## 逐字族字体检查（无回退）
 
 - serif ← `serifFamily()` / `serifBoldFamily()` / `Theme.serif` / `Theme.serifBold`
-- sans ← `sansFamily()` / `sansMediumFamily()` / `Theme.sansRegular` / `Theme.sansMedium`
+- sans ← `sansFamily()` / `sansMediumFamily()` / `Theme.sans` / `Theme.sansMedium`
 
 可选中的字符集来自解析 `Text(...)` / `Button(...)` 及其后链式 `.fontFamily(...)`：静态字符串按其字面字符计入；含 `${...}` 插值或非字面量表达式则计入「动态数据字符集」（chapter.cj 全部字符串字面量 + levels.json 所有关卡 `name` + 数字 0-9 + 全部可打印 ASCII）。任何未被 `.fontFamily(...)` 覆盖的 `Text`/`Button` 视为错误（`NO_FAMILY` —— 全部文字必须使用内置字体，绝不允许系统字体）。
-
-sans 两个字体文件全部缺失时，构建可用 `--pending-sans-ok` 宽松通过（exit 3，结果不可发布）；只缺其中一个仍然失败。详见 `fonts/PENDING_SANS.md`。
 
 ## 已知问题与变通方案 (Workarounds)
 
@@ -80,4 +78,6 @@ sans 两个字体文件全部缺失时，构建可用 `--pending-sans-ok` 宽松
 
 ## 字体许可
 
-字体基于 Noto Serif SC，遵循 SIL Open Font License 1.1 开源协议。详情请参阅 `fonts/OFL.txt`。
+字体基于 Noto Serif SC 与 Noto Sans SC (variable, google/fonts ofl/notosanssc @ a85815a, instanced 400/500, subset 346 chars by design)，遵循 SIL Open Font License 1.1 开源协议。详情请参阅 `fonts/OFL.txt`。
+- **YiluSerif**: Noto Serif SC 子集。
+- **YiluSans**: Noto Sans SC 400/500 子集，由设计交付，sha256: 808b5efe87f8 (check_glyphs.py)。

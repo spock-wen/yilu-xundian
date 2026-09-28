@@ -72,7 +72,7 @@ class EntryView {
             this.fontsDone = true
             this.fontHandle = registerYiluFonts()
         }
-        return Theme.sansRegular
+        return Theme.sans
     }
 
     func sansMediumFamily(): String {
@@ -494,6 +494,7 @@ class EntryView {
                 if (this.levels.size == 0) {
                     Text(LevelCatalog.loadError())
                         .fontSize(11)
+                        .lineHeight(15)
                         .fontColor(Theme.vermillion)
                         .fontFamily(this.sansFamily())
                 }
@@ -507,12 +508,12 @@ class EntryView {
                     .height(Theme.primaryH)
                     .backgroundColor(Theme.qingDeep)
                     .fontColor(Theme.whitePaper)
-                    .fontSize(18)
+                    .fontSize(16)
                     .fontFamily(this.sansMediumFamily())
                     .onClick({event => this.startPlay()})
                 Row {
                     Text("章节")
-                        .fontSize(18)
+                        .fontSize(16)
                         .fontColor(Theme.ink)
                         .fontFamily(this.sansFamily())
                 }
@@ -542,7 +543,8 @@ class EntryView {
                     Text("驿程")
                         .fontSize(20)
                         .fontColor(Theme.ink)
-                        .fontFamily(this.serifFamily())
+                        .fontFamily(this.serifBoldFamily())
+                        .fontWeight(FontWeight.Bold)
                 }
                 .width(100.percent)
                 .height(Theme.topBar)
@@ -567,7 +569,8 @@ class EntryView {
                                         Text(item.name)
                                             .fontSize(18)
                                             .fontColor(Theme.ink)
-                                            .fontFamily(this.serifFamily())
+                                            .fontFamily(this.serifBoldFamily())
+                                            .fontWeight(FontWeight.Bold)
                                             .margin(left: 12)
                                         Blank()
                                         Text("已通")
@@ -608,7 +611,8 @@ class EntryView {
                                         Text(item.name)
                                             .fontSize(18)
                                             .fontColor(Theme.locked)
-                                            .fontFamily(this.serifFamily())
+                                            .fontFamily(this.serifBoldFamily())
+                                            .fontWeight(FontWeight.Bold)
                                             .margin(left: 12)
                                         Blank()
                                         Text("锁")
@@ -632,7 +636,7 @@ class EntryView {
                 .width(100.percent)
                 .layoutWeight(1)
                 Text("已通 ${this.cleared} · 当前 ${this.currentName()}")
-                    .fontSize(13)
+                    .fontSize(12)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.sansFamily())
                     .margin(top: 12, bottom: 8)
@@ -648,7 +652,8 @@ class EntryView {
                     Text("章节")
                         .fontSize(20)
                         .fontColor(Theme.ink)
-                        .fontFamily(this.serifFamily())
+                        .fontFamily(this.serifBoldFamily())
+                        .fontWeight(FontWeight.Bold)
                 }
                 .width(100.percent)
                 .height(Theme.topBar)
@@ -835,6 +840,7 @@ class EntryView {
                                     Column {
                                         Text(item.label)
                                             .fontSize(11)
+                                            .lineHeight(15)
                                             .fontColor(this.cardMutedColor(this.chapterOpen(item.id)))
                                             .fontFamily(this.sansFamily())
                                         Text(item.title)
@@ -845,6 +851,7 @@ class EntryView {
                                             .margin(top: 2)
                                         Text(item.subtitle)
                                             .fontSize(11)
+                                            .lineHeight(15)
                                             .fontColor(this.cardMutedColor(this.chapterOpen(item.id)))
                                             .fontFamily(this.sansFamily())
                                             .margin(top: 2)
@@ -853,7 +860,7 @@ class EntryView {
                                     .alignItems(HorizontalAlign.Start)
                                     if (this.chapterOpen(item.id)) {
                                         Text("可入")
-                                            .fontSize(13)
+                                            .fontSize(12)
                                             .fontColor(this.enterInk(index))
                                             .fontFamily(this.sansFamily())
                                             .width(48)
@@ -864,7 +871,7 @@ class EntryView {
                                             .border(width: 1, color: Theme.ink)
                                     } else {
                                         Text("未开")
-                                            .fontSize(13)
+                                            .fontSize(12)
                                             .fontColor(Theme.locked)
                                             .fontFamily(this.sansFamily())
                                             .width(48)
@@ -905,7 +912,8 @@ class EntryView {
                     Text(this.chapterListTitle())
                         .fontSize(20)
                         .fontColor(Theme.ink)
-                        .fontFamily(this.serifFamily())
+                        .fontFamily(this.serifBoldFamily())
+                        .fontWeight(FontWeight.Bold)
                 }
                 .width(100.percent)
                 .height(Theme.topBar)
@@ -936,10 +944,12 @@ class EntryView {
                                                 Text(item.name)
                                                     .fontSize(16)
                                                     .fontColor(Theme.ink)
-                                                    .fontFamily(this.serifFamily())
+                                                    .fontFamily(this.serifBoldFamily())
+                                                    .fontWeight(FontWeight.Bold)
                                                 if (ChapterCatalog.isDessert(item.id)) {
                                                     Text("点心")
-                                                        .fontSize(10)
+                                                        .fontSize(11)
+                                                        .lineHeight(15)
                                                         .fontColor(Theme.inkMuted)
                                                         .fontFamily(this.sansFamily())
                                                         .padding(left: 4, right: 4)
@@ -956,7 +966,7 @@ class EntryView {
                                         .alignItems(HorizontalAlign.Start)
                                         Blank()
                                         Text("已通")
-                                            .fontSize(13)
+                                            .fontSize(12)
                                             .fontColor(Theme.success)
                                             .fontFamily(this.sansFamily())
                                     } else if (item.id == this.cleared) {
@@ -978,7 +988,8 @@ class EntryView {
                                                     .fontWeight(FontWeight.Bold)
                                                 if (ChapterCatalog.isDessert(item.id)) {
                                                     Text("点心")
-                                                        .fontSize(10)
+                                                        .fontSize(11)
+                                                        .lineHeight(15)
                                                         .fontColor(Theme.ink)
                                                         .fontFamily(this.sansFamily())
                                                         .padding(left: 4, right: 4)
@@ -995,7 +1006,7 @@ class EntryView {
                                         .alignItems(HorizontalAlign.Start)
                                         Blank()
                                         Text("当前")
-                                            .fontSize(13)
+                                            .fontSize(12)
                                             .fontColor(Theme.ink)
                                             .fontFamily(this.sansFamily())
                                     } else {
@@ -1013,10 +1024,12 @@ class EntryView {
                                                 Text(item.name)
                                                     .fontSize(16)
                                                     .fontColor(Theme.locked)
-                                                    .fontFamily(this.serifFamily())
+                                                    .fontFamily(this.serifBoldFamily())
+                                                    .fontWeight(FontWeight.Bold)
                                                 if (ChapterCatalog.isDessert(item.id)) {
                                                     Text("点心")
-                                                        .fontSize(10)
+                                                        .fontSize(11)
+                                                        .lineHeight(15)
                                                         .fontColor(Theme.locked)
                                                         .fontFamily(this.sansFamily())
                                                         .padding(left: 4, right: 4)
@@ -1033,7 +1046,7 @@ class EntryView {
                                         .alignItems(HorizontalAlign.Start)
                                         Blank()
                                         Text("锁")
-                                            .fontSize(13)
+                                            .fontSize(12)
                                             .fontColor(Theme.locked)
                                             .fontFamily(this.sansFamily())
                                     }
@@ -1072,7 +1085,8 @@ class EntryView {
                     Text(this.currentChapter().title)
                         .fontSize(20)
                         .fontColor(Theme.ink)
-                        .fontFamily(this.serifFamily())
+                        .fontFamily(this.serifBoldFamily())
+                        .fontWeight(FontWeight.Bold)
                 }
                 .width(100.percent)
                 .height(Theme.topBar)
@@ -1180,7 +1194,7 @@ class EntryView {
                         .height(Theme.primaryH)
                         .backgroundColor(Theme.qingDeep)
                         .fontColor(Theme.whitePaper)
-                        .fontSize(18)
+                        .fontSize(16)
                         .fontFamily(this.sansMediumFamily())
                         .onClick({event => this.nextLevel()})
                 }
@@ -1201,7 +1215,8 @@ class EntryView {
                     Text(this.roadTitle())
                         .fontSize(18)
                         .fontColor(Theme.ink)
-                        .fontFamily(this.serifFamily())
+                        .fontFamily(this.serifBoldFamily())
+                        .fontWeight(FontWeight.Bold)
                 }
                 .width(100.percent)
                 .height(48)
@@ -1300,6 +1315,7 @@ class EntryView {
                 .layoutWeight(1)
                 Text(this.chromeLine())
                     .fontSize(11)
+                    .lineHeight(15)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.sansFamily())
                     .padding(left: Theme.inset, right: Theme.inset)

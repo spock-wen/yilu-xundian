@@ -194,20 +194,27 @@ python3 "$REPO/mobile/scripts/check_level.py"
 
 echo "STEP F: Running check_fonts.py"
 if [ "$PENDING_SANS_OK" -eq 1 ]; then
-  set +e
-  python3 "$SCRIPT_DIR/check_fonts.py" --pending-sans-ok
-  FONTS_RC=$?
-  set -e
-  if [ "$FONTS_RC" -eq 3 ]; then
-    PENDING_BANNER=1
-    echo "  NOTE: check_fonts.py exit 3 — pending sans tolerated by --pending-sans-ok"
-  elif [ "$FONTS_RC" -ne 0 ]; then
-    echo "ERROR: check_fonts.py failed (exit $FONTS_RC)" >&2
-    exit 1
-  fi
-else
-  python3 "$SCRIPT_DIR/check_fonts.py"
+  echo "--pending-sans-ok ignored: sans fonts are delivered"
 fi
+python3 "$SCRIPT_DIR/check_fonts.py"
+
+echo "STEP F: Running check_glyphs.py"
+tmp=$(mktemp -d)
+mkdir -p "$tmp/mobile/cjmp"
+cp -R "$REPO/mobile/cjmp/lib" "$tmp/mobile/cjmp/"
+cp -R "$REPO/mobile/shared" "$tmp/mobile/"
+set +e
+out=$(python3 "$SCRIPT_DIR/check_glyphs.py" "$tmp/mobile" --fonts-dir "$REPO/mobile/cjmp/fonts" --chars "$REPO/mobile/cjmp/fonts/yilu_sans_chars.txt" --strict-family 2>&1)
+rc=$?
+set -e
+echo "check_glyphs scan root: repo mobile/cjmp/lib + mobile/shared (staged, excludes .host)"
+echo "$out"
+echo "check_glyphs exit=$rc"
+rm -rf "$tmp"
+if [ "$rc" -ne 0 ]; then
+  exit 1
+fi
+
 
 # ---------------------------------------------------------------------------
 # STEP G: Build
@@ -262,14 +269,4 @@ fi
 # ---------------------------------------------------------------------------
 # STEP H: Final summary
 # ---------------------------------------------------------------------------
-if [ "$PENDING_BANNER" -eq 1 ]; then
-  echo ""
-  echo "======================================================================"
-  echo "PENDING SANS FONT FILES — NOT RELEASE-VALID —"
-  echo "sans roles render in system font until design delivers"
-  echo "YiluSans-Regular/Medium"
-  echo "======================================================================"
-  echo "BUILD_FROM_REPO OK (PENDING SANS)"
-else
-  echo "BUILD_FROM_REPO OK"
-fi
+echo "BUILD_FROM_REPO OK"

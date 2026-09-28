@@ -61,8 +61,8 @@ SERIF_FILES = [
     FONTS_DIR / "YiluSerif-Bold.otf",
 ]
 SANS_FILES = [
-    FONTS_DIR / "YiluSans-Regular.otf",
-    FONTS_DIR / "YiluSans-Medium.otf",
+    FONTS_DIR / "YiluSans-Regular.ttf",
+    FONTS_DIR / "YiluSans-Medium.ttf",
 ]
 
 # ---------------------------------------------------------------------------
@@ -273,14 +273,12 @@ def main() -> int:
             failures.append(msg)
 
     if any_sans_missing:
-        if all_sans_missing and args.pending_sans_ok:
-            # Tolerated — will handle at the end
-            pass
-        else:
-            for p in sans_missing:
-                msg = f"MISSING_FONT_FILE {p.relative_to(REPO)}"
-                print(msg)
-                failures.append(msg)
+        if args.pending_sans_ok:
+            print("--pending-sans-ok ignored: sans fonts are delivered")
+        for p in sans_missing:
+            msg = f"MISSING_FONT_FILE {p.relative_to(REPO)}"
+            print(msg)
+            failures.append(msg)
 
     # ------------------------------------------------------------------
     # Parse all .cj files for Text/Button + fontFamily
@@ -397,7 +395,7 @@ def main() -> int:
             print(f"serif: NOT CHECKED (missing font file: {names})")
 
         # Sans (check unless both missing and pending-sans-ok)
-        if not (all_sans_missing and args.pending_sans_ok):
+        if True:
             sans_count = len(required["sans"])
             print(f"sans: {sans_count} required chars")
             if sans_missing:
@@ -417,14 +415,8 @@ def main() -> int:
         print(f"\nFAIL: {len(failures)} issue(s) found.", file=sys.stderr)
         return 1
 
-    if all_sans_missing and args.pending_sans_ok:
-        print()
-        print("=" * 70)
-        print("PENDING SANS FONT FILES — NOT RELEASE-VALID —")
-        print("sans roles render in system font until design delivers")
-        print("YiluSans-Regular/Medium")
-        print("=" * 70)
-        return 3
+    if args.pending_sans_ok:
+        print("--pending-sans-ok ignored: sans fonts are delivered")
 
     print("\ncheck_fonts: PASS")
     return 0

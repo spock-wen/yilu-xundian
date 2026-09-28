@@ -96,7 +96,8 @@ public class Theme {
     public static const serif: String = "YiluSerif"
     public static const serifBold: String = "YiluSerifBold"
     // D-03: only bundled families are allowed (the system default family is not).
-    public static const sansRegular: String = "YiluSans"        // YiluSans-Regular.otf (400) — PENDING from design
-    public static const sansMedium: String = "YiluSansMedium"   // YiluSans-Medium.otf (500) — PENDING from design
+    public static const sans: String = "YiluSans"             // YiluSans-Regular.ttf (400)
+    public static const sansMedium: String = "YiluSansMedium" // YiluSans-Medium.ttf (500)
+    // one family per file because Keels 0.2.2 cannot carry two weights under one family name (device-tested)
     public static const stationSerif: String = "YiluSerifBold"
 }

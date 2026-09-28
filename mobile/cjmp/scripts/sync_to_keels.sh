@@ -170,30 +170,27 @@ sync_assets_to() {
     fi
   done
 
-  # --- Fonts: always serif; sans only if present ---
+  # --- Fonts: *.otf and *.ttf ---
   local count_otf=0
+  local count_ttf=0
   local fonts_dir="$REPO/mobile/cjmp/fonts"
-  for font in \
-    "$fonts_dir/YiluSerif-Regular.otf" \
-    "$fonts_dir/YiluSerif-Bold.otf"; do
+  for font in "$fonts_dir"/*.otf; do
     if [ -f "$font" ]; then
       cp "$font" "$dest/"
       count_otf=$((count_otf + 1))
     fi
   done
-  for font in \
-    "$fonts_dir/YiluSans-Regular.otf" \
-    "$fonts_dir/YiluSans-Medium.otf"; do
+  for font in "$fonts_dir"/*.ttf; do
     if [ -f "$font" ]; then
       cp "$font" "$dest/"
-      count_otf=$((count_otf + 1))
+      count_ttf=$((count_ttf + 1))
     fi
   done
   if [ -f "$fonts_dir/OFL.txt" ]; then
     cp "$fonts_dir/OFL.txt" "$dest/"
   fi
 
-  echo "Synced to $dest: png=$count_png svg=$count_svg otf=$count_otf"
+  echo "Synced to $dest: png=$count_png svg=$count_svg otf=$count_otf ttf=$count_ttf"
 }
 
 sync_assets_to "$IOS_RAWFILE"
@@ -203,16 +200,16 @@ sync_assets_to "$ANDROID_RAWFILE"
 # 7. Summary
 # ---------------------------------------------------------------------------
 total_otf=0
+total_ttf=0
 fonts_dir="$REPO/mobile/cjmp/fonts"
-for font in \
-  "$fonts_dir/YiluSerif-Regular.otf" \
-  "$fonts_dir/YiluSerif-Bold.otf" \
-  "$fonts_dir/YiluSans-Regular.otf" \
-  "$fonts_dir/YiluSans-Medium.otf"; do
+for font in "$fonts_dir"/*.otf; do
   [ -f "$font" ] && total_otf=$((total_otf + 1))
+done
+for font in "$fonts_dir"/*.ttf; do
+  [ -f "$font" ] && total_ttf=$((total_ttf + 1))
 done
 
 total_svg=2
 total_levels=$(python3 -c "import json; print(len(json.load(open('$REPO/mobile/shared/levels/levels.json'))))")
 
-echo "SYNC OK png=$ref_count svg=$total_svg otf=$total_otf levels=$total_levels excluded=${excluded_list:-none}"
+echo "SYNC OK png=$ref_count svg=$total_svg otf=$total_otf ttf=$total_ttf levels=$total_levels excluded=${excluded_list:-none}"
