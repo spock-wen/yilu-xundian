@@ -46,6 +46,21 @@ class EntryView {
     // A2: back button pressed ripple opacity
     @State var backPressedOpacity: Float64 = 0.0
 
+    // Board shape renderer state (Keels 0.2.2)
+    @State var boardGen: Int64 = 0
+    @State var boardCells: Array<BoardRect> = Array<BoardRect>()
+    @State var boardGrid: Array<BoardSeg> = Array<BoardSeg>()
+    @State var boardWalls: Array<BoardSeg> = Array<BoardSeg>()
+    @State var boardParityLabels: Array<BoardLabel> = Array<BoardLabel>()
+    @State var boardRoute: Array<BoardSeg> = Array<BoardSeg>()
+    @State var boardDots: Array<BoardDot> = Array<BoardDot>()
+    @State var boardStationCircles: Array<BoardDot> = Array<BoardDot>()
+    @State var boardNextLabels: Array<BoardLabel> = Array<BoardLabel>()
+    @State var boardDigits: Array<BoardPath> = Array<BoardPath>()
+
+    func homeMarkFontVp(): Float64 { return 12.0 / this.getPxFactor() }
+    func homeMarkTop(baseline: Float64): Float64 { return baseline - 0.88 * this.homeMarkFontVp() }
+
     var fontsDone: Bool = false
     var fontHandle: Int64 = 0
     var pxFactor: Float64 = 0.0
@@ -182,7 +197,18 @@ class EntryView {
         }
         this.parityRejectFlash = true
         this.parityRejectGen = this.parityRejectGen + 1
-        // M2: parity toast (animateTo removed)
+        let gen = this.parityRejectGen
+        /* UI-thread delayed clear: animateTo's onFinish runs on the
+           UI thread, so @State writes repaint immediately.  The 180ms
+           duration drives a no-op animation; onFinish clears the toast. */
+        this.getUIContext().animateTo(
+            AnimateParam(duration: 180, onFinish: Some({ =>
+                if (gen == this.parityRejectGen) {
+                    this.clearParityReject()
+                }
+            })),
+            { => }
+        )
     }
 
     func remainingSteps(): Int64 {
@@ -240,10 +266,35 @@ class EntryView {
         return this.levels[this.cleared].name
     }
 
+    func stationState(n: Int64): Int64 {
+        return stationStateOf(this.game, n)
+    }
+
+    func rebuildBoard(): Unit {
+        this.boardGen = this.boardGen + 1
+        let layout = this.currentLayout()
+        let factor = this.getPxFactor()
+        this.boardCells = buildBoardCells(this.game, layout)
+        this.boardGrid = buildBoardGrid(layout)
+        this.boardWalls = buildBoardWalls(this.game, layout)
+        this.boardParityLabels = buildBoardParityLabels(this.game, layout, factor)
+        this.boardRoute = buildBoardRoute(this.game, layout)
+        this.boardDots = buildBoardHeadDot(this.game, layout)
+        this.boardStationCircles = buildBoardStationCircles(this.game, layout)
+        this.boardNextLabels = buildBoardNextLabels(this.game, layout, factor)
+        this.boardDigits = buildBoardDigits(this.game, layout, factor)
+    }
+
     func refresh(): Unit {
         this.tick = this.tick + 1
         this.stepFilled = this.game.filled()
+        this.rebuildBoard()
     }
+
+    protected override func aboutToAppear(): Unit {
+        this.rebuildBoard()
+    }
+
 
     func openLevel(index: Int64): Unit {
         this.levelIndex = index
@@ -434,6 +485,39 @@ class EntryView {
         this.refresh()
     }
 
+    func handleDrag(event: TouchEvent): Unit {
+        /* Win sets screen=2 then refresh(); a trailing Move can still
+           hit the Canvas and drag-back-undo the last cell. */
+        if (this.screen != 1) {
+            return
+        }
+        if (event.touches.size == 0) {
+            return
+        }
+        let px = event.touches[0].x
+        let py = event.touches[0].y
+        let hit = touchToCell(px, py, this.currentLayout())
+        match (hit) {
+            case None => ()
+            case Some(cell) =>
+                if (this.game.tryStep(cell)) {
+                    this.clearParityReject()
+                    if (this.game.isWin()) {
+                        if (this.levelIndex + 1 > this.cleared) {
+                            this.cleared = this.levelIndex + 1
+                        }
+                        this.screen = 2
+                    }
+                    this.refresh()
+                } else {
+                    if (this.game.lastRejectParity != 0) {
+                        this.showParityReject()
+                        this.refresh()
+                    }
+                }
+        }
+    }
+
     func rowBorder(index: Int64): Int64 {
         if (index == this.cleared) {
             return Theme.ink
@@ -499,10 +583,47 @@ class EntryView {
                         .fontColor(Theme.vermillion)
                         .fontFamily(this.sansFamily())
                 }
-                // PLACEHOLDER(M2): home mark route (was Canvas drawHomeMark)
-                Column {}
-                    .width(100.percent)
-                    .height(140)
+                Stack(alignContent: Alignment.TopStart) {
+                    Line(width: 360, height: 140)
+                        .startPoint((40.0, 24.0))
+                        .endPoint((130.0, 56.0))
+                        .stroke(Theme.paperLine)
+                        .strokeWidth(Theme.hairline)
+                    Line(width: 360, height: 140)
+                        .startPoint((130.0, 56.0))
+                        .endPoint((78.0, 96.0))
+                        .stroke(Theme.paperLine)
+                        .strokeWidth(Theme.hairline)
+                    Line(width: 360, height: 140)
+                        .startPoint((78.0, 96.0))
+                        .endPoint((200.0, 118.0))
+                        .stroke(Theme.paperLine)
+                        .strokeWidth(Theme.hairline)
+                    /* HarmonyOS parity: Canvas font 12px = 12 device px; top = baseline - 0.88*fontVp */
+                    Text("涿郡")
+                        .fontSize(this.homeMarkFontVp())
+                        .fontColor(Theme.inkMuted)
+                        .fontFamily(Theme.sans)
+                        .position(x: 28.0, y: this.homeMarkTop(20.0))
+                    Text("平原")
+                        .fontSize(this.homeMarkFontVp())
+                        .fontColor(Theme.inkMuted)
+                        .fontFamily(Theme.sans)
+                        .position(x: 126.0, y: this.homeMarkTop(52.0))
+                    Text("安喜")
+                        .fontSize(this.homeMarkFontVp())
+                        .fontColor(Theme.inkMuted)
+                        .fontFamily(Theme.sans)
+                        .position(x: 64.0, y: this.homeMarkTop(108.0))
+                    Text("郡治")
+                        .fontSize(this.homeMarkFontVp())
+                        .fontColor(Theme.inkMuted)
+                        .fontFamily(Theme.sans)
+                        .position(x: 190.0, y: this.homeMarkTop(124.0))
+                }
+                .width(100.percent)
+                .height(140)
+                .opacity(0.18)
                 Blank()
                 Button("开始传书")
                     .width(100.percent)
@@ -918,11 +1039,17 @@ class EntryView {
                 }
                 .width(100.percent)
                 .height(Theme.topBar)
+                // FIX(M1-polish): On Android Keels, Text without an explicit height measures taller due to default font metrics,
+                // and Column inside a layoutWeight(1) Scroll can vertically center when total item height (632vp) is shorter than
+                // the Android viewport (~738vp), introducing an extra ~20-25vp gap above row 1.
+                // Specifying explicit height(16) and margin(bottom: 6) on listSubtitle, and justifyContent(FlexAlign.Start)
+                // on the Column aligns the list to hairline + 22vp, exactly matching HarmonyOS and iOS design baselines.
                 Text(this.currentChapter().listSubtitle)
                     .fontSize(12)
+                    .height(16)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.sansFamily())
-                    .margin(bottom: 8)
+                    .margin(bottom: 6)
                     .width(100.percent)
                 Scroll {
                     Column(space: 8) {
@@ -1063,6 +1190,7 @@ class EntryView {
                         )
                     }
                     .width(100.percent)
+                    .justifyContent(FlexAlign.Start)
                 }
                 .width(100.percent)
                 .layoutWeight(1)
@@ -1295,19 +1423,168 @@ class EntryView {
                 .margin(bottom: Theme.bandClear)
                 Scroll {
                     Column {
-                        // PLACEHOLDER(M2): board renderer (was Canvas drawBoard + onTouch)
-                        Column {
-                            Text("棋盘 · M2")
-                                .fontSize(14)
-                                .fontColor(Theme.inkMuted)
-                                .fontFamily(this.sansFamily())
+                        Stack(alignContent: Alignment.TopStart) {
+                            // Keys omit boardGen so unchanged shapes are reused between moves (perf); content fields keep keys unique.
+                            // Layer 1: Cells (fill whitePaper/paperShade per cell)
+                            ForEach(
+                                this.boardCells,
+                                itemGenerator: { item: BoardRect, idx: Int64 =>
+                                    Rect(width: item.w, height: item.h)
+                                        .fill(item.color)
+                                        .position(x: item.x, y: item.y)
+                                },
+                                // Keels 0.2.2: ForEach key label is keyGeneratorFunc (macro passes it to forEachUpdateFunction)
+                                keyGeneratorFunc: { item: BoardRect, idx: Int64 =>
+                                    "${idx}-${item.x}-${item.y}-${item.color}"
+                                }
+                            )
+
+                            // Layer 2: Grid hairlines (paperLine hairline)
+                            ForEach(
+                                this.boardGrid,
+                                itemGenerator: { item: BoardSeg, idx: Int64 =>
+                                    Line(width: this.boardW(), height: this.boardH())
+                                        .startPoint((item.x1, item.y1))
+                                        .endPoint((item.x2, item.y2))
+                                        .stroke(item.color)
+                                        .strokeWidth(item.width)
+                                },
+                                keyGeneratorFunc: { item: BoardSeg, idx: Int64 =>
+                                    "${idx}-${item.x1}-${item.y1}-${item.x2}-${item.y2}"
+                                }
+                            )
+
+                            // Layer 3: Walls (ink lineWidth 3 with 4vp inset at both ends and BUTT caps — matches HarmonyOS Canvas default lineCap)
+                            ForEach(
+                                this.boardWalls,
+                                itemGenerator: { item: BoardSeg, idx: Int64 =>
+                                    Line(width: this.boardW(), height: this.boardH())
+                                        .startPoint((item.x1, item.y1))
+                                        .endPoint((item.x2, item.y2))
+                                        .stroke(item.color)
+                                        .strokeWidth(item.width)
+                                        .strokeLineCap(LineCapStyle.Butt)
+                                        .antiAlias(true)
+                                },
+                                keyGeneratorFunc: { item: BoardSeg, idx: Int64 =>
+                                    "${idx}-${item.x1}-${item.y1}-${item.x2}-${item.y2}-${item.color}"
+                                }
+                            )
+
+                            // Layer 4: Parity labels (HarmonyOS: 11 device px serif inkMuted, textAlign start, baseline at my+4.0)
+                            // HarmonyOS parity: 11 device px (Canvas px); readability noted in M2 report
+                            ForEach(
+                                this.boardParityLabels,
+                                itemGenerator: { item: BoardLabel, idx: Int64 =>
+                                    Text(if (item.text == "奇") { "奇" } else { "偶" })
+                                        .fontSize(item.size)
+                                        .fontColor(item.color)
+                                        .fontFamily(this.serifFamily())
+                                        .width(item.w)
+                                        .textAlign(TextAlign.Start)
+                                        .position(x: item.x, y: item.y)
+                                },
+                                keyGeneratorFunc: { item: BoardLabel, idx: Int64 =>
+                                    "${idx}-${item.x}-${item.y}-${item.text}-${item.color}-${item.size}"
+                                }
+                            )
+
+                            // Layer 5: Route polyline
+                            // Route: one Line per consecutive pair with strokeLineCap Round.
+                            // Round caps on every segment give round joins at corners in native vp coordinates without device px scaling artifacts.
+                            ForEach(
+                                this.boardRoute,
+                                itemGenerator: { item: BoardSeg, idx: Int64 =>
+                                    Line(width: this.boardW(), height: this.boardH())
+                                        .startPoint((item.x1, item.y1))
+                                        .endPoint((item.x2, item.y2))
+                                        .stroke(item.color)
+                                        .strokeWidth(item.width)
+                                        .strokeLineCap(LineCapStyle.Round)
+                                        .antiAlias(true)
+                                },
+                                keyGeneratorFunc: { item: BoardSeg, idx: Int64 =>
+                                    "${idx}-${item.x1}-${item.y1}-${item.x2}-${item.y2}"
+                                }
+                            )
+
+                            // Layer 6: Head dot (r=6 whitePaper fill + ink hairline)
+                            ForEach(
+                                this.boardDots,
+                                itemGenerator: { item: BoardDot, idx: Int64 =>
+                                    Circle(width: item.r * 2.0, height: item.r * 2.0)
+                                        .fill(item.fill)
+                                        .stroke(item.stroke)
+                                        .strokeWidth(item.strokeW)
+                                        .position(x: item.cx - item.r, y: item.cy - item.r)
+                                },
+                                keyGeneratorFunc: { item: BoardDot, idx: Int64 =>
+                                    "${idx}-${item.cx}-${item.cy}-${item.r}-${item.fill}"
+                                }
+                            )
+
+                            // Layer 7: Station circles (+ next ring)
+                            ForEach(
+                                this.boardStationCircles,
+                                itemGenerator: { item: BoardDot, idx: Int64 =>
+                                    Circle(width: item.r * 2.0, height: item.r * 2.0)
+                                        .fill(item.fill)
+                                        .fillOpacity(if (item.fill <= 0x01000000) { 0.0 } else { 1.0 })
+                                        .stroke(item.stroke)
+                                        .strokeWidth(if (item.hasStroke) { item.strokeW } else { 0.0 })
+                                        .position(x: item.cx - item.r, y: item.cy - item.r)
+                                },
+                                keyGeneratorFunc: { item: BoardDot, idx: Int64 =>
+                                    "${idx}-${item.cx}-${item.cy}-${item.r}-${item.fill}-${item.stroke}-${item.hasStroke}"
+                                }
+                            )
+
+                            // Layer 8: Next station label ("下一驿" 11 device px sans gold, textAlign start, baseline at cy+r+12.0)
+                            // HarmonyOS parity: 11 device px (Canvas px); readability noted in M2 report
+                            ForEach(
+                                this.boardNextLabels,
+                                itemGenerator: { item: BoardLabel, idx: Int64 =>
+                                    Text("下一驿")
+                                        .fontSize(item.size)
+                                        .fontColor(item.color)
+                                        .fontFamily(this.sansFamily())
+                                        .width(item.w)
+                                        .textAlign(TextAlign.Start)
+                                        .position(x: item.x, y: item.y)
+                                },
+                                keyGeneratorFunc: { item: BoardLabel, idx: Int64 =>
+                                    "${idx}-${item.x}-${item.y}-${item.text}-${item.size}"
+                                }
+                            )
+
+                            // Layer 9: Digits (Path with device px commands, strokeWidth vp, round caps/joins)
+                            ForEach(
+                                this.boardDigits,
+                                itemGenerator: { item: BoardPath, idx: Int64 =>
+                                    Path(width: this.boardW(), height: this.boardH(), commands: item.commands)
+                                        .stroke(item.color)
+                                        .strokeWidth(item.strokeW)
+                                        .strokeLineCap(LineCapStyle.Round)
+                                        .strokeLineJoin(LineJoinStyle.Round)
+                                        .fillOpacity(0.0)
+                                        .antiAlias(true)
+                                        .position(x: 0, y: 0)
+                                },
+                                keyGeneratorFunc: { item: BoardPath, idx: Int64 =>
+                                    "${idx}-${item.color}-${item.strokeW}-${item.commands}"
+                                }
+                            )
                         }
                         .width(this.boardW())
                         .height(this.boardH())
-                        .backgroundColor(Theme.whitePaper)
-                        .border(width: 1, color: Theme.paperLine)
-                        .justifyContent(FlexAlign.Center)
-                        .alignItems(HorizontalAlign.Center)
+                        .backgroundColor(Theme.paper)
+                        .onTouch({ evt =>
+                            match (evt.eventType) {
+                                case TouchType.Down => this.handleDrag(evt)
+                                case TouchType.Move => this.handleDrag(evt)
+                                case _ => ()
+                            }
+                        })
                     }
                     .width(100.percent)
                     .alignItems(HorizontalAlign.Center)
