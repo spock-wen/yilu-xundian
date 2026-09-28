@@ -1,12 +1,12 @@
 # Progress lock
 
-平原 stays grey-locked (`未开`) until 涿郡 is cleared (`cleared >= 10`). 徐州 / 吕布 remain locked without boards.
+平原 stays grey-locked (`未开`) until 涿郡 is cleared (`cleared >= 10`). Later chapters (徐州…北伐) each unlock at their `levelStart` and all ship boards; 徐州 / 吕布 when still locked show `未开` with no skin preview (tap no-op).
 
 ## Sub-features
 
 - `pingyuan-locked` shows 平原 as not enterable on a fresh install.
 - `pingyuan-open` (after progress) shows `可入` and allows 驿程.
-- `xuzhou-locked` stays non-playable (list card only; tap is a no-op, no skin preview).
+- `xuzhou-locked` stays non-enterable until `cleared >= 20` (list card `未开`; tap is a no-op, no skin preview). Boards exist after unlock.
 
 ## How to get to it (user POV)
 

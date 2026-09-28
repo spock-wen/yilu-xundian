@@ -5,7 +5,7 @@ On an open station board the player draws an orthogonal Hamiltonian path visitin
 ## Sub-features
 
 - `board-enter` opens a 涿郡 station board with top title and path canvas.
-- `board-chrome` shows bottom `撤销` and `重绘驿道` plus the 涿郡 landscape band (`band_zhuojun_v91`, always on levels 0–9; busts are in the band composite).
+- `board-chrome` shows bottom `撤销` and `重绘驿道` plus the 涿郡 landscape band (`band_zhuojun_v91`, always on levels 0–9; busts are in the band composite). Parity boards also show top-bar `第 N 步` (`stepChipLabel`); boards with `stepLimit > 0` show `余步 · N`. Neither chip is a tap target for smoke drives.
 - `board-clear` (optional heavy) reaches 通关 overlay after a full valid path.
 
 ## How to get to it (user POV)
@@ -28,3 +28,4 @@ Preconditions:
 - Do not edit `levels.json` during verification.
 - Band / bust sizing regressions need fullscreen board shots, not chapter thumbs alone.
 - Simulator density changes Path2D digit size; judge glance readability on fullscreen.
+- Top-bar `第 N 步` / `余步 · N` (parity-step-v1) are read-only chrome. Do not dumpLayout-needle them for taps; prefer station title + `撤销` / `重绘驿道`.
