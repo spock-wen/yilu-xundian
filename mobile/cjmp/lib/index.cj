@@ -9,9 +9,14 @@ internal import ohos.arkui.state_management.LocalStorage
 import ohos.arkui.state_macro_manage.Entry
 import ohos.arkui.state_macro_manage.Component
 import ohos.arkui.state_macro_manage.State
+import ohos.arkui.state_macro_manage.Builder
 import ohos_app_cangjie_entry.logic.logicTest
 import ohos.arkui.component.circle.*
 import ohos.arkui.component.rect.*
+import ohos.arkui.component.line.*
+import ohos.arkui.component.path.*
+import ohos.arkui.component.stack.*
+import ohos.arkui.component.common.*
 import ohos.base.*
 import ohos.arkui.component.list.*
 import ohos.arkui.component.list_item.*
@@ -38,9 +43,12 @@ class EntryView {
     @State var parityRejectText: String = ""
     @State var parityRejectFlash: Bool = false
     @State var parityRejectGen: Int64 = 0
+    // A2: back button pressed ripple opacity
+    @State var backPressedOpacity: Float64 = 0.0
 
     var fontsDone: Bool = false
     var fontHandle: Int64 = 0
+    var pxFactor: Float64 = 0.0
 
     func serifFamily(): String {
         if (!this.fontsDone) {
@@ -56,6 +64,105 @@ class EntryView {
             this.fontHandle = registerYiluFonts()
         }
         return Theme.serifBold
+    }
+
+    // D-03: sans helpers — register fonts once via fontsDone flag
+    func sansFamily(): String {
+        if (!this.fontsDone) {
+            this.fontsDone = true
+            this.fontHandle = registerYiluFonts()
+        }
+        return Theme.sansRegular
+    }
+
+    func sansMediumFamily(): String {
+        if (!this.fontsDone) {
+            this.fontsDone = true
+            this.fontHandle = registerYiluFonts()
+        }
+        return Theme.sansMedium
+    }
+
+    // A2: back button — device-pixel path commands for the chevron icon
+    func getPxFactor(): Float64 {
+        if (this.pxFactor > 0.0) {
+            return this.pxFactor
+        }
+        /* Cache device px factor once via UIContext.vp2px.
+           iOS sim is 3.0 px/vp, Android is 2.625 px/vp.
+           If vp2px fails at runtime, fall back to 3.0. */
+        match (this.getUIContext().vp2px(1.0.vp)) {
+            case Some(len) =>
+                this.pxFactor = len.value
+                println("UIContext.vp2px factor: ${this.pxFactor}")
+            case None =>
+                // Fallback factor if vp2px returns None at runtime (unlikely on Keels)
+                println("UIContext.vp2px returned None, fallback factor: 3.0")
+                this.pxFactor = 3.0
+        }
+        return this.pxFactor
+    }
+
+    func backIconCommands(): String {
+        let f = this.getPxFactor()
+        return "M ${27.0 * f} ${16.5 * f} L ${20.0 * f} ${24.0 * f} L ${27.0 * f} ${31.5 * f}"
+    }
+
+    // SPEC cjmp-gaps-v1 A2 (not locked yet — may change)
+    @Builder func backButton(action: () -> Unit, isBoardOrWin: Bool) {
+        Stack {
+            // Pressed state: 40vp Circle filled Theme.paperShade centred on icon
+            Circle(width: 40.0, height: 40.0)
+                .fill(Theme.paperShade)
+                .opacity(this.backPressedOpacity)
+                .position(x: 4.0, y: 4.0)
+
+            // Icon: 24vp box (left=12, top=12), Path commands device pixels, stroke Theme.ink width 1.5vp
+            Path(width: 48.0, height: 48.0, commands: this.backIconCommands())
+                .stroke(Theme.ink)
+                .strokeWidth(1.5)
+                .strokeLineCap(LineCapStyle.Round)
+                .strokeLineJoin(LineJoinStyle.Round)
+                .fillOpacity(0.0)
+                .antiAlias(true)
+                .position(x: 0.0, y: 0.0)
+        }
+        .width(48)
+        .height(48)
+        .margin(left: 4, top: if (isBoardOrWin) { 0 } else { 4 }, bottom: if (isBoardOrWin) { 0 } else { 4 })
+        .onTouch({ evt =>
+            match (evt.eventType) {
+                case TouchType.Down =>
+                    this.backPressedOpacity = 1.0
+                case TouchType.Up | TouchType.Cancel =>
+                    this.getUIContext().animateTo(
+                        AnimateParam(duration: 160, curve: Curve.EaseOut),
+                        { => this.backPressedOpacity = 0.0 }
+                    )
+                case _ => ()
+            }
+        })
+        .onClick({ evt =>
+            this.backPressedOpacity = 0.0
+            action()
+        })
+    }
+
+    // Android system back override (Keels CustomView page-level back)
+    protected override func onBackPress(): Bool {
+        if (this.screen == 0) {
+            return false
+        } else if (this.screen == 1 || this.screen == 2) {
+            this.leaveBoard()
+            return true
+        } else if (this.screen == 3 || this.screen == 4) {
+            this.screen = 0
+            return true
+        } else if (this.screen == 5 || this.screen == 6) {
+            this.screen = 4
+            return true
+        }
+        return false
     }
 
     func clearParityReject(): Unit {
@@ -383,12 +490,12 @@ class EntryView {
                 Text("传书过驿")
                     .fontSize(14)
                     .fontColor(Theme.inkMuted)
-                    .fontFamily(Theme.sans)
+                    .fontFamily(this.serifFamily())
                 if (this.levels.size == 0) {
                     Text(LevelCatalog.loadError())
                         .fontSize(11)
                         .fontColor(Theme.vermillion)
-                        .fontFamily(Theme.sans)
+                        .fontFamily(this.sansFamily())
                 }
                 // PLACEHOLDER(M2): home mark route (was Canvas drawHomeMark)
                 Column {}
@@ -401,13 +508,13 @@ class EntryView {
                     .backgroundColor(Theme.qingDeep)
                     .fontColor(Theme.whitePaper)
                     .fontSize(18)
-                    .fontFamily(Theme.sans)
+                    .fontFamily(this.sansMediumFamily())
                     .onClick({event => this.startPlay()})
                 Row {
                     Text("章节")
                         .fontSize(18)
                         .fontColor(Theme.ink)
-                        .fontFamily(Theme.sans)
+                        .fontFamily(this.sansFamily())
                 }
                 .width(100.percent)
                 .height(44)
@@ -421,18 +528,13 @@ class EntryView {
                 Text("驿程")
                     .fontSize(16)
                     .fontColor(Theme.inkMuted)
-                    .fontFamily(Theme.sans)
+                    .fontFamily(this.sansFamily())
                     .margin(top: 16, bottom: 12)
                     .onClick({event => this.screen = 3})
             } else if (this.screen == 3) {
                 Stack {
                     Row {
-                        // in-page back: iOS edge swipe does not pop on Keels 0.2.2
-                        Text("〈")
-                            .fontSize(22)
-                            .fontColor(Theme.ink)
-                            .fontFamily(Theme.sans)
-                            .onClick({event => this.screen = 0})
+                        this.backButton({ => this.screen = 0 }, false)
                         Blank()
                     }
                     .width(100.percent)
@@ -471,7 +573,7 @@ class EntryView {
                                         Text("已通")
                                             .fontSize(14)
                                             .fontColor(Theme.success)
-                                            .fontFamily(Theme.sans)
+                                            .fontFamily(this.sansFamily())
                                     } else if (index == this.cleared) {
                                         Text("${index + 1}")
                                             .fontSize(16)
@@ -492,7 +594,7 @@ class EntryView {
                                         Text("当前")
                                             .fontSize(14)
                                             .fontColor(Theme.ink)
-                                            .fontFamily(Theme.sans)
+                                            .fontFamily(this.sansFamily())
                                     } else {
                                         Text("${index + 1}")
                                             .fontSize(16)
@@ -512,7 +614,7 @@ class EntryView {
                                         Text("锁")
                                             .fontSize(14)
                                             .fontColor(Theme.locked)
-                                            .fontFamily(Theme.sans)
+                                            .fontFamily(this.sansFamily())
                                     }
                                 }
                                 .width(100.percent)
@@ -532,18 +634,13 @@ class EntryView {
                 Text("已通 ${this.cleared} · 当前 ${this.currentName()}")
                     .fontSize(13)
                     .fontColor(Theme.inkMuted)
-                    .fontFamily(Theme.sans)
+                    .fontFamily(this.sansFamily())
                     .margin(top: 12, bottom: 8)
                     .width(100.percent)
             } else if (this.screen == 4) {
                 Stack {
                     Row {
-                        // in-page back: iOS edge swipe does not pop on Keels 0.2.2
-                        Text("〈")
-                            .fontSize(22)
-                            .fontColor(Theme.ink)
-                            .fontFamily(Theme.sans)
-                            .onClick({event => this.screen = 0})
+                        this.backButton({ => this.screen = 0 }, false)
                         Blank()
                     }
                     .width(100.percent)
@@ -558,7 +655,7 @@ class EntryView {
                 Text("选章入驿 · 开章可入 · 灰章未启")
                     .fontSize(12)
                     .fontColor(Theme.inkMuted)
-                    .fontFamily(Theme.sans)
+                    .fontFamily(this.sansFamily())
                     .margin(top: 2, bottom: 8)
                     .width(100.percent)
                 Scroll {
@@ -739,7 +836,7 @@ class EntryView {
                                         Text(item.label)
                                             .fontSize(11)
                                             .fontColor(this.cardMutedColor(this.chapterOpen(item.id)))
-                                            .fontFamily(Theme.sans)
+                                            .fontFamily(this.sansFamily())
                                         Text(item.title)
                                             .fontSize(17)
                                             .fontColor(this.cardTitleColor(this.chapterOpen(item.id)))
@@ -749,7 +846,7 @@ class EntryView {
                                         Text(item.subtitle)
                                             .fontSize(11)
                                             .fontColor(this.cardMutedColor(this.chapterOpen(item.id)))
-                                            .fontFamily(Theme.sans)
+                                            .fontFamily(this.sansFamily())
                                             .margin(top: 2)
                                     }
                                     .layoutWeight(1)
@@ -758,7 +855,7 @@ class EntryView {
                                         Text("可入")
                                             .fontSize(13)
                                             .fontColor(this.enterInk(index))
-                                            .fontFamily(Theme.sans)
+                                            .fontFamily(this.sansFamily())
                                             .width(48)
                                             .height(28)
                                             .textAlign(TextAlign.Center)
@@ -769,7 +866,7 @@ class EntryView {
                                         Text("未开")
                                             .fontSize(13)
                                             .fontColor(Theme.locked)
-                                            .fontFamily(Theme.sans)
+                                            .fontFamily(this.sansFamily())
                                             .width(48)
                                             .textAlign(TextAlign.Center)
                                     }
@@ -794,18 +891,13 @@ class EntryView {
                 Text(this.chapterOpenFooter())
                     .fontSize(12)
                     .fontColor(Theme.inkMuted)
-                    .fontFamily(Theme.sans)
+                    .fontFamily(this.sansFamily())
                     .margin(top: 8, bottom: 8)
                     .width(100.percent)
             } else if (this.screen == 5) {
                 Stack {
                     Row {
-                        // in-page back: iOS edge swipe does not pop on Keels 0.2.2
-                        Text("〈")
-                            .fontSize(22)
-                            .fontColor(Theme.ink)
-                            .fontFamily(Theme.sans)
-                            .onClick({event => this.screen = 4})
+                        this.backButton({ => this.screen = 4 }, false)
                         Blank()
                     }
                     .width(100.percent)
@@ -820,7 +912,7 @@ class EntryView {
                 Text(this.currentChapter().listSubtitle)
                     .fontSize(12)
                     .fontColor(Theme.inkMuted)
-                    .fontFamily(Theme.sans)
+                    .fontFamily(this.sansFamily())
                     .margin(bottom: 8)
                     .width(100.percent)
                 Scroll {
@@ -849,7 +941,7 @@ class EntryView {
                                                     Text("点心")
                                                         .fontSize(10)
                                                         .fontColor(Theme.inkMuted)
-                                                        .fontFamily(Theme.sans)
+                                                        .fontFamily(this.sansFamily())
                                                         .padding(left: 4, right: 4)
                                                         .border(width: 1, color: Theme.paperLine)
                                                         .borderRadius(4)
@@ -858,7 +950,7 @@ class EntryView {
                                             Text("${item.cols}×${item.rows}")
                                                 .fontSize(12)
                                                 .fontColor(Theme.inkMuted)
-                                                .fontFamily(Theme.sans)
+                                                .fontFamily(this.sansFamily())
                                         }
                                         .margin(left: 10)
                                         .alignItems(HorizontalAlign.Start)
@@ -866,7 +958,7 @@ class EntryView {
                                         Text("已通")
                                             .fontSize(13)
                                             .fontColor(Theme.success)
-                                            .fontFamily(Theme.sans)
+                                            .fontFamily(this.sansFamily())
                                     } else if (item.id == this.cleared) {
                                         Text("${index + 1}")
                                             .fontSize(14)
@@ -888,7 +980,7 @@ class EntryView {
                                                     Text("点心")
                                                         .fontSize(10)
                                                         .fontColor(Theme.ink)
-                                                        .fontFamily(Theme.sans)
+                                                        .fontFamily(this.sansFamily())
                                                         .padding(left: 4, right: 4)
                                                         .border(width: 1, color: Theme.ink)
                                                         .borderRadius(4)
@@ -897,7 +989,7 @@ class EntryView {
                                             Text("${item.cols}×${item.rows}")
                                                 .fontSize(12)
                                                 .fontColor(Theme.inkMuted)
-                                                .fontFamily(Theme.sans)
+                                                .fontFamily(this.sansFamily())
                                         }
                                         .margin(left: 10)
                                         .alignItems(HorizontalAlign.Start)
@@ -905,7 +997,7 @@ class EntryView {
                                         Text("当前")
                                             .fontSize(13)
                                             .fontColor(Theme.ink)
-                                            .fontFamily(Theme.sans)
+                                            .fontFamily(this.sansFamily())
                                     } else {
                                         Text("${index + 1}")
                                             .fontSize(14)
@@ -926,7 +1018,7 @@ class EntryView {
                                                     Text("点心")
                                                         .fontSize(10)
                                                         .fontColor(Theme.locked)
-                                                        .fontFamily(Theme.sans)
+                                                        .fontFamily(this.sansFamily())
                                                         .padding(left: 4, right: 4)
                                                         .border(width: 1, color: Theme.locked)
                                                         .borderRadius(4)
@@ -935,7 +1027,7 @@ class EntryView {
                                             Text("${item.cols}×${item.rows}")
                                                 .fontSize(12)
                                                 .fontColor(Theme.locked)
-                                                .fontFamily(Theme.sans)
+                                                .fontFamily(this.sansFamily())
                                         }
                                         .margin(left: 10)
                                         .alignItems(HorizontalAlign.Start)
@@ -943,7 +1035,7 @@ class EntryView {
                                         Text("锁")
                                             .fontSize(13)
                                             .fontColor(Theme.locked)
-                                            .fontFamily(Theme.sans)
+                                            .fontFamily(this.sansFamily())
                                     }
                                 }
                                 .width(100.percent)
@@ -964,19 +1056,14 @@ class EntryView {
                 Text(this.chapterListFooter())
                     .fontSize(12)
                     .fontColor(Theme.inkMuted)
-                    .fontFamily(Theme.sans)
+                    .fontFamily(this.sansFamily())
                     .margin(top: 8, bottom: 8)
                     .width(100.percent)
             } else if (this.screen == 6) {
                 /* Skin-only preview for locked 05–10. No boards, no gameplay. */
                 Stack {
                     Row {
-                        // in-page back: iOS edge swipe does not pop on Keels 0.2.2
-                        Text("〈")
-                            .fontSize(22)
-                            .fontColor(Theme.ink)
-                            .fontFamily(Theme.sans)
-                            .onClick({event => this.screen = 4})
+                        this.backButton({ => this.screen = 4 }, false)
                         Blank()
                     }
                     .width(100.percent)
@@ -992,7 +1079,7 @@ class EntryView {
                 Text(this.currentChapter().listSubtitle)
                     .fontSize(12)
                     .fontColor(Theme.inkMuted)
-                    .fontFamily(Theme.sans)
+                    .fontFamily(this.sansFamily())
                     .padding(left: Theme.inset, right: Theme.inset)
                     .margin(bottom: 4)
                     .width(100.percent)
@@ -1030,22 +1117,19 @@ class EntryView {
             } else if (this.screen == 2) {
                 // in-page back: iOS edge swipe does not pop on Keels 0.2.2
                 Row {
-                    Text("〈")
-                        .fontSize(22)
-                        .fontColor(Theme.ink)
-                        .fontFamily(Theme.sans)
-                        .onClick({event => this.leaveBoard()})
+                    // A2: 48vp hit area
+                    this.backButton({ => this.leaveBoard() }, true)
                     Blank()
                 }
                 .width(100.percent)
-                .height(40)
+                .height(48)
                 .padding(left: Theme.inset, right: Theme.inset)
                 Blank()
                 Column {
                     Text("通关")
                         .fontSize(14)
                         .fontColor(Theme.inkMuted)
-                        .fontFamily(Theme.sans)
+                        .fontFamily(this.sansFamily())
                         .margin(bottom: 8)
                     Text(this.roadTitle())
                         .fontSize(26)
@@ -1058,11 +1142,11 @@ class EntryView {
                             Text("驿道已通")
                                 .fontSize(14)
                                 .fontColor(Theme.inkMuted)
-                                .fontFamily(Theme.sans)
+                                .fontFamily(this.sansFamily())
                             Text("文书递达本驿")
                                 .fontSize(14)
                                 .fontColor(Theme.inkMuted)
-                                .fontFamily(Theme.sans)
+                                .fontFamily(this.sansFamily())
                                 .margin(top: 4)
                         }
                         .alignItems(HorizontalAlign.Start)
@@ -1097,7 +1181,7 @@ class EntryView {
                         .backgroundColor(Theme.qingDeep)
                         .fontColor(Theme.whitePaper)
                         .fontSize(18)
-                        .fontFamily(Theme.sans)
+                        .fontFamily(this.sansMediumFamily())
                         .onClick({event => this.nextLevel()})
                 }
                 .width(86.percent)
@@ -1108,28 +1192,24 @@ class EntryView {
             } else if (this.screen == 1) {
                 Stack {
                     Row {
-                        // in-page back: iOS edge swipe does not pop on Keels 0.2.2
-                        Text("〈")
-                            .fontSize(22)
-                            .fontColor(Theme.ink)
-                            .fontFamily(Theme.sans)
-                            .onClick({event => this.leaveBoard()})
+                        // A2: 48vp hit area — in-page back: iOS edge swipe does not pop on Keels 0.2.2
+                        this.backButton({ => this.leaveBoard() }, true)
                         Blank()
                     }
                     .width(100.percent)
-                    .height(40)
+                    .height(48)
                     Text(this.roadTitle())
                         .fontSize(18)
                         .fontColor(Theme.ink)
                         .fontFamily(this.serifFamily())
                 }
                 .width(100.percent)
-                .height(40)
+                .height(48)
                 .padding(left: Theme.inset, right: Theme.inset)
                 Text(this.boardSubtitle())
                     .fontSize(12)
                     .fontColor(Theme.inkMuted)
-                    .fontFamily(Theme.sans)
+                    .fontFamily(this.sansFamily())
                     .padding(left: Theme.inset, right: Theme.inset)
                     .margin(bottom: 4)
                     .width(100.percent)
@@ -1204,7 +1284,7 @@ class EntryView {
                             Text("棋盘 · M2")
                                 .fontSize(14)
                                 .fontColor(Theme.inkMuted)
-                                .fontFamily(Theme.sans)
+                                .fontFamily(this.sansFamily())
                         }
                         .width(this.boardW())
                         .height(this.boardH())
@@ -1221,7 +1301,7 @@ class EntryView {
                 Text(this.chromeLine())
                     .fontSize(11)
                     .fontColor(Theme.inkMuted)
-                    .fontFamily(Theme.sans)
+                    .fontFamily(this.sansFamily())
                     .padding(left: Theme.inset, right: Theme.inset)
                     .margin(top: 4, bottom: 4)
                     .width(100.percent)
@@ -1235,7 +1315,7 @@ class EntryView {
                         Text("撤销")
                             .fontSize(16)
                             .fontColor(Theme.ink)
-                            .fontFamily(Theme.sans)
+                            .fontFamily(this.sansFamily())
                     }
                     .layoutWeight(1)
                     .height(Theme.undoH)
@@ -1252,7 +1332,7 @@ class EntryView {
                         Text("重绘驿道")
                             .fontSize(16)
                             .fontColor(Theme.ink)
-                            .fontFamily(Theme.sans)
+                            .fontFamily(this.sansFamily())
                     }
                     .layoutWeight(1)
                     .height(Theme.undoH)

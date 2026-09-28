@@ -91,10 +91,12 @@ public class Theme {
     public static const iconVp: Int64 = 24
     public static const hairline: Float64 = 1.0
 
-    /* Text chrome still uses system generic families (docs_cangjie
-       Text.fontFamily). Board waypoint digits are Path2D in vp. */
+    /* Text chrome uses bundled families (docs_cangjie Text.fontFamily).
+       Board waypoint digits are Path2D in vp. */
     public static const serif: String = "YiluSerif"
     public static const serifBold: String = "YiluSerifBold"
-    public static const sans: String = "sans-serif"
+    // D-03: only bundled families are allowed (the system default family is not).
+    public static const sansRegular: String = "YiluSans"        // YiluSans-Regular.otf (400) — PENDING from design
+    public static const sansMedium: String = "YiluSansMedium"   // YiluSans-Medium.otf (500) — PENDING from design
     public static const stationSerif: String = "YiluSerifBold"
 }
