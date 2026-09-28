@@ -80,4 +80,4 @@ SVG 图标（`icon-undo`、`icon-reset`）与字体的同步行为不变。
 
 字体基于 Noto Serif SC 与 Noto Sans SC (variable, google/fonts ofl/notosanssc @ a85815a, instanced 400/500, subset 346 chars by design)，遵循 SIL Open Font License 1.1 开源协议。详情请参阅 `fonts/OFL.txt`。
 - **YiluSerif**: Noto Serif SC 子集。
-- **YiluSans**: Noto Sans SC 400/500 子集，由设计交付，sha256: 808b5efe87f8 (check_glyphs.py)。
+- **YiluSans**: Noto Sans SC 400/500 子集，由设计交付，sha256: 37976c86df12 (design check_glyphs.py, vendored unchanged)。

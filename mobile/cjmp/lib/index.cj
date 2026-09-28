@@ -488,7 +488,8 @@ class EntryView {
                 // Divider not in OpenSDK 0.2.2: 1vp hairline Column, same color/width as HarmonyOS
                 Column() {}.width(168).height(1).backgroundColor(Theme.gold).margin(top: 6, bottom: 8)
                 Text("传书过驿")
-                    .fontSize(14)
+                    .fontSize(16)
+                    .lineHeight(24)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.serifFamily())
                 if (this.levels.size == 0) {

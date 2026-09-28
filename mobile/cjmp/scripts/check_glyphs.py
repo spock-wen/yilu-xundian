@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# VENDORED from design fonts-d03/check_glyphs.py sha256 808b5efe87f8...; local change: sansMedium counted as sans role (D-03 two-family registration, see README)
 """check_glyphs.py — gate: every string a sans Text/Button node can show must be
 in the cmap of both YiluSans static fonts.
 
@@ -26,6 +25,7 @@ THEME_CONST = re.compile(
     r'(?:static\s+)?(?:const|let)\s+([A-Za-z_]\w*)\s*:\s*String\s*=\s*"([^"]*)"')
 RETURN_THEME = re.compile(r"\breturn\s+(?:Theme|this|self)\.(\w+)\b")
 SERIF_NAMES = ("serif", "serifBold", "stationSerif")
+SANS_NAMES = ("sans", "sansMedium")  # PR#30: engine cannot hold 2 weights in 1 family -> YiluSans / YiluSansMedium
 TRANSITIONAL = {"〈": "D-03 ruling: 〈 literal -> Path2D icon-back",
                 "传书过驿": "D-03 ruling: 传书过驿 -> serif"}
 
@@ -140,7 +140,7 @@ class Corpus:
             for m in THEME_CONST.finditer(src):
                 name, val = m.group(1), m.group(2)
                 values[name] = val
-                roles[name] = ("sans" if name in ("sans", "sansMedium")
+                roles[name] = ("sans" if name in SANS_NAMES
                                else "serif" if name in SERIF_NAMES
                                else "unknown")
         return values, roles
@@ -425,7 +425,7 @@ def unknown_family_msg(arg, inner=None):
     brief = " ".join(arg.strip().split())[:80]
     base = (f"unknown family {brief} -> cannot verify; not a known AppTheme "
             f"family or a helper returning one "
-            f"(D-03: known = Theme.sans / Theme.serif / serifBold / stationSerif)")
+            f"(D-03: known = Theme.sans / sansMedium / Theme.serif / serifBold / stationSerif)")
     if inner:
         base += f" ({inner})"
     return base
