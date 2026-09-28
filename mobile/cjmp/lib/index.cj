@@ -187,6 +187,7 @@ class EntryView {
         this.parityRejectGen = this.parityRejectGen + 1
         this.parityRejectText = ""
         this.parityRejectFlash = false
+        if (PERF_LOG) { perfLog("toast clear gen=${this.parityRejectGen}") }
     }
 
     func showParityReject(): Unit {
@@ -201,11 +202,13 @@ class EntryView {
         this.parityRejectFlash = true
         this.parityRejectGen = this.parityRejectGen + 1
         let gen = this.parityRejectGen
+        if (PERF_LOG) { perfLog("toast show text=${this.parityRejectText} gen=${this.parityRejectGen}") }
         /* UI-thread delayed clear: animateTo's onFinish runs on the
            UI thread, so @State writes repaint immediately.  The 180ms
            duration drives a no-op animation; onFinish clears the toast. */
         this.getUIContext().animateTo(
             AnimateParam(duration: 180, onFinish: Some({ =>
+                if (PERF_LOG) { perfLog("toast onFinish gen=${gen}") }
                 if (gen == this.parityRejectGen) {
                     this.clearParityReject()
                 }
@@ -214,8 +217,15 @@ class EntryView {
         )
     }
 
+    func curLevel(): LevelDef {
+        if (this.levelIndex >= 0 && this.levelIndex < this.levels.size) {
+            return this.levels[this.levelIndex]
+        }
+        return blankLevel()
+    }
+
     func remainingSteps(): Int64 {
-        let lim = this.game.level.stepLimit
+        let lim = this.curLevel().stepLimit
         if (lim <= 0) { return 0 }
         var taken = this.stepFilled - 1
         if (taken < 0) { taken = 0 }
@@ -230,7 +240,7 @@ class EntryView {
     }
 
     func hasParityBoard(): Bool {
-        return this.game.level.parityEdges.size > 0
+        return this.curLevel().parityEdges.size > 0
     }
 
     func stepChipLabel(): String {
@@ -238,8 +248,8 @@ class EntryView {
     }
 
     func cellVp(): Int64 {
-        let cols = this.game.level.cols
-        let rows = this.game.level.rows
+        let cols = this.curLevel().cols
+        let rows = this.curLevel().rows
         if (cols == 6 && rows == 8) {
             return Theme.tutorialCell
         }
@@ -247,11 +257,11 @@ class EntryView {
     }
 
     func boardW(): Int64 {
-        return this.game.level.cols * this.cellVp()
+        return this.curLevel().cols * this.cellVp()
     }
 
     func boardH(): Int64 {
-        return this.game.level.rows * this.cellVp()
+        return this.curLevel().rows * this.cellVp()
     }
 
     func currentLayout(): GridLayout {
@@ -259,7 +269,7 @@ class EntryView {
     }
 
     func roadTitle(): String {
-        return this.game.level.name
+        return this.curLevel().name
     }
 
     func currentName(): String {
@@ -1391,7 +1401,7 @@ class EntryView {
                     .padding(left: Theme.inset, right: Theme.inset)
                     .margin(bottom: 4)
                     .width(100.percent)
-                if (this.hasParityBoard() || this.game.level.stepLimit > 0) {
+                if (this.hasParityBoard() || this.curLevel().stepLimit > 0) {
                     Row(space: 8) {
                         if (this.hasParityBoard()) {
                             Text(this.stepChipLabel())
@@ -1405,7 +1415,7 @@ class EntryView {
                                 .border(width: 1, color: this.stepChipBorder())
                                 .backgroundColor(Theme.whitePaper)
                         }
-                        if (this.game.level.stepLimit > 0) {
+                        if (this.curLevel().stepLimit > 0) {
                             Text("余步 · ${this.remainingSteps()}")
                                 .fontSize(15)
                                 .fontWeight(FontWeight.Bold)
