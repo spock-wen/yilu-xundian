@@ -2,7 +2,7 @@
 # build_from_repo.sh — ONE documented command to build CJMP (Keels 0.2.2) for iOS and/or Android.
 #
 # Usage:
-#   mobile/cjmp/scripts/build_from_repo.sh [--out DIR] [--android] [--ios] [--pending-sans-ok]
+#   mobile/cjmp/scripts/build_from_repo.sh [--out DIR] [--android] [--ios] [--pending-sans-ok] [--auto-venv]
 #
 # Options:
 #   --out DIR          Output directory for the Keels project (default: <repo>/mobile/cjmp/.host)
@@ -11,6 +11,7 @@
 #   (neither flag)     Build both platforms
 #   --pending-sans-ok  Tolerate missing YiluSans-* files (exit 3 from check_fonts.py is non-fatal;
 #                      build is NOT release-valid)
+#   --auto-venv        Automatically create a venv at mobile/cjmp/.venv and install fontTools
 #
 # Prerequisites:
 #   • Source the CJMP OpenSDK 0.2.2 environment script before running this script.
@@ -64,9 +65,13 @@ while [ "$#" -gt 0 ]; do
       PENDING_SANS_OK=1
       shift
       ;;
+    --auto-venv)
+      AUTO_VENV=1
+      shift
+      ;;
     *)
       echo "Unknown argument: $1" >&2
-      echo "Usage: $0 [--out DIR] [--android] [--ios] [--pending-sans-ok]" >&2
+      echo "Usage: $0 [--out DIR] [--android] [--ios] [--pending-sans-ok] [--auto-venv]" >&2
       exit 1
       ;;
   esac
@@ -102,6 +107,30 @@ fi
 if ! command -v python3 >/dev/null 2>&1; then
   echo "ERROR: 'python3' not found on PATH." >&2
   exit 1
+fi
+
+PY="${YILU_PY:-python3}"
+if "$PY" -c 'import fontTools' >/dev/null 2>&1; then
+  echo "fontTools OK ($("$PY" -c 'import fontTools;print(fontTools.version)'))"
+else
+  if [ "${AUTO_VENV:-0}" -eq 1 ]; then
+    if [ ! -d "$REPO/mobile/cjmp/.venv" ]; then
+      python3 -m venv "$REPO/mobile/cjmp/.venv"
+    fi
+    "$REPO/mobile/cjmp/.venv/bin/python" -m pip install --quiet fonttools
+    PY="$REPO/mobile/cjmp/.venv/bin/python"
+    if ! "$PY" -c 'import fontTools' >/dev/null 2>&1; then
+      echo "ERROR: Python module 'fontTools' not found for $PY after auto-venv installation." >&2
+      exit 1
+    fi
+    echo "fontTools OK ($("$PY" -c 'import fontTools;print(fontTools.version)'))"
+  else
+    echo "ERROR: Python module 'fontTools' not found for $PY." >&2
+    echo "  Install:  python3 -m pip install fonttools" >&2
+    echo "  or rerun with --auto-venv (creates mobile/cjmp/.venv and installs fonttools there)" >&2
+    echo "  or point YILU_PY at an interpreter that has it (e.g. YILU_PY=~/ftvenv/bin/python)." >&2
+    exit 1
+  fi
 fi
 
 keels --version
@@ -190,13 +219,13 @@ echo "STEP E: Syncing source and assets"
 # STEP F: Run checks
 # ---------------------------------------------------------------------------
 echo "STEP F: Running check_level.py"
-python3 "$REPO/mobile/scripts/check_level.py"
+"$PY" "$REPO/mobile/scripts/check_level.py"
 
 echo "STEP F: Running check_fonts.py"
 if [ "$PENDING_SANS_OK" -eq 1 ]; then
   echo "--pending-sans-ok ignored: sans fonts are delivered"
 fi
-python3 "$SCRIPT_DIR/check_fonts.py"
+"$PY" "$SCRIPT_DIR/check_fonts.py"
 
 echo "STEP F: Running check_glyphs.py"
 tmp=$(mktemp -d)
@@ -204,7 +233,7 @@ mkdir -p "$tmp/mobile/cjmp"
 cp -R "$REPO/mobile/cjmp/lib" "$tmp/mobile/cjmp/"
 cp -R "$REPO/mobile/shared" "$tmp/mobile/"
 set +e
-out=$(python3 "$SCRIPT_DIR/check_glyphs.py" "$tmp/mobile" --fonts-dir "$REPO/mobile/cjmp/fonts" --chars "$REPO/mobile/cjmp/fonts/yilu_sans_chars.txt" --strict-family 2>&1)
+out=$("$PY" "$SCRIPT_DIR/check_glyphs.py" "$tmp/mobile" --fonts-dir "$REPO/mobile/cjmp/fonts" --chars "$REPO/mobile/cjmp/fonts/yilu_sans_chars.txt" --strict-family 2>&1)
 rc=$?
 set -e
 echo "check_glyphs scan root: repo mobile/cjmp/lib + mobile/shared (staged, excludes .host)"

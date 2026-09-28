@@ -19,7 +19,7 @@
 构建前需：
 
 1. **CJMP OpenSDK 0.2.2 环境脚本**：使 `keels` CLI 进入 PATH 并设置 `CJMP_SDK_HOME`。该脚本路径因机器而异（勿在脚本中硬编码），例如 `source ~/orca/cjmp/env.sh`（示例路径，以本机实际为准）。
-2. `python3` 在 PATH 上；字形检查依赖 `fontTools`（`python3 -m pip install fonttools`）。
+2. `python3` 在 PATH 上；字形检查依赖 `fontTools`（`python3 -m pip install fonttools`，或使用 `--auto-venv` 标志让脚本自动在 `mobile/cjmp/.venv` 创建并安装，也可以通过设置 `YILU_PY` 环境变量指定含有该依赖的 Python 解释器路径）。
 3. **Xcode**（iOS 构建，需 iOS 15.0 部署目标）。
 4. **Android SDK + NDK 26.3.11579264**（Android 构建）。
 
@@ -28,7 +28,7 @@
 在任意工作目录运行：
 
 ```bash
-mobile/cjmp/scripts/build_from_repo.sh [--out DIR] [--android] [--ios] 
+mobile/cjmp/scripts/build_from_repo.sh [--out DIR] [--android] [--ios] [--auto-venv]
 ```
 
 - 默认同时构建双平台；`--android` / `--ios` 只构建对应平台。
@@ -73,7 +73,8 @@ SVG 图标（`icon-undo`、`icon-reset`）与字体的同步行为不变。
 - **字体注册**：由于公共字体注册 API 限制，字体通过引擎底层私有 FFI 符号 `FfiFontManagerRegisterFont` 配合 `dlsym` 进行动态注册（属内部私有符号，后续 SDK 版本可能调整）。
 - **页面返回（方案 A2，页内返回按钮）**：iOS 系统的侧滑返回手势在当前容器下不可用，Android 的系统返回键在此桥接容器内不会天然触发页面回退，因此所有子页面均内置页面内返回按钮 `〈`（方案 A2）；Android 系统返回键被映射为触发同一页内返回按钮的处理逻辑，保证双端返回行为一致。
 - **安全区与状态栏**：安全区及状态栏间距当前为占位实现（PLACEHOLDER），等待产品经理（PM）的设计决策最终确定。
-- **棋盘实现**：当前棋盘为占位展示，完整巡点交互逻辑将在 M2 里程碑接入。
+- **棋盘实现**：M2 起棋盘由 shape 组件（Rect/Line/Circle 等，非 Canvas）绘制，见 lib/board.cj。
+- 仓颉编译器（CJMP OpenSDK 0.2.2 cjc）偶发随机崩溃/失败，重跑即可；且构建产物不可逐字节复现，因此脚本打印的 APK / iOS 二进制 SHA-256 仅供参考（用于核对同一次构建的传递），不作为版本一致性依据。
 - **特殊机制与修缮关卡**：6 种核心特殊机制及修缮关卡暂未实现，计划在 M3 里程碑实现。
 
 ## 字体许可
