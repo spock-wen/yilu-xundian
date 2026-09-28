@@ -3,7 +3,7 @@ package yilu_zip.game
 import std.collection.ArrayList
 import yilu_zip.engine.Wall
 
-/* Minimal JSON reader for one levels.json object.
+/* Minimal JSON reader for levels.json objects.
    String bytes are read with String.get, which returns None past the end
    (1.1.3 String <: Collection<Byte>). operator[] throws IndexOutOfBoundsException,
    and that exception's message interpolates the index through numberToString.
@@ -11,7 +11,7 @@ import yilu_zip.engine.Wall
    (YiluXundian-2026-09-26-223058.ips). This loader returns an error string instead.
    https://cj-docs.gitcode.com/zh/1.1.3/libs/std/core/core_package_api/core_package_structs.html
    https://github.com/cangjielanguage/cangjie_runtime/blob/v1.1.3/stdlib/libs/std/core/array.cj
-   parityEdges must be absent or empty: this loader does not construct ParityEdge values.
+   parityEdges are parsed into ParityEdge values (x1, y1, x2, y2, requireOdd, requireEven).
    stepLimit is stored on LevelDef and not enforced, same as PatrolGame in patrol.cj. */
 
 func asciiDigit(d: Int64): String {
@@ -66,6 +66,16 @@ public class LevelLoad {
 
     public init(level: Option<LevelDef>, error: String) {
         this.level = level
+        this.error = error
+    }
+}
+
+public class LevelsLoad {
+    public let levels: ArrayList<LevelDef>
+    public let error: String
+
+    public init(levels: ArrayList<LevelDef>, error: String) {
+        this.levels = levels
         this.error = error
     }
 }
@@ -463,6 +473,20 @@ func readIntField(obj: JsonVal, key: String, err: LevelLoad): Int64 {
     }
 }
 
+func readBoolField(obj: JsonVal, key: String, err: LevelLoad): Bool {
+    match (jsonField(obj, key)) {
+        case None =>
+            err.error = "missing " + key
+            return false
+        case Some(v) =>
+            if (v.kind != 1) {
+                err.error = key + " must be a bool"
+                return false
+            }
+            return v.boolVal
+    }
+}
+
 public func blankLevel(): LevelDef {
     return LevelDef(
         0,
@@ -476,16 +500,7 @@ public func blankLevel(): LevelDef {
     )
 }
 
-public func levelFromJson(text: String): LevelLoad {
-    let parser = JsonParser(text)
-    let root = parser.parseValue()
-    if (parser.failed) {
-        return LevelLoad(None, parser.message)
-    }
-    parser.skipWs()
-    if (!parser.eof()) {
-        return LevelLoad(None, "trailing data after json value")
-    }
+func levelFromJsonObject(root: JsonVal): LevelLoad {
     if (root.kind != 5) {
         return LevelLoad(None, "level json must be an object")
     }
@@ -582,14 +597,48 @@ public func levelFromJson(text: String): LevelLoad {
                 i = i + 1
             }
     }
+    let parityEdges = ArrayList<ParityEdge>()
     match (jsonField(root, "parityEdges")) {
         case None => ()
         case Some(v) =>
             if (v.kind != 4) {
                 return LevelLoad(None, "parityEdges must be an array")
             }
-            if (v.arr.size != 0) {
-                return LevelLoad(None, "non-empty parityEdges are not loaded by the iOS v1 shell")
+            var i: Int64 = 0
+            while (i < v.arr.size) {
+                let item = match (v.arr.get(i)) {
+                    case None => return LevelLoad(None, "parityEdge index")
+                    case Some(got) => got
+                }
+                if (item.kind != 5) {
+                    return LevelLoad(None, "parityEdge must be an object")
+                }
+                let x1 = readIntField(item, "x1", scratch)
+                if (scratch.error != "") {
+                    return scratch
+                }
+                let y1 = readIntField(item, "y1", scratch)
+                if (scratch.error != "") {
+                    return scratch
+                }
+                let x2 = readIntField(item, "x2", scratch)
+                if (scratch.error != "") {
+                    return scratch
+                }
+                let y2 = readIntField(item, "y2", scratch)
+                if (scratch.error != "") {
+                    return scratch
+                }
+                let requireOdd = readBoolField(item, "requireOdd", scratch)
+                if (scratch.error != "") {
+                    return scratch
+                }
+                let requireEven = readBoolField(item, "requireEven", scratch)
+                if (scratch.error != "") {
+                    return scratch
+                }
+                parityEdges.add(ParityEdge(x1, y1, x2, y2, requireOdd, requireEven))
+                i = i + 1
             }
     }
     var stepLimit: Int64 = 0
@@ -601,6 +650,54 @@ public func levelFromJson(text: String): LevelLoad {
             }
             stepLimit = v.intVal
     }
-    let level = LevelDef(id, name, cols, rows, waypoints, walls, ArrayList<ParityEdge>(), stepLimit)
+    let level = LevelDef(id, name, cols, rows, waypoints, walls, parityEdges, stepLimit)
     return LevelLoad(Some(level), "")
+}
+
+public func levelFromJson(text: String): LevelLoad {
+    let parser = JsonParser(text)
+    let root = parser.parseValue()
+    if (parser.failed) {
+        return LevelLoad(None, parser.message)
+    }
+    parser.skipWs()
+    if (!parser.eof()) {
+        return LevelLoad(None, "trailing data after json value")
+    }
+    return levelFromJsonObject(root)
+}
+
+public func levelsFromJson(text: String): LevelsLoad {
+    let parser = JsonParser(text)
+    let root = parser.parseValue()
+    if (parser.failed) {
+        return LevelsLoad(ArrayList<LevelDef>(), parser.message)
+    }
+    parser.skipWs()
+    if (!parser.eof()) {
+        return LevelsLoad(ArrayList<LevelDef>(), "trailing data after json value")
+    }
+    if (root.kind != 4) {
+        return LevelsLoad(ArrayList<LevelDef>(), "levels json must be an array")
+    }
+    let levels = ArrayList<LevelDef>()
+    var idx: Int64 = 0
+    while (idx < root.arr.size) {
+        let item = match (root.arr.get(idx)) {
+            case None =>
+                return LevelsLoad(ArrayList<LevelDef>(), "level " + decimalText(idx) + ": level index")
+            case Some(got) => got
+        }
+        let loaded = levelFromJsonObject(item)
+        if (loaded.error != "") {
+            return LevelsLoad(ArrayList<LevelDef>(), "level " + decimalText(idx) + ": " + loaded.error)
+        }
+        match (loaded.level) {
+            case Some(lv) => levels.add(lv)
+            case None =>
+                return LevelsLoad(ArrayList<LevelDef>(), "level " + decimalText(idx) + ": missing level")
+        }
+        idx = idx + 1
+    }
+    return LevelsLoad(levels, "")
 }
