@@ -25,6 +25,7 @@ import ohos.arkui.component.scroll.*
 import std.collection.ArrayList
 import ohos_app_cangjie_entry.engine.*
 import ohos_app_cangjie_entry.game.*
+import std.time.MonoTime
 
 @Entry
 @Component
@@ -48,6 +49,8 @@ class EntryView {
 
     // Board shape renderer state (Keels 0.2.2)
     @State var boardGen: Int64 = 0
+    var lastBuildUs: Int64 = 0
+    var lastAssignUs: Int64 = 0
     @State var boardCells: Array<BoardRect> = Array<BoardRect>()
     @State var boardGrid: Array<BoardSeg> = Array<BoardSeg>()
     @State var boardWalls: Array<BoardSeg> = Array<BoardSeg>()
@@ -274,15 +277,30 @@ class EntryView {
         this.boardGen = this.boardGen + 1
         let layout = this.currentLayout()
         let factor = this.getPxFactor()
-        this.boardCells = buildBoardCells(this.game, layout)
-        this.boardGrid = buildBoardGrid(layout)
-        this.boardWalls = buildBoardWalls(this.game, layout)
-        this.boardParityLabels = buildBoardParityLabels(this.game, layout, factor)
-        this.boardRoute = buildBoardRoute(this.game, layout)
-        this.boardDots = buildBoardHeadDot(this.game, layout)
-        this.boardStationCircles = buildBoardStationCircles(this.game, layout)
-        this.boardNextLabels = buildBoardNextLabels(this.game, layout, factor)
-        this.boardDigits = buildBoardDigits(this.game, layout, factor)
+
+        let tBuild0 = MonoTime.now()
+        let tmpCells = buildBoardCells(this.game, layout)
+        let tmpGrid = buildBoardGrid(layout)
+        let tmpWalls = buildBoardWalls(this.game, layout)
+        let tmpParityLabels = buildBoardParityLabels(this.game, layout, factor)
+        let tmpRoute = buildBoardRoute(this.game, layout)
+        let tmpDots = buildBoardHeadDot(this.game, layout)
+        let tmpStationCircles = buildBoardStationCircles(this.game, layout)
+        let tmpNextLabels = buildBoardNextLabels(this.game, layout, factor)
+        let tmpDigits = buildBoardDigits(this.game, layout, factor)
+        this.lastBuildUs = (MonoTime.now() - tBuild0).toMicroseconds()
+
+        let tAssign0 = MonoTime.now()
+        this.boardCells = tmpCells
+        this.boardGrid = tmpGrid
+        this.boardWalls = tmpWalls
+        this.boardParityLabels = tmpParityLabels
+        this.boardRoute = tmpRoute
+        this.boardDots = tmpDots
+        this.boardStationCircles = tmpStationCircles
+        this.boardNextLabels = tmpNextLabels
+        this.boardDigits = tmpDigits
+        this.lastAssignUs = (MonoTime.now() - tAssign0).toMicroseconds()
     }
 
     func refresh(): Unit {
@@ -304,6 +322,9 @@ class EntryView {
         }
         this.screen = 1
         this.refresh()
+        if (PERF_LOG) {
+            perfLog("open lvl=${index} build_us=${this.lastBuildUs} assign_us=${this.lastAssignUs}")
+        }
     }
 
     func startPlay(): Unit {
@@ -485,7 +506,7 @@ class EntryView {
         this.refresh()
     }
 
-    func handleDrag(event: TouchEvent): Unit {
+    func handleDrag(event: TouchEvent, isDown: Bool): Unit {
         /* Win sets screen=2 then refresh(); a trailing Move can still
            hit the Canvas and drag-back-undo the last cell. */
         if (this.screen != 1) {
@@ -500,13 +521,19 @@ class EntryView {
         match (hit) {
             case None => ()
             case Some(cell) =>
+                let t0 = MonoTime.now()
+                var ok = 0
                 if (this.game.tryStep(cell)) {
+                    ok = 1
                     this.clearParityReject()
                     if (this.game.isWin()) {
                         if (this.levelIndex + 1 > this.cleared) {
                             this.cleared = this.levelIndex + 1
                         }
                         this.screen = 2
+                        if (PERF_LOG) {
+                            perfLog("win lvl=${this.levelIndex}")
+                        }
                     }
                     this.refresh()
                 } else {
@@ -514,6 +541,11 @@ class EntryView {
                         this.showParityReject()
                         this.refresh()
                     }
+                }
+                if (PERF_LOG) {
+                    let evStr = if (isDown) { "down" } else { "move" }
+                    let us = (MonoTime.now() - t0).toMicroseconds()
+                    perfLog("touch ev=${evStr} lvl=${this.levelIndex} ok=${ok} filled=${this.game.filled()} handler_us=${us} cells=${this.boardCells.size} grid=${this.boardGrid.size} route=${this.boardRoute.size} digits=${this.boardDigits.size} gen=${this.boardGen} rebuild_us=${this.lastBuildUs + this.lastAssignUs} build_us=${this.lastBuildUs} assign_us=${this.lastAssignUs} tick=${this.tick}")
                 }
         }
     }
@@ -1332,7 +1364,9 @@ class EntryView {
                 .backgroundColor(Theme.whitePaper)
                 .borderRadius(12)
                 Blank()
-            } else if (this.screen == 1) {
+            }
+            // Keels 0.2.2 leaks @State subscriptions of destroyed subtrees; keep board mounted
+            Column {
                 Stack {
                     Row {
                         // A2: 48vp hit area — in-page back: iOS edge swipe does not pop on Keels 0.2.2
@@ -1580,8 +1614,8 @@ class EntryView {
                         .backgroundColor(Theme.paper)
                         .onTouch({ evt =>
                             match (evt.eventType) {
-                                case TouchType.Down => this.handleDrag(evt)
-                                case TouchType.Move => this.handleDrag(evt)
+                                case TouchType.Down => this.handleDrag(evt, true)
+                                case TouchType.Move => this.handleDrag(evt, false)
                                 case _ => ()
                             }
                         })
@@ -1641,7 +1675,10 @@ class EntryView {
                 .height(Theme.bottomBar)
                 .alignItems(VerticalAlign.Center)
                 .padding(left: Theme.inset, right: Theme.inset)
-            }
+                        }
+            .visibility(if (this.screen == 1) { Visibility.Visible } else { Visibility.None })
+            .width(100.percent)
+            .layoutWeight(1)
         }
         .width(100.percent)
         .height(100.percent)
