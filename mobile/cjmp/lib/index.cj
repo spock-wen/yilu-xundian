@@ -44,6 +44,11 @@ class EntryView {
     @State var parityRejectText: String = ""
     @State var parityRejectFlash: Bool = false
     @State var parityRejectGen: Int64 = 0
+    @State var rejectFromX: Int64 = 0
+    @State var rejectFromY: Int64 = 0
+    @State var rejectToX: Int64 = 0
+    @State var rejectToY: Int64 = 0
+    @State var winW: Float64 = 360.0
     // A2: back button pressed ripple opacity
     @State var backPressedOpacity: Float64 = 0.0
 
@@ -52,7 +57,6 @@ class EntryView {
     var lastBuildUs: Int64 = 0
     var lastAssignUs: Int64 = 0
     @State var boardCells: Array<BoardRect> = Array<BoardRect>()
-    @State var boardGrid: Array<BoardSeg> = Array<BoardSeg>()
     @State var boardWalls: Array<BoardSeg> = Array<BoardSeg>()
     @State var boardParityLabels: Array<BoardLabel> = Array<BoardLabel>()
     @State var boardRoute: Array<BoardSeg> = Array<BoardSeg>()
@@ -227,16 +231,69 @@ class EntryView {
     func remainingSteps(): Int64 {
         let lim = this.curLevel().stepLimit
         if (lim <= 0) { return 0 }
-        var taken = this.stepFilled - 1
-        if (taken < 0) { taken = 0 }
-        let left = lim - taken
+        let left = lim - this.stepFilled
         if (left < 0) { return 0 }
         return left
     }
 
     func stepChipBorder(): Int64 {
-        if (this.parityRejectFlash) { return Theme.vermillion }
         return Theme.paperLine
+    }
+
+    func stepLeftBorderColor(): Int64 {
+        if (this.remainingSteps() <= Theme.stepWarnAt) {
+            return Theme.gold
+        }
+        return Theme.paperLine
+    }
+
+    func stepLeftBorderW(): Int64 {
+        if (this.remainingSteps() <= Theme.stepWarnAt) {
+            return 2
+        }
+        return 1
+    }
+
+    func rejectEdgeMid(): (Float64, Float64) {
+        return this.boardGeom().seamMid(this.rejectFromX, this.rejectFromY, this.rejectToX, this.rejectToY)
+    }
+
+    func rejectEdgeStartPoint(): (Float64, Float64) {
+        let (midX, midY) = this.rejectEdgeMid()
+        if (this.rejectFromX != this.rejectToX) {
+            return (midX, midY - 12.0)
+        }
+        return (midX - 12.0, midY)
+    }
+
+    func rejectEdgeEndPoint(): (Float64, Float64) {
+        let (midX, midY) = this.rejectEdgeMid()
+        if (this.rejectFromX != this.rejectToX) {
+            return (midX, midY + 12.0)
+        }
+        return (midX + 12.0, midY)
+    }
+
+    func rejectToastX(): Float64 {
+        let (midX, _) = this.rejectEdgeMid()
+        var x = midX - 42.0
+        if (x < 0.0) {
+            x = 0.0
+        }
+        let maxW = Float64(this.boardW()) - 84.0
+        if (x > maxW) {
+            x = maxW
+        }
+        return x
+    }
+
+    func rejectToastY(): Float64 {
+        let (_, midY) = this.rejectEdgeMid()
+        var y = midY - 36.0
+        if (y < 0.0) {
+            y = midY + 8.0
+        }
+        return y
     }
 
     func hasParityBoard(): Bool {
@@ -247,25 +304,24 @@ class EntryView {
         return "第 ${this.stepFilled} 步"
     }
 
+    func boardGeom(): BoardGeom {
+        return boardGeomFor(this.curLevel().cols, this.curLevel().rows, this.winW)
+    }
+
     func cellVp(): Int64 {
-        let cols = this.curLevel().cols
-        let rows = this.curLevel().rows
-        if (cols == 6 && rows == 8) {
-            return Theme.tutorialCell
-        }
-        return Theme.boardInner / cols
+        return Int64(this.boardGeom().c)
     }
 
     func boardW(): Int64 {
-        return this.curLevel().cols * this.cellVp()
+        return Int64(this.boardGeom().trayW())
     }
 
     func boardH(): Int64 {
-        return this.curLevel().rows * this.cellVp()
+        return Int64(this.boardGeom().trayH())
     }
 
     func currentLayout(): GridLayout {
-        return GridLayout(0.0, 0.0, Float64(this.cellVp()), this.game.level.cols, this.game.level.rows)
+        return GridLayout(0.0, 0.0, this.boardGeom().c, this.curLevel().cols, this.curLevel().rows)
     }
 
     func roadTitle(): String {
@@ -285,24 +341,22 @@ class EntryView {
 
     func rebuildBoard(): Unit {
         this.boardGen = this.boardGen + 1
-        let layout = this.currentLayout()
+        let geom = this.boardGeom()
         let factor = this.getPxFactor()
 
         let tBuild0 = MonoTime.now()
-        let tmpCells = buildBoardCells(this.game, layout)
-        let tmpGrid = buildBoardGrid(layout)
-        let tmpWalls = buildBoardWalls(this.game, layout)
-        let tmpParityLabels = buildBoardParityLabels(this.game, layout, factor)
-        let tmpRoute = buildBoardRoute(this.game, layout)
-        let tmpDots = buildBoardHeadDot(this.game, layout)
-        let tmpStationCircles = buildBoardStationCircles(this.game, layout)
-        let tmpNextLabels = buildBoardNextLabels(this.game, layout, factor)
-        let tmpDigits = buildBoardDigits(this.game, layout, factor)
+        let tmpCells = buildBoardCells(this.game, geom)
+        let tmpWalls = buildBoardWalls(this.game, geom)
+        let tmpParityLabels = buildBoardParityLabels(this.game, geom, factor)
+        let tmpRoute = buildBoardRoute(this.game, geom)
+        let tmpDots = buildBoardHeadDot(this.game, geom)
+        let tmpStationCircles = buildBoardStationCircles(this.game, geom)
+        let tmpNextLabels = buildBoardNextLabels(this.game, geom, factor)
+        let tmpDigits = buildBoardDigits(this.game, geom, factor)
         this.lastBuildUs = (MonoTime.now() - tBuild0).toMicroseconds()
 
         let tAssign0 = MonoTime.now()
         this.boardCells = tmpCells
-        this.boardGrid = tmpGrid
         this.boardWalls = tmpWalls
         this.boardParityLabels = tmpParityLabels
         this.boardRoute = tmpRoute
@@ -387,10 +441,8 @@ class EntryView {
         if (this.screen == 6) {
             return Theme.paperOf(this.chapterIndex)
         }
-        /* 平原 board + 通关 share sage paper. screen==2 used to fall
-           through to 涿郡 Theme.paper and flash the win sheet. */
-        if ((this.screen == 1 || this.screen == 2) && this.levelIndex >= 10) {
-            return Theme.pingyuanPaper
+        if (this.screen == 1 || this.screen == 2) {
+            return Theme.paperOf(this.chapterIndex)
         }
         return Theme.paper
     }
@@ -527,7 +579,7 @@ class EntryView {
         }
         let px = event.touches[0].x
         let py = event.touches[0].y
-        let hit = touchToCell(px, py, this.currentLayout())
+        let hit = this.boardGeom().hitTest(px, py)
         match (hit) {
             case None => ()
             case Some(cell) =>
@@ -548,6 +600,13 @@ class EntryView {
                     this.refresh()
                 } else {
                     if (this.game.lastRejectParity != 0) {
+                        if (this.game.path.size() > 0) {
+                            let lastCell = this.game.path.at(this.game.path.size() - 1)
+                            this.rejectFromX = lastCell.x
+                            this.rejectFromY = lastCell.y
+                            this.rejectToX = cell.x
+                            this.rejectToY = cell.y
+                        }
                         this.showParityReject()
                         this.refresh()
                     }
@@ -555,7 +614,7 @@ class EntryView {
                 if (PERF_LOG) {
                     let evStr = if (isDown) { "down" } else { "move" }
                     let us = (MonoTime.now() - t0).toMicroseconds()
-                    perfLog("touch ev=${evStr} lvl=${this.levelIndex} ok=${ok} filled=${this.game.filled()} handler_us=${us} cells=${this.boardCells.size} grid=${this.boardGrid.size} route=${this.boardRoute.size} digits=${this.boardDigits.size} gen=${this.boardGen} rebuild_us=${this.lastBuildUs + this.lastAssignUs} build_us=${this.lastBuildUs} assign_us=${this.lastAssignUs} tick=${this.tick}")
+                    perfLog("touch ev=${evStr} lvl=${this.levelIndex} ok=${ok} filled=${this.game.filled()} handler_us=${us} cells=${this.boardCells.size} grid=0 route=${this.boardRoute.size} digits=${this.boardDigits.size} gen=${this.boardGen} rebuild_us=${this.lastBuildUs + this.lastAssignUs} build_us=${this.lastBuildUs} assign_us=${this.lastAssignUs} tick=${this.tick}")
                 }
         }
     }
@@ -1378,6 +1437,29 @@ class EntryView {
             // Keels 0.2.2 leaks @State subscriptions of destroyed subtrees; keep board mounted
             Column {
                 Stack {
+                    Text(this.roadTitle())
+                        .fontSize(18)
+                        .fontColor(Theme.ink)
+                        .fontFamily(this.serifBoldFamily())
+                        .fontWeight(FontWeight.Bold)
+                        .width(100.percent)
+                        .height(48)
+                        .textAlign(TextAlign.Center)
+                        .padding(left: 64, right: 64)
+                        .position(x: 0, y: 0)
+
+                    Text(this.boardSubtitle())
+                        .fontSize(12)
+                        .fontColor(Theme.inkMuted)
+                        .fontFamily(this.sansFamily())
+                        .maxLines(1)
+                        .textOverflow(TextOverflow.Ellipsis)
+                        .textAlign(TextAlign.Center)
+                        .width(100.percent)
+                        .height(16)
+                        .padding(left: 64, right: 64)
+                        .position(x: 0, y: 37)
+
                     Row {
                         // A2: 48vp hit area — in-page back: iOS edge swipe does not pop on Keels 0.2.2
                         this.backButton({ => this.leaveBoard() }, true)
@@ -1385,22 +1467,18 @@ class EntryView {
                     }
                     .width(100.percent)
                     .height(48)
-                    Text(this.roadTitle())
-                        .fontSize(18)
-                        .fontColor(Theme.ink)
-                        .fontFamily(this.serifBoldFamily())
-                        .fontWeight(FontWeight.Bold)
+                    .padding(left: Theme.inset, right: Theme.inset)
+                    .position(x: 0, y: 0)
                 }
                 .width(100.percent)
-                .height(48)
-                .padding(left: Theme.inset, right: Theme.inset)
-                Text(this.boardSubtitle())
-                    .fontSize(12)
-                    .fontColor(Theme.inkMuted)
-                    .fontFamily(this.sansFamily())
-                    .padding(left: Theme.inset, right: Theme.inset)
-                    .margin(bottom: 4)
+                .height(56)
+
+                Column() {}
                     .width(100.percent)
+                    .height(1)
+                    .backgroundColor(Theme.paperLine)
+                    .margin(left: 20, right: 20)
+
                 if (this.hasParityBoard() || this.curLevel().stepLimit > 0) {
                     Row(space: 8) {
                         if (this.hasParityBoard()) {
@@ -1424,57 +1502,77 @@ class EntryView {
                                 .padding(left: 12, right: 12)
                                 .height(28)
                                 .borderRadius(4)
-                                .border(width: 1, color: Theme.paperLine)
+                                .border(width: this.stepLeftBorderW(), color: this.stepLeftBorderColor())
                                 .backgroundColor(Theme.whitePaper)
                         }
                     }
                     .justifyContent(FlexAlign.Center)
                     .width(100.percent)
-                    .margin(bottom: 4)
+                    .height(28)
+                    .margin(top: 8, bottom: 8)
                 }
-                if (this.parityRejectText.size > 0) {
-                    Row {
-                        Text(this.parityRejectText)
-                            .fontSize(14)
-                            .fontFamily(this.serifFamily())
-                            .fontColor(Theme.vermillion)
-                            .padding(left: 14, right: 14)
-                            .height(28)
-                            .borderRadius(4)
-                            .border(width: 1, color: Theme.vermillion)
-                            .backgroundColor(Theme.whitePaper)
-                    }
-                    .justifyContent(FlexAlign.Center)
-                    .width(100.percent)
-                    .margin(bottom: 4)
-                }
-                /* BANDS.md composite: 涿郡 0–9 / 平原 10–19.
+                /* BANDS.md composite: chapters 0..9.
                    Full-width 360×100 vp; Theme.bandClear keeps bust/flags
                    out of the Canvas grid (band.bottom ≤ board.top − 30px). */
                 Column {
-                    if (this.levelIndex < 10) {
+                    if (this.chapterIndex == 0) {
                         Image(rawImg("band_zhuojun_v91"))
                             .width(100.percent)
                             .height(Theme.bandH)
-                    } else {
+                    } else if (this.chapterIndex == 1) {
                         Image(rawImg("band_pingyuan_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else if (this.chapterIndex == 2) {
+                        Image(rawImg("band_xuzhou_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else if (this.chapterIndex == 3) {
+                        Image(rawImg("band_lvbu_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else if (this.chapterIndex == 4) {
+                        Image(rawImg("band_touyuan_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else if (this.chapterIndex == 5) {
+                        Image(rawImg("band_jingzhou_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else if (this.chapterIndex == 6) {
+                        Image(rawImg("band_chibi_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else if (this.chapterIndex == 7) {
+                        Image(rawImg("band_rushu_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else if (this.chapterIndex == 8) {
+                        Image(rawImg("band_hanzhong_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else {
+                        Image(rawImg("band_beifa_v91"))
                             .width(100.percent)
                             .height(Theme.bandH)
                     }
                 }
                 .width(100.percent)
                 .height(Theme.bandH)
-                .margin(bottom: Theme.bandClear)
+                .margin(top: if (this.hasParityBoard() || this.curLevel().stepLimit > 0) { 0 } else { 4 }, bottom: Theme.bandClear)
                 Scroll {
                     Column {
                         Stack(alignContent: Alignment.TopStart) {
                             // Keys omit boardGen so unchanged shapes are reused between moves (perf); content fields keep keys unique.
-                            // Layer 1: Cells (fill whitePaper/paperShade per cell)
+                            // Layer 1: Cells (fill whitePaper/paperShade per cell with radius 2 and 1vp paperLine outline)
                             ForEach(
                                 this.boardCells,
                                 itemGenerator: { item: BoardRect, idx: Int64 =>
                                     Rect(width: item.w, height: item.h)
+                                        .radius(2)
                                         .fill(item.color)
+                                        .stroke(Theme.paperLine)
+                                        .strokeWidth(1)
                                         .position(x: item.x, y: item.y)
                                 },
                                 // Keels 0.2.2: ForEach key label is keyGeneratorFunc (macro passes it to forEachUpdateFunction)
@@ -1483,22 +1581,7 @@ class EntryView {
                                 }
                             )
 
-                            // Layer 2: Grid hairlines (paperLine hairline)
-                            ForEach(
-                                this.boardGrid,
-                                itemGenerator: { item: BoardSeg, idx: Int64 =>
-                                    Line(width: this.boardW(), height: this.boardH())
-                                        .startPoint((item.x1, item.y1))
-                                        .endPoint((item.x2, item.y2))
-                                        .stroke(item.color)
-                                        .strokeWidth(item.width)
-                                },
-                                keyGeneratorFunc: { item: BoardSeg, idx: Int64 =>
-                                    "${idx}-${item.x1}-${item.y1}-${item.x2}-${item.y2}"
-                                }
-                            )
-
-                            // Layer 3: Walls (ink lineWidth 3 with 4vp inset at both ends and BUTT caps — matches HarmonyOS Canvas default lineCap)
+                            // Layer 3: Walls (4x24 ink round-cap bars centred exactly on the seam midpoint)
                             ForEach(
                                 this.boardWalls,
                                 itemGenerator: { item: BoardSeg, idx: Int64 =>
@@ -1507,7 +1590,7 @@ class EntryView {
                                         .endPoint((item.x2, item.y2))
                                         .stroke(item.color)
                                         .strokeWidth(item.width)
-                                        .strokeLineCap(LineCapStyle.Butt)
+                                        .strokeLineCap(LineCapStyle.Round)
                                         .antiAlias(true)
                                 },
                                 keyGeneratorFunc: { item: BoardSeg, idx: Int64 =>
@@ -1601,27 +1684,50 @@ class EntryView {
                                 }
                             )
 
-                            // Layer 9: Digits (Path with device px commands, strokeWidth vp, round caps/joins)
+                            // Layer 9: Digits (Path with filled outlines, nonzero fill)
                             ForEach(
                                 this.boardDigits,
                                 itemGenerator: { item: BoardPath, idx: Int64 =>
                                     Path(width: this.boardW(), height: this.boardH(), commands: item.commands)
-                                        .stroke(item.color)
-                                        .strokeWidth(item.strokeW)
-                                        .strokeLineCap(LineCapStyle.Round)
-                                        .strokeLineJoin(LineJoinStyle.Round)
-                                        .fillOpacity(0.0)
+                                        .fill(item.color)
+                                        .fillOpacity(1.0)
+                                        .strokeWidth(0)
                                         .antiAlias(true)
                                         .position(x: 0, y: 0)
                                 },
                                 keyGeneratorFunc: { item: BoardPath, idx: Int64 =>
-                                    "${idx}-${item.color}-${item.strokeW}-${item.commands}"
+                                    "${idx}-${item.color}-${item.commands}"
                                 }
                             )
+
+                            // Parity reject overlay: flashing edge line + toast
+                            if (this.parityRejectFlash && this.parityRejectText.size > 0) {
+                                Line(width: this.boardW(), height: this.boardH())
+                                    .startPoint(this.rejectEdgeStartPoint())
+                                    .endPoint(this.rejectEdgeEndPoint())
+                                    .stroke(Theme.vermillion)
+                                    .strokeWidth(3)
+                                    .strokeLineCap(LineCapStyle.Round)
+                                    .antiAlias(true)
+                                Text(this.parityRejectText)
+                                    .fontSize(14)
+                                    .fontFamily(this.serifBoldFamily())
+                                    .fontColor(Theme.vermillion)
+                                    .width(84)
+                                    .height(28)
+                                    .textAlign(TextAlign.Center)
+                                    .padding(left: 14, right: 14)
+                                    .borderRadius(4)
+                                    .border(width: 1, color: Theme.vermillion)
+                                    .backgroundColor(Theme.whitePaper)
+                                    .position(x: this.rejectToastX(), y: this.rejectToastY())
+                            }
                         }
                         .width(this.boardW())
                         .height(this.boardH())
-                        .backgroundColor(Theme.paper)
+                        .backgroundColor(Theme.paperShade)
+                        .border(width: 1, color: Theme.paperLine)
+                        .borderRadius(8)
                         .onTouch({ evt =>
                             match (evt.eventType) {
                                 case TouchType.Down => this.handleDrag(evt, true)
@@ -1695,5 +1801,13 @@ class EntryView {
         .padding(left: this.playInset(), right: this.playInset())
         .backgroundColor(this.playPaper())
         .alignItems(HorizontalAlign.Center)
+        .onAreaChange({ old, new =>
+            let w = new.width.value
+            let targetW = if (w > 0.0) { w } else { 360.0 }
+            if (targetW - this.winW > 0.5 || this.winW - targetW > 0.5) {
+                this.winW = targetW
+                this.rebuildBoard()
+            }
+        })
     }
 }

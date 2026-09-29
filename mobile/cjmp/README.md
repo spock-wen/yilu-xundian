@@ -48,7 +48,7 @@ Android namespace / applicationId 与 iOS bundle identifier 均为 `com.yilu.xun
 
 ## 资源同步策略（仅拷贝被代码引用的 PNG）
 
-`sync_to_keels.sh` 以正则 `rawImg("([A-Za-z0-9_]+)")` 扫描 `mobile/cjmp/lib/*.cj` 收集引用名；任一被引用 PNG 缺失即失败退出。media 目录中存在但未被引用的 PNG 会从 rawfile 目录中清除（仅清理这些文件）。当前 41 张 PNG 中有 36 张被引用，排除的 5 张及原因：
+`sync_to_keels.sh` 以正则 `rawImg("([A-Za-z0-9_]+)")` 扫描 `mobile/cjmp/lib/*.cj` 收集引用名；任一被引用 PNG 缺失即失败退出。media 目录中存在但未被引用的 PNG 会从 rawfile 目录中清除（仅清理这些文件）。当前 49 张 PNG 中有 44 张被引用，排除的 5 张及原因：
 
 | PNG | 排除原因 |
 |-----|----------|
@@ -73,7 +73,7 @@ SVG 图标（`icon-undo`、`icon-reset`）与字体的同步行为不变。
 - **字体注册**：由于公共字体注册 API 限制，字体通过引擎底层私有 FFI 符号 `FfiFontManagerRegisterFont` 配合 `dlsym` 进行动态注册（属内部私有符号，后续 SDK 版本可能调整）。
 - **页面返回（方案 A2，页内返回按钮）**：iOS 系统的侧滑返回手势在当前容器下不可用，Android 的系统返回键在此桥接容器内不会天然触发页面回退，因此所有子页面均内置页面内返回按钮 `〈`（方案 A2）；Android 系统返回键被映射为触发同一页内返回按钮的处理逻辑，保证双端返回行为一致。
 - **安全区与状态栏**：安全区及状态栏间距当前为占位实现（PLACEHOLDER），等待产品经理（PM）的设计决策最终确定。
-- **棋盘实现**：M2 起棋盘由 shape 组件（Rect/Line/Circle 等，非 Canvas）绘制，见 lib/board.cj。
+- **棋盘实现**：M2 起棋盘由 shape 组件（Rect/Line/Circle/Path 等，非 Canvas）绘制，托盘与格宽基于 BoardGeom 几何计算（间隙 6vp，见 lib/board.cj）。
 - 仓颉编译器（CJMP OpenSDK 0.2.2 cjc）偶发随机崩溃/失败，重跑即可；且构建产物不可逐字节复现，因此脚本打印的 APK / iOS 二进制 SHA-256 仅供参考（用于核对同一次构建的传递），不作为版本一致性依据。
 - **特殊机制与修缮关卡**：6 种核心特殊机制及修缮关卡暂未实现，计划在 M3 里程碑实现。
 

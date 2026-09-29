@@ -16,9 +16,12 @@ public class Theme {
     public static const locked: Int64 = 0xFFC9BBA6
     public static const success: Int64 = 0xFF5E7A6A
     public static const whitePaper: Int64 = 0xFFFBF6EC
-    /* 平原 board paper from chapter-flow v1.3 mock (sage). */
-    public static const pingyuanPaper: Int64 = 0xFFE7EBD8
-    /* ch05-10-SHIP.md paper tokens — preview screen only. */
+    /* Parity step limit warning threshold (mock warn state is N=3; applies to 3,2,1,0). */
+    public static const stepWarnAt: Int64 = 3
+    /* Locked chapter paper tokens (chapters 0..9). */
+    public static const pingyuanPaper: Int64 = 0xFFE8EDE6
+    public static const xuzhouPaper: Int64 = 0xFFE4E8EC
+    public static const lvbuPaper: Int64 = 0xFFE6E4E2
     public static const touyuanPaper: Int64 = 0xFFE8E4DC
     public static const jingzhouPaper: Int64 = 0xFFE8EDE8
     public static const chibiPaper: Int64 = 0xFFE2E4EA
@@ -27,6 +30,15 @@ public class Theme {
     public static const beifaPaper: Int64 = 0xFFEDE6D8
 
     public static func paperOf(chapterId: Int64): Int64 {
+        if (chapterId == 1) {
+            return Theme.pingyuanPaper
+        }
+        if (chapterId == 2) {
+            return Theme.xuzhouPaper
+        }
+        if (chapterId == 3) {
+            return Theme.lvbuPaper
+        }
         if (chapterId == 4) {
             return Theme.touyuanPaper
         }
@@ -44,9 +56,6 @@ public class Theme {
         }
         if (chapterId == 9) {
             return Theme.beifaPaper
-        }
-        if (chapterId == 1) {
-            return Theme.pingyuanPaper
         }
         return Theme.paper
     }
@@ -80,8 +89,8 @@ public class Theme {
     public static const bandClear: Int64 = 10
     public static const tutorialCell: Int64 = 48
     public static const boardInner: Int64 = 288
-    /* Mock 03-station: ~40 circle on the 48vp tutorial cell. */
-    public static const stationD: Float64 = 40.0
+    /* Mock 03-station: ~36 circle on cell 43 (scaled by c/43). */
+    public static const stationD: Float64 = 36.0
     /* Mock 03-station: 22–24vp; board uses 24 at cell 48, then cs/48. */
     public static const stationNumber: Int64 = 24
     public static const stationNumberMin: Int64 = 22

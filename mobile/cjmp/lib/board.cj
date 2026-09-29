@@ -7,7 +7,7 @@ import ohos_app_cangjie_entry.game.{PatrolGame, Waypoint, ParityEdge}
 
 /*
  * Pure data helpers for board rendering in CJMP Keels (0.2.2).
- * Converts PatrolGame + GridLayout + device pxPerVp into small renderable structs.
+ * Converts PatrolGame + BoardGeom + device pxPerVp into small renderable structs.
  */
 
 public struct BoardRect {
@@ -96,95 +96,99 @@ public struct BoardPath {
     }
 }
 
-func appendFullCircle(sb: StringBuilder, ccx: Float64, ccy: Float64, r: Float64): Unit {
-    let xRight = ccx + r
-    let xLeft = ccx - r
-    sb.append(" M ${xRight} ${ccy} A ${r} ${r} 0 0 1 ${xLeft} ${ccy} A ${r} ${r} 0 0 1 ${xRight} ${ccy}")
-}
+public struct BoardGeom {
+    public let c: Float64
+    public let gap: Float64
+    public let pad: Float64
+    public let cols: Int64
+    public let rows: Int64
 
-func appendArc(sb: StringBuilder, ccx: Float64, ccy: Float64, r: Float64, startAngle: Float64, endAngle: Float64, needMove: Bool): Unit {
-    let sx = ccx + r * cos(startAngle)
-    let sy = ccy + r * sin(startAngle)
-    let ex = ccx + r * cos(endAngle)
-    let ey = ccy + r * sin(endAngle)
-    var span = endAngle - startAngle
-    while (span < 0.0) {
-        span = span + 6.283185307179586
+    public init(c: Float64, cols: Int64, rows: Int64, gap!: Float64 = 6.0, pad!: Float64 = 8.0) {
+        this.c = c
+        this.cols = cols
+        this.rows = rows
+        this.gap = gap
+        this.pad = pad
     }
-    while (span >= 6.283185307179586) {
-        span = span - 6.283185307179586
-    }
-    let largeArc = if (span > 3.141592653589793) { 1 } else { 0 }
-    let sweep = 1
-    if (needMove) {
-        sb.append(" M ${sx} ${sy}")
-    } else {
-        sb.append(" L ${sx} ${sy}")
-    }
-    sb.append(" A ${r} ${r} 0 ${largeArc} ${sweep} ${ex} ${ey}")
-}
 
-func appendDigitCommands(sb: StringBuilder, d: Int64, cx: Float64, cy: Float64, h: Float64, px: Float64): Unit {
-    let scx = cx * px
-    let scy = cy * px
-    let sh = h * px
+    public func pitch(): Float64 {
+        return this.c + this.gap
+    }
 
-    if (d == 0) {
-        appendFullCircle(sb, scx, scy, sh * 0.22)
-    } else if (d == 1) {
-        sb.append(" M ${scx - sh * 0.16} ${scy - sh * 0.18}")
-        sb.append(" L ${scx + sh * 0.04} ${scy - sh * 0.32}")
-        sb.append(" L ${scx + sh * 0.04} ${scy + sh * 0.32}")
-        sb.append(" M ${scx - sh * 0.18} ${scy + sh * 0.32}")
-        sb.append(" L ${scx + sh * 0.20} ${scy + sh * 0.32}")
-    } else if (d == 2) {
-        appendArc(sb, scx, scy - sh * 0.14, sh * 0.18, 2.90, 0.35, true)
-        sb.append(" L ${scx - sh * 0.22} ${scy + sh * 0.32}")
-        sb.append(" L ${scx + sh * 0.22} ${scy + sh * 0.32}")
-    } else if (d == 3) {
-        appendArc(sb, scx, scy - sh * 0.14, sh * 0.16, 2.70, 0.70, true)
-        sb.append(" M ${scx + sh * 0.16} ${scy + sh * 0.14}")
-        appendArc(sb, scx, scy + sh * 0.14, sh * 0.17, 5.60, 2.20, false)
-    } else if (d == 4) {
-        sb.append(" M ${scx + sh * 0.14} ${scy + sh * 0.32}")
-        sb.append(" L ${scx + sh * 0.14} ${scy - sh * 0.32}")
-        sb.append(" L ${scx - sh * 0.22} ${scy + sh * 0.04}")
-        sb.append(" L ${scx + sh * 0.24} ${scy + sh * 0.04}")
-    } else if (d == 5) {
-        sb.append(" M ${scx + sh * 0.20} ${scy - sh * 0.32}")
-        sb.append(" L ${scx - sh * 0.18} ${scy - sh * 0.32}")
-        sb.append(" L ${scx - sh * 0.18} ${scy - sh * 0.02}")
-        sb.append(" L ${scx + sh * 0.06} ${scy - sh * 0.02}")
-        appendArc(sb, scx, scy + sh * 0.14, sh * 0.18, 5.20, 2.40, false)
-    } else if (d == 6) {
-        appendFullCircle(sb, scx, scy + sh * 0.10, sh * 0.18)
-        sb.append(" M ${scx - sh * 0.18} ${scy + sh * 0.10}")
-        sb.append(" L ${scx - sh * 0.10} ${scy - sh * 0.32}")
-    } else if (d == 7) {
-        sb.append(" M ${scx - sh * 0.22} ${scy - sh * 0.32}")
-        sb.append(" L ${scx + sh * 0.22} ${scy - sh * 0.32}")
-        sb.append(" L ${scx - sh * 0.04} ${scy + sh * 0.32}")
-    } else if (d == 8) {
-        appendFullCircle(sb, scx, scy - sh * 0.14, sh * 0.14)
-        appendFullCircle(sb, scx, scy + sh * 0.16, sh * 0.16)
-    } else if (d == 9) {
-        appendFullCircle(sb, scx, scy - sh * 0.10, sh * 0.18)
-        sb.append(" M ${scx + sh * 0.18} ${scy - sh * 0.10}")
-        sb.append(" L ${scx + sh * 0.12} ${scy + sh * 0.32}")
+    public func cellX(i: Int64): Float64 {
+        return this.pad + Float64(i) * this.pitch()
+    }
+
+    public func cellY(j: Int64): Float64 {
+        return this.pad + Float64(j) * this.pitch()
+    }
+
+    public func centerX(i: Int64): Float64 {
+        return this.cellX(i) + this.c * 0.5
+    }
+
+    public func centerY(j: Int64): Float64 {
+        return this.cellY(j) + this.c * 0.5
+    }
+
+    public func trayW(): Float64 {
+        return Float64(this.cols) * this.c + Float64(this.cols - 1) * this.gap + 2.0 * this.pad
+    }
+
+    public func trayH(): Float64 {
+        return Float64(this.rows) * this.c + Float64(this.rows - 1) * this.gap + 2.0 * this.pad
+    }
+
+    public func seamMid(c1: Int64, r1: Int64, c2: Int64, r2: Int64): (Float64, Float64) {
+        let mx = (this.centerX(c1) + this.centerX(c2)) * 0.5
+        let my = (this.centerY(r1) + this.centerY(r2)) * 0.5
+        return (mx, my)
+    }
+
+    public func hitTest(px: Float64, py: Float64): Option<Cell> {
+        let p = this.pitch()
+        let fi = floor((px - this.pad + 3.0) / p)
+        let fj = floor((py - this.pad + 3.0) / p)
+        if (fi >= 0.0 && fi < Float64(this.cols) && fj >= 0.0 && fj < Float64(this.rows)) {
+            return Some(Cell(Int64(fi), Int64(fj)))
+        }
+        return None
     }
 }
 
-public func stationDigitCommands(n: Int64, cx: Float64, cy: Float64, h: Float64, pxPerVp: Float64): String {
-    let factor = if (pxPerVp <= 0.0) { 3.0 } else { pxPerVp }
-    let sb = StringBuilder()
-    if (n >= 10) {
-        let pair = h * 0.90
-        appendDigitCommands(sb, 1, cx - h * 0.34, cy, pair, factor)
-        appendDigitCommands(sb, n - 10, cx + h * 0.30, cy, pair, factor)
-    } else {
-        appendDigitCommands(sb, n, cx, cy, h, factor)
+public func boardGeomFor(cols: Int64, rows: Int64, winW: Float64): BoardGeom {
+    let w = if (winW > 0.0) { winW } else { 360.0 }
+    let numCols = if (cols > 0) { cols } else { 6 }
+    let numRows = if (rows > 0) { rows } else { 6 }
+    let avail = w - 40.0 - 16.0 - Float64(numCols - 1) * 6.0
+    var c = floor(avail / Float64(numCols))
+    if (c > 43.0) {
+        c = 43.0
     }
-    return sb.toString().trimAscii()
+    if (c < 1.0) {
+        c = 1.0
+    }
+    return BoardGeom(c, numCols, numRows, gap: 6.0, pad: 8.0)
+}
+
+func digitsOf(n: Int64): ArrayList<Int64> {
+    let list = ArrayList<Int64>()
+    if (n <= 0) {
+        list.add(0)
+        return list
+    }
+    var v = n
+    while (v > 0) {
+        list.add(v % 10)
+        v = v / 10
+    }
+    let res = ArrayList<Int64>()
+    var i = list.size - 1
+    while (i >= 0) {
+        res.add(list.get(i).getOrThrow())
+        i = i - 1
+    }
+    return res
 }
 
 public func stationStateOf(game: PatrolGame, n: Int64): Int64 {
@@ -198,10 +202,10 @@ public func stationStateOf(game: PatrolGame, n: Int64): Int64 {
     return 0
 }
 
-public func buildBoardCells(game: PatrolGame, layout: GridLayout): Array<BoardRect> {
-    let cs = layout.cellSize
-    let cols = layout.cols
-    let rows = layout.rows
+public func buildBoardCells(game: PatrolGame, geom: BoardGeom): Array<BoardRect> {
+    let cs = geom.c
+    let cols = geom.cols
+    let rows = geom.rows
     let list = ArrayList<BoardRect>()
     var y: Int64 = 0
     while (y < rows) {
@@ -213,7 +217,7 @@ public func buildBoardCells(game: PatrolGame, layout: GridLayout): Array<BoardRe
             } else {
                 Theme.whitePaper
             }
-            list.add(BoardRect(Float64(x) * cs, Float64(y) * cs, cs, cs, color))
+            list.add(BoardRect(geom.cellX(x), geom.cellY(y), cs, cs, color))
             x = x + 1
         }
         y = y + 1
@@ -221,62 +225,35 @@ public func buildBoardCells(game: PatrolGame, layout: GridLayout): Array<BoardRe
     return list.toArray()
 }
 
-public func buildBoardGrid(layout: GridLayout): Array<BoardSeg> {
-    let cs = layout.cellSize
-    let cols = layout.cols
-    let rows = layout.rows
-    let bw = Float64(cols) * cs
-    let bh = Float64(rows) * cs
-    let list = ArrayList<BoardSeg>()
-    var gx: Int64 = 0
-    while (gx <= cols) {
-        let px = Float64(gx) * cs
-        list.add(BoardSeg(px, 0.0, px, bh, Theme.paperLine, Theme.hairline))
-        gx = gx + 1
-    }
-    var gy: Int64 = 0
-    while (gy <= rows) {
-        let py = Float64(gy) * cs
-        list.add(BoardSeg(0.0, py, bw, py, Theme.paperLine, Theme.hairline))
-        gy = gy + 1
-    }
-    return list.toArray()
+public func buildBoardGrid(geom: BoardGeom): Array<BoardSeg> {
+    return Array<BoardSeg>()
 }
 
-public func buildBoardWalls(game: PatrolGame, layout: GridLayout): Array<BoardSeg> {
-    let cs = layout.cellSize
+public func buildBoardWalls(game: PatrolGame, geom: BoardGeom): Array<BoardSeg> {
     let list = ArrayList<BoardSeg>()
     for (wall in game.level.walls) {
-        var ax = wall.x1
-        var ay = wall.y1
-        var bx = wall.x2
-        var by = wall.y2
-        if (ay == by && ax + 1 == bx) {
-            let px = Float64(bx) * cs
-            list.add(BoardSeg(px, Float64(ay) * cs + 4.0, px, Float64(ay + 1) * cs - 4.0, Theme.ink, 3.0))
-        } else if (ay == by && bx + 1 == ax) {
-            let px = Float64(ax) * cs
-            list.add(BoardSeg(px, Float64(ay) * cs + 4.0, px, Float64(ay + 1) * cs - 4.0, Theme.ink, 3.0))
-        } else if (ax == bx && ay + 1 == by) {
-            let py = Float64(by) * cs
-            list.add(BoardSeg(Float64(ax) * cs + 4.0, py, Float64(ax + 1) * cs - 4.0, py, Theme.ink, 3.0))
-        } else if (ax == bx && by + 1 == ay) {
-            let py = Float64(ay) * cs
-            list.add(BoardSeg(Float64(ax) * cs + 4.0, py, Float64(ax + 1) * cs - 4.0, py, Theme.ink, 3.0))
+        let ax = wall.x1
+        let ay = wall.y1
+        let bx = wall.x2
+        let by = wall.y2
+        let (mx, my) = geom.seamMid(ax, ay, bx, by)
+        if (ay == by && (ax + 1 == bx || bx + 1 == ax)) {
+            // vertical seam between columns; perpendicular round-cap bar along the seam (y direction)
+            list.add(BoardSeg(mx, my - 10.0, mx, my + 10.0, Theme.ink, 4.0))
+        } else if (ax == bx && (ay + 1 == by || by + 1 == ay)) {
+            // horizontal seam between rows; perpendicular round-cap bar along the seam (x direction)
+            list.add(BoardSeg(mx - 10.0, my, mx + 10.0, my, Theme.ink, 4.0))
         }
     }
     return list.toArray()
 }
 
-public func buildBoardParityLabels(game: PatrolGame, layout: GridLayout, pxFactor: Float64): Array<BoardLabel> {
-    let cs = layout.cellSize
+public func buildBoardParityLabels(game: PatrolGame, geom: BoardGeom, pxFactor: Float64): Array<BoardLabel> {
     let list = ArrayList<BoardLabel>()
-    // HarmonyOS parity: 11 device px (Canvas px); readability noted in M2 report
     let factor = if (pxFactor <= 0.0) { 3.0 } else { pxFactor }
     let fontVp = 11.0 / factor
     for (pe in game.level.parityEdges) {
-        let mx = (Float64(pe.x1) + Float64(pe.x2) + 1.0) * cs * 0.5
-        let my = (Float64(pe.y1) + Float64(pe.y2) + 1.0) * cs * 0.5
+        let (mx, my) = geom.seamMid(pe.x1, pe.y1, pe.x2, pe.y2)
         let label = if (pe.requireOdd) { "奇" } else { "偶" }
         // Left edge at mx-5.5, top at my+4.0-0.88*fontVp (ascent offset so baseline lands at my+4.0)
         list.add(BoardLabel(mx - 5.5, my + 4.0 - 0.88 * fontVp, 60.0, fontVp * 1.5, label, Theme.inkMuted, fontVp))
@@ -284,8 +261,7 @@ public func buildBoardParityLabels(game: PatrolGame, layout: GridLayout, pxFacto
     return list.toArray()
 }
 
-public func buildBoardRoute(game: PatrolGame, layout: GridLayout): Array<BoardSeg> {
-    let cs = layout.cellSize
+public func buildBoardRoute(game: PatrolGame, geom: BoardGeom): Array<BoardSeg> {
     let list = ArrayList<BoardSeg>()
     let sz = game.path.size()
     if (sz >= 2) {
@@ -293,10 +269,10 @@ public func buildBoardRoute(game: PatrolGame, layout: GridLayout): Array<BoardSe
         while (i + 1 < sz) {
             let c1 = game.path.at(i)
             let c2 = game.path.at(i + 1)
-            let x1 = (Float64(c1.x) + 0.5) * cs
-            let y1 = (Float64(c1.y) + 0.5) * cs
-            let x2 = (Float64(c2.x) + 0.5) * cs
-            let y2 = (Float64(c2.y) + 0.5) * cs
+            let x1 = geom.centerX(c1.x)
+            let y1 = geom.centerY(c1.y)
+            let x2 = geom.centerX(c2.x)
+            let y2 = geom.centerY(c2.y)
             list.add(BoardSeg(x1, y1, x2, y2, Theme.path, Theme.pathStroke))
             i = i + 1
         }
@@ -304,49 +280,45 @@ public func buildBoardRoute(game: PatrolGame, layout: GridLayout): Array<BoardSe
     return list.toArray()
 }
 
-public func buildBoardHeadDot(game: PatrolGame, layout: GridLayout): Array<BoardDot> {
-    let cs = layout.cellSize
+public func buildBoardHeadDot(game: PatrolGame, geom: BoardGeom): Array<BoardDot> {
     let list = ArrayList<BoardDot>()
     let sz = game.path.size()
     if (sz >= 1) {
         let last = game.path.at(sz - 1)
-        let hx = (Float64(last.x) + 0.5) * cs
-        let hy = (Float64(last.y) + 0.5) * cs
+        let hx = geom.centerX(last.x)
+        let hy = geom.centerY(last.y)
         list.add(BoardDot(hx, hy, 6.0, Theme.whitePaper, Theme.ink, Theme.hairline, true))
     }
     return list.toArray()
 }
 
-public func buildBoardStationCircles(game: PatrolGame, layout: GridLayout): Array<BoardDot> {
-    let cs = layout.cellSize
+public func buildBoardStationCircles(game: PatrolGame, geom: BoardGeom): Array<BoardDot> {
     let list = ArrayList<BoardDot>()
-    let r = Theme.stationD * cs / 48.0 / 2.0
+    let r = 18.0 * geom.c / 43.0
     for (wp in game.level.waypoints) {
-        let cx = (Float64(wp.x) + 0.5) * cs
-        let cy = (Float64(wp.y) + 0.5) * cs
+        let cx = geom.centerX(wp.x)
+        let cy = geom.centerY(wp.y)
         let st = stationStateOf(game, wp.n)
         if (st == 2) {
             list.add(BoardDot(cx, cy, r, Theme.qing, Theme.qing, 0.0, false))
         } else {
-            list.add(BoardDot(cx, cy, r, Theme.whitePaper, Theme.ink, Theme.hairline, true))
             if (st == 1) {
-                list.add(BoardDot(cx, cy, r + 3.0, 0x01000000, Theme.gold, Theme.hairline, true))
+                list.add(BoardDot(cx, cy, r + 2.5, 0x01000000, Theme.gold, 1.3, true))
             }
+            list.add(BoardDot(cx, cy, r, Theme.whitePaper, Theme.ink, 2.0, true))
         }
     }
     return list.toArray()
 }
 
-public func buildBoardNextLabels(game: PatrolGame, layout: GridLayout, pxFactor: Float64): Array<BoardLabel> {
-    let cs = layout.cellSize
+public func buildBoardNextLabels(game: PatrolGame, geom: BoardGeom, pxFactor: Float64): Array<BoardLabel> {
     let list = ArrayList<BoardLabel>()
-    let r = Theme.stationD * cs / 48.0 / 2.0
-    // HarmonyOS parity: 11 device px (Canvas px); readability noted in M2 report
+    let r = 18.0 * geom.c / 43.0
     let factor = if (pxFactor <= 0.0) { 3.0 } else { pxFactor }
     let fontVp = 11.0 / factor
     for (wp in game.level.waypoints) {
-        let cx = (Float64(wp.x) + 0.5) * cs
-        let cy = (Float64(wp.y) + 0.5) * cs
+        let cx = geom.centerX(wp.x)
+        let cy = geom.centerY(wp.y)
         let st = stationStateOf(game, wp.n)
         if (st == 1) {
             // Left edge at cx, top at cy+r+12.0-0.88*fontVp (ascent offset so baseline lands at cy+r+12.0)
@@ -356,21 +328,73 @@ public func buildBoardNextLabels(game: PatrolGame, layout: GridLayout, pxFactor:
     return list.toArray()
 }
 
-public func buildBoardDigits(game: PatrolGame, layout: GridLayout, pxPerVp: Float64): Array<BoardPath> {
-    let cs = layout.cellSize
+public func buildBoardDigits(game: PatrolGame, geom: BoardGeom, pxPerVp: Float64): Array<BoardPath> {
     let list = ArrayList<BoardPath>()
-    var glyphH: Float64 = Theme.stationD * cs / 48.0 * 0.60
-    if (glyphH < Float64(Theme.stationNumberMin)) {
-        glyphH = Float64(Theme.stationNumberMin)
-    }
+    let size = 21.0 * geom.c / 43.0
     for (wp in game.level.waypoints) {
-        let cx = (Float64(wp.x) + 0.5) * cs
-        let cy = (Float64(wp.y) + 0.5) * cs
+        let cx = geom.centerX(wp.x)
+        let cy = geom.centerY(wp.y)
         let st = stationStateOf(game, wp.n)
         let color = if (st == 2) { Theme.whitePaper } else { Theme.ink }
-        let strokeW = glyphH * 0.16
-        let cmds = stationDigitCommands(wp.n, cx, cy, glyphH, pxPerVp)
-        list.add(BoardPath(cmds, color, strokeW))
+        let digList = digitsOf(wp.n)
+        if (digList.size == 1) {
+            let d = digList.get(0).getOrThrow()
+            let bbox = digitBBox(d)
+            let left = cx - (bbox[0] + bbox[2]) * 0.5 * size / 1000.0
+            let base = cy - (bbox[1] + bbox[3]) * 0.5 * size / 1000.0
+            let cmds = digitPathCommands(d, left, base, size, pxPerVp)
+            list.add(BoardPath(cmds, color, 0.0))
+        } else {
+            var pos = 0.0
+            let pList = ArrayList<Float64>()
+            var k: Int64 = 0
+            while (k < digList.size) {
+                let d = digList.get(k).getOrThrow()
+                pList.add(pos)
+                pos = pos + digitAdvance(d)
+                k = k + 1
+            }
+            let firstD = digList.get(0).getOrThrow()
+            let lastD = digList.get(digList.size - 1).getOrThrow()
+            let firstBBox = digitBBox(firstD)
+            let lastBBox = digitBBox(lastD)
+            let lastPos = pList.get(pList.size - 1).getOrThrow()
+
+            let xStart = pList.get(0).getOrThrow() + firstBBox[0]
+            let xEnd = lastPos + lastBBox[2]
+
+            var yMin = firstBBox[1]
+            var yMax = firstBBox[3]
+            var m: Int64 = 1
+            while (m < digList.size) {
+                let d = digList.get(m).getOrThrow()
+                let bb = digitBBox(d)
+                if (bb[1] < yMin) { yMin = bb[1] }
+                if (bb[3] > yMax) { yMax = bb[3] }
+                m = m + 1
+            }
+
+            let xMid = (xStart + xEnd) * 0.5 * size / 1000.0
+            let yMid = (yMin + yMax) * 0.5 * size / 1000.0
+
+            let originX = cx - xMid
+            let base = cy - yMid
+
+            let sbCmds = StringBuilder()
+            var idx: Int64 = 0
+            while (idx < digList.size) {
+                let d = digList.get(idx).getOrThrow()
+                let pEm = pList.get(idx).getOrThrow()
+                let dLeft = originX + pEm * size / 1000.0
+                let cmd = digitPathCommands(d, dLeft, base, size, pxPerVp)
+                if (idx > 0 && cmd.size > 0) {
+                    sbCmds.append(" ")
+                }
+                sbCmds.append(cmd)
+                idx = idx + 1
+            }
+            list.add(BoardPath(sbCmds.toString(), color, 0.0))
+        }
     }
     return list.toArray()
 }
