@@ -318,12 +318,12 @@ class EntryView {
 
     func rejectToastX(): Float64 {
         let (midX, midY) = this.rejectEdgeMid()
-        return toastAvoidX(Float64(this.boardW()), midX, midY, this.collectToastObstacles())
+        return toastPlace(Float64(this.boardW()), Float64(this.boardH()), midX, midY, this.collectToastObstacles()).x
     }
 
     func rejectToastY(): Float64 {
-        let (_, midY) = this.rejectEdgeMid()
-        return midY - 36.0
+        let (midX, midY) = this.rejectEdgeMid()
+        return toastPlace(Float64(this.boardW()), Float64(this.boardH()), midX, midY, this.collectToastObstacles()).y
     }
 
     func hasParityBoard(): Bool {
