@@ -1740,15 +1740,16 @@ class EntryView {
                     .alignItems(HorizontalAlign.Center)
                 }
                 .width(100.percent)
-                .layoutWeight(1)
+                .height(this.boardH() + 2)
                 Text(this.chromeLine())
                     .fontSize(11)
                     .lineHeight(15)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.sansFamily())
                     .padding(left: Theme.inset, right: Theme.inset)
-                    .margin(top: 4, bottom: 4)
+                    .margin(top: 14, bottom: 4)
                     .width(100.percent)
+                Column() {}.width(100.percent).layoutWeight(1)
                 // Divider not in OpenSDK 0.2.2: 1vp hairline Column, same color/width as HarmonyOS
                 Column() {}.width(100.percent).height(1).backgroundColor(Theme.paperLine)
                 Row(space: 12) {
