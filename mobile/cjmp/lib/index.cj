@@ -274,26 +274,56 @@ class EntryView {
         return (midX + 12.0, midY)
     }
 
+    // U3: Collect board obstacles for toast avoidance (designer ruling)
+    func collectToastObstacles(): Array<ToastBox> {
+        let list = ArrayList<ToastBox>()
+
+        // 1. Flash line: bounding box of start/end points inflated by 1.5 (3 vp stroke, round cap)
+        let (sx, sy) = this.rejectEdgeStartPoint()
+        let (ex, ey) = this.rejectEdgeEndPoint()
+        let minX = if (sx <= ex) { sx } else { ex }
+        let maxX = if (sx >= ex) { sx } else { ex }
+        let minY = if (sy <= ey) { sy } else { ey }
+        let maxY = if (sy >= ey) { sy } else { ey }
+        list.add(ToastBox(minX - 1.5, minY - 1.5, maxX + 1.5, maxY + 1.5))
+
+        // 2. Head dot: cx±(r+0.5), cy±(r+0.5)
+        for (dot in this.boardDots) {
+            let rEff = dot.r + 0.5
+            list.add(ToastBox(dot.cx - rEff, dot.cy - rEff, dot.cx + rEff, dot.cy + rEff))
+        }
+
+        // 3. Station circles: cx±(r+strokeW/2) (gold ring already has a bigger r entry)
+        for (circle in this.boardStationCircles) {
+            let extra = if (circle.hasStroke) { circle.strokeW * 0.5 } else { 0.0 }
+            let rEff = circle.r + extra
+            list.add(ToastBox(circle.cx - rEff, circle.cy - rEff, circle.cx + rEff, circle.cy + rEff))
+        }
+
+        // 4. 下一驿 labels: anchored at left edge and baseline (cy+r+12)
+        for (lbl in this.boardNextLabels) {
+            let baseline = lbl.y + 0.88 * lbl.size
+            list.add(ToastBox(lbl.x - 0.5, baseline - 10.0, lbl.x + 35.0, baseline + 3.5))
+        }
+
+        // 5. Parity labels: glyph centred on seam midpoint (mx, my)
+        for (lbl in this.boardParityLabels) {
+            let mx = lbl.x + 5.5
+            let my = lbl.y - 4.0 + 0.88 * lbl.size
+            list.add(ToastBox(mx - 6.5, my - 8.5, mx + 6.5, my + 5.0))
+        }
+
+        return list.toArray()
+    }
+
     func rejectToastX(): Float64 {
-        let (midX, _) = this.rejectEdgeMid()
-        var x = midX - 42.0
-        if (x < 0.0) {
-            x = 0.0
-        }
-        let maxW = Float64(this.boardW()) - 84.0
-        if (x > maxW) {
-            x = maxW
-        }
-        return x
+        let (midX, midY) = this.rejectEdgeMid()
+        return toastAvoidX(Float64(this.boardW()), midX, midY, this.collectToastObstacles())
     }
 
     func rejectToastY(): Float64 {
         let (_, midY) = this.rejectEdgeMid()
-        var y = midY - 36.0
-        if (y < 0.0) {
-            y = midY + 8.0
-        }
-        return y
+        return midY - 36.0
     }
 
     func hasParityBoard(): Bool {
@@ -1713,7 +1743,8 @@ class EntryView {
                                     .fontSize(14)
                                     .fontFamily(this.serifBoldFamily())
                                     .fontColor(Theme.vermillion)
-                                    .width(84)
+                                    .maxLines(1)
+                                    .width(86)
                                     .height(28)
                                     .textAlign(TextAlign.Center)
                                     .padding(left: 14, right: 14)
