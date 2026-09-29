@@ -12,7 +12,7 @@
       "name": "汉中·阳平关",
       "dessert": false,
       "note": "奇偶闸首讲：边仅奇/偶步可过；叉口决策；禁走廊填墙。",
-      "step_limit": 12,
+      "step_limit": 49,
       "size": 7,
       "numbers_rc": [
         [
