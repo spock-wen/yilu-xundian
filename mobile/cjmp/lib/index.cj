@@ -204,6 +204,13 @@ class EntryView {
             return
         }
         this.parityRejectFlash = true
+        let p = this.rejectPlacement()
+        if (!p.shown) {
+            println("TOAST_NOT_PLACED level=${this.curLevel().id} edge=(${this.rejectFromX},${this.rejectFromY})-(${this.rejectToX},${this.rejectToY})")
+        }
+        if (PERF_LOG) {
+            perfLog("toast place step=${p.step} lift=${p.lift} x=${p.x} y=${p.y}")
+        }
         this.parityRejectGen = this.parityRejectGen + 1
         let gen = this.parityRejectGen
         if (PERF_LOG) { perfLog("toast show text=${this.parityRejectText} gen=${this.parityRejectGen}") }
@@ -313,17 +320,41 @@ class EntryView {
             list.add(ToastBox(mx - 6.5, my - 8.5, mx + 6.5, my + 5.0))
         }
 
+
+        // 6. Walls: width/2 padding, clear = 0.0
+        for (wall in this.boardWalls) {
+            let hw = wall.width * 0.5
+            let minX = (if (wall.x1 <= wall.x2) { wall.x1 } else { wall.x2 }) - hw
+            let maxX = (if (wall.x1 >= wall.x2) { wall.x1 } else { wall.x2 }) + hw
+            let minY = (if (wall.y1 <= wall.y2) { wall.y1 } else { wall.y2 }) - hw
+            let maxY = (if (wall.y1 >= wall.y2) { wall.y1 } else { wall.y2 }) + hw
+            list.add(ToastBox(minX, minY, maxX, maxY, 0.0))
+        }
+
+        // 7. Route: width/2 padding, clear = 0.0
+        for (route in this.boardRoute) {
+            let hw = route.width * 0.5
+            let minX = (if (route.x1 <= route.x2) { route.x1 } else { route.x2 }) - hw
+            let maxX = (if (route.x1 >= route.x2) { route.x1 } else { route.x2 }) + hw
+            let minY = (if (route.y1 <= route.y2) { route.y1 } else { route.y2 }) - hw
+            let maxY = (if (route.y1 >= route.y2) { route.y1 } else { route.y2 }) + hw
+            list.add(ToastBox(minX, minY, maxX, maxY, 0.0))
+        }
+
         return list.toArray()
     }
 
-    func rejectToastX(): Float64 {
+    func rejectPlacement(): ToastPlacement {
         let (midX, midY) = this.rejectEdgeMid()
-        return toastPlace(Float64(this.boardW()), Float64(this.boardH()), midX, midY, this.collectToastObstacles()).x
+        return toastPlace(Float64(this.boardW()), Float64(this.boardH()), midX, midY, this.collectToastObstacles())
+    }
+
+    func rejectToastX(): Float64 {
+        return this.rejectPlacement().x
     }
 
     func rejectToastY(): Float64 {
-        let (midX, midY) = this.rejectEdgeMid()
-        return toastPlace(Float64(this.boardW()), Float64(this.boardH()), midX, midY, this.collectToastObstacles()).y
+        return this.rejectPlacement().y
     }
 
     func hasParityBoard(): Bool {
@@ -1752,6 +1783,7 @@ class EntryView {
                                     .border(width: 1, color: Theme.vermillion)
                                     .backgroundColor(Theme.whitePaper)
                                     .position(x: this.rejectToastX(), y: this.rejectToastY())
+                                    .visibility(if (this.rejectPlacement().shown) { Visibility.Visible } else { Visibility.None })
                             }
                         }
                         .width(this.boardW())
