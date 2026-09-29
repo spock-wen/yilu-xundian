@@ -6,12 +6,12 @@ import std.collection.ArrayList
  * Parity reject overlay toast avoidance (designer final ruling).
  * Toast is 86 wide x 28 high vp, one line.
  * All coordinates are tray coordinates in vp (u). E = rejected-edge midpoint (midX, midY).
- * Obstacles = ToastBox list from collectToastObstacles().
+ * Obstacles = ToastBox list from collectToastObstacles() (walls/route use clear 2.0).
  *
  * Validity of candidate rect (x, y, 86, 28):
  *   - horizontally inside tray with >= 16 from left/right edges: 16 <= x and x + 86 <= trayW - 16
  *   - vertically inside tray with >= 8 from top/bottom edges: 8 <= y and y + 28 <= trayH - 8
- *   - for every obstacle box b, clearance >= b.clear: box inflated by b.clear must not overlap rect
+ *   - for every obstacle box b, clearance >= b.clear: box inflated by b.clear must not overlap rect (walls/route use clear 2.0)
  *
  * Candidate x set: {midX - 43, 16, trayW - 16 - 86} plus for each obstacle box b:
  *   b.x0 - b.clear - 86 and b.x1 + b.clear
