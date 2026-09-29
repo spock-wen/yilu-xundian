@@ -8,7 +8,9 @@ package ohos_app_cangjie_entry
    Official media: bust_p01..p10 + bust_s01, flag_p01..p10 + flag_gate_pattern,
    skin_01/02 + skin_05..10, card_05..10. Gate flag is pattern-only (no 关).
    Board landscape bands (assets/chapter-bands-v91): band_zhuojun_v91 /
-   band_pingyuan_v91, 1080×300 composite (bust+flag+terrain). */
+   band_pingyuan_v91 / band_xuzhou_v91 / band_lvbu_v91 / band_touyuan_v91 /
+   band_jingzhou_v91 / band_chibi_v91 / band_rushu_v91 / band_hanzhong_v91 /
+   band_beifa_v91, 1080×300 composite (bust+flag+terrain). */
 import std.collection.ArrayList
 import ohos_app_cangjie_entry.game.LevelDef
 
