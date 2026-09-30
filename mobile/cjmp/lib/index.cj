@@ -1653,6 +1653,7 @@ class EntryView {
                                         .strokeWidth(item.width)
                                         .strokeLineCap(LineCapStyle.Round)
                                         .antiAlias(true)
+                                        .position(x: 0, y: 0)
                                 },
                                 keyGeneratorFunc: { item: BoardSeg, idx: Int64 =>
                                     "${idx}-${item.x1}-${item.y1}-${item.x2}-${item.y2}-${item.color}"
@@ -1690,6 +1691,7 @@ class EntryView {
                                         .strokeWidth(item.width)
                                         .strokeLineCap(LineCapStyle.Round)
                                         .antiAlias(true)
+                                        .position(x: 0, y: 0)
                                 },
                                 keyGeneratorFunc: { item: BoardSeg, idx: Int64 =>
                                     "${idx}-${item.x1}-${item.y1}-${item.x2}-${item.y2}"
@@ -1770,6 +1772,7 @@ class EntryView {
                                     .strokeWidth(3)
                                     .strokeLineCap(LineCapStyle.Round)
                                     .antiAlias(true)
+                                    .position(x: 0, y: 0)
                                 Text(this.parityRejectText)
                                     .fontSize(14)
                                     .fontFamily(this.serifBoldFamily())
