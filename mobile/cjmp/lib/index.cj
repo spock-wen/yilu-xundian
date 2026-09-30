@@ -522,6 +522,10 @@ class EntryView {
         return "友：${ch.friendLine} · 张力：${ch.tensionLine} · 城：${ch.cityLine}"
     }
 
+    func chromeCaption(): String {
+        return captionWrap(this.chromeLine(), this.winW - 32.0)
+    }
+
     func boardSubtitle(): String {
         return this.currentChapter().boardSubtitle
     }
@@ -1807,12 +1811,12 @@ class EntryView {
                 }
                 .width(100.percent)
                 .height(this.boardH() + 2)
-                Text(this.chromeLine())
+                Text(this.chromeCaption())
                     .fontSize(12)
                     .lineHeight(16)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.sansFamily())
-                    .padding(left: Theme.inset, right: Theme.inset)
+                    .padding(left: 16, right: 16)
                     .margin(top: 14, bottom: 4)
                     .width(100.percent)
                     .textAlign(TextAlign.Center)
