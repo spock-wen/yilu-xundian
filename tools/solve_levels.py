@@ -1,19 +1,48 @@
 #!/usr/bin/env python3
-"""Independent solver for 「驿路巡点」 levels.
+"""Independent solver / proof runner for 「驿路巡点」 levels (100 shipped).
 
-Rules (LinkedIn Zip / Hamiltonian path with ordered waypoints):
-- Orthogonal 4-direction steps only
-- Visit every cell exactly once
-- Visit numbered waypoints in increasing order 1..N
-- Start on cell 1; end on the highest number
-- Path cannot cross walls or itself
+Base rules (LinkedIn Zip / Hamiltonian path with ordered waypoints):
+  orthogonal 4-direction steps; every cell visited exactly once; numbered
+  waypoints visited in increasing order 1..N; start on waypoint 1 (驿号 1);
+  no stepping through walls or onto an already-visited cell.
 
-This script is the source of truth for ship-or-reject. It does not share
-code with the Cangjie app.
+Mechanisms handled by this solver (all in the committed rules layer
+`Rules`/`expand`/`apply`/`check_path`/`validate_mechanics`):
+  ferry      渡口 one-way jump 甲->乙 (exactly one jump, jump itself
+             bypasses walls/one-ways; entering 甲 obeys them)
+  ow         one_way directed edges (lvbu_ch4)
+  slide      slide_cells 泽地 (chibi_ch7)
+  seal       seal_gates + token_cells 封印/符节 (rushu_ch8)
+  collapse   collapse step_on_trigger edge removal (beifa_ch10)
+  burden     burden 负重 forbidden cells / load / unload (beifa_ch10)
+  parity     parityEdges even/odd cell constraints (hanzhong_ch9)
+
+Independence: this module never imports the design code — it is a fully
+re-implemented, standalone checker.  Where rules were ambiguous, behaviour
+follows the design code literally and the citation (file:line) is in a code
+comment next to the rule.  Design sources of truth:
+  /workspace/lvbu_ch4/zip_oneway.py, /workspace/jingzhou_ch6/zip_ferry.py,
+  /workspace/chibi_ch7/zip_full.py + zip_slide.py, /workspace/rushu_ch8/
+  zip_seal.py, /workspace/hanzhong_ch9/zip_parity.py,
+  /workspace/beifa_ch10/zip_burden.py (+ sibling zip_*.py), and the repo's
+  boards-locked/*.json (rule tables: cjmp-smoke/mech/PHASE0.md §1,
+  cjmp-smoke/mech/analysis/rules_raw.md §10).
+
+Data conventions: waypoints/walls/parityEdges use x/y (x=col, y=row); the
+new mechanism keys keep boards-locked [r, c] shape verbatim (no coordinate
+conversion in Python).  Only boards carrying a mechanism carry its key.
 
 Usage (from repo root):
     python3 tools/solve_levels.py
     python3 tools/solve_levels.py --json entry/src/main/resources/rawfile/levels.json
+    python3 tools/solve_levels.py --limit 2 --timeout 60 --table out.md
+    python3 tools/solve_levels.py --ids 52,59,60        # debug subset
+
+Exit codes:
+    0  every level SOLVED
+    1  at least one level proven UNSOLVABLE (do not ship)
+    2  data/parameter error (not exactly 100 levels, ids != 0..99, bad schema)
+    3  no UNSOLVABLE but at least one TIMEOUT (unverified -> NOT a pass)
 """
 
 from __future__ import annotations
@@ -648,13 +677,165 @@ class SolverTimeout(Exception):
     """Large grids may exceed a practical DFS budget."""
 
 
-def solve(
+def solve_rules(
+    level: dict,
+    limit: int = 1,
+    timeout_s: float | None = None,
+) -> list[list[tuple[int, int]]]:
+    """Mechanism-aware DFS on top of the committed rules layer.
+
+    Candidates are simply the four orthogonal neighbours of the current cell;
+    stepping onto 渡口甲 already forces the jump to 乙 inside `Rules.expand`
+    (beifa_ch10/zip_burden.py:195-202), so no extra candidate is needed.
+    Returns up to `limit` solution paths as `(x, y)` tuples — for a ferry
+    board 甲 and 乙 are two adjacent elements of the path.
+    Raises SolverTimeout when `timeout_s` elapses (checked every 1024 nodes).
+    """
+    rules = Rules(level)
+    state0 = rules.initial_state()
+    if state0 is None:
+        return []  # unwinnable start (beifa_ch10/zip_burden.py:331-332)
+    solutions: list[list[tuple[int, int]]] = []
+    deadline = None if timeout_s is None else time.monotonic() + timeout_s
+    nodes = 0
+    walls = rules.walls
+    cols, rows = rules.cols, rules.rows
+    ferry = rules.ferry
+    all_cells = frozenset((x, y) for x in range(cols) for y in range(rows))
+
+    def connected(state: State) -> bool:
+        """(a) Optimistic connectivity of the remaining cells.
+
+        Flood-fill from the current cell over edges that ignore every
+        mechanism except walls (one-way / gate / collapse / parity / 禁区 are
+        all treated as open, i.e. an over-estimate of real reachability), plus
+        the extra 渡口 甲→乙 jump edge (jingzhou_ch6/zip_ferry.py:52-57) when the
+        landing 乙 is still unvisited.  Prunes only when even this optimistic
+        graph leaves some unvisited cell unreachable — sound because every
+        real solution's future steps are a subset of these edges."""
+        cur = state.path[-1]
+        visited = state.visited
+        seen = {cur}
+        stack = [cur]
+        while stack:
+            x, y = stack.pop()
+            if ferry is not None and (x, y) == ferry[0] and ferry[1] not in visited:
+                yx, yy = ferry[1]
+                if (yx, yy) not in seen:
+                    seen.add((yx, yy))
+                    stack.append((yx, yy))
+            for dx, dy in DIRS:
+                nx, ny = x + dx, y + dy
+                if not (0 <= nx < cols and 0 <= ny < rows):
+                    continue
+                if edge_key((x, y), (nx, ny)) in walls:
+                    continue
+                n = (nx, ny)
+                if n in seen or n in visited:
+                    continue
+                seen.add(n)
+                stack.append(n)
+        return all(c in seen for c in all_cells - visited)
+
+    end_cell = next(xy for xy, n in rules.clue.items() if n == rules.max_n)
+
+    def deg1_ok(state: State) -> bool:
+        """(c) Boards with no ferry and no slide: after exclusions, at most
+        one unvisited cell may have optimistic degree 1.
+
+        Degree = wall-free unvisited neighbours (ignoring one-way/gate/parity/
+        禁区 → over-estimate, so real degrees are never smaller).  In any real
+        solution the remaining path's interior cells keep ≥2 unvisited path
+        neighbours; the two ends are the last cell (largest waypoint, excluded)
+        and the first remaining cell (a wall-free neighbour of the current
+        cell, excluded).  Counting >1 after those exclusions therefore only
+        happens in dead ends — sound prune."""
+        if ferry is not None or rules.slide:
+            return True
+        cur = state.path[-1]
+        visited = state.visited
+        cur_adj = set()
+        for dx, dy in DIRS:
+            nx, ny = cur[0] + dx, cur[1] + dy
+            if 0 <= nx < cols and 0 <= ny < rows and edge_key(cur, (nx, ny)) not in walls:
+                cur_adj.add((nx, ny))
+        ones = 0
+        for cell in all_cells - visited:
+            d = 0
+            for dx, dy in DIRS:
+                qx, qy = cell[0] + dx, cell[1] + dy
+                if not (0 <= qx < cols and 0 <= qy < rows):
+                    continue
+                if edge_key(cell, (qx, qy)) in walls:
+                    continue
+                if (qx, qy) not in visited:
+                    d += 1
+            if d == 1 and cell != end_cell and cell not in cur_adj:
+                ones += 1
+                if ones > 1:
+                    return False
+        return True
+
+    def dfs(state: State) -> None:
+        nonlocal nodes
+        nodes += 1
+        if nodes & 1023 == 0 and deadline is not None and time.monotonic() > deadline:
+            raise SolverTimeout()
+        if len(solutions) >= limit:
+            return
+        if rules.is_win(state):
+            solutions.append(list(state.path))
+            return
+        if state.filled >= rules.total:
+            return
+        if not connected(state):
+            return
+        if not deg1_ok(state):
+            return
+        cur = state.path[-1]
+        cands = []
+        for dx, dy in DIRS:
+            nx, ny = cur[0] + dx, cur[1] + dy
+            if not (0 <= nx < rules.cols and 0 <= ny < rules.rows):
+                continue
+            seg = rules.expand(state, (nx, ny))
+            if seg is None:
+                continue
+            # (b) order by the landing cell's optimistic open unvisited
+            # neighbour count, ascending — heuristic only, never filters.
+            # (ferry: landing = 乙 = seg[-1]; slide: last slid cell)
+            landing = seg[-1]
+            free = 0
+            for ddx, ddy in DIRS:
+                qx, qy = landing[0] + ddx, landing[1] + ddy
+                if not (0 <= qx < cols and 0 <= qy < rows):
+                    continue
+                if edge_key(landing, (qx, qy)) in walls:
+                    continue
+                if (qx, qy) in state.visited or (qx, qy) in seg:
+                    continue
+                free += 1
+            cands.append((free, nx, ny, seg))
+        cands.sort(key=lambda c: c[0])
+        for _, nx, ny, seg in cands:
+            dfs(rules.apply(state, seg))
+            if len(solutions) >= limit:
+                return
+
+    dfs(state0)
+    return solutions
+
+
+def _solve_plain(
     level: dict,
     find_all: bool = False,
     limit: int = 1,
     timeout_s: float | None = None,
 ) -> list[list[tuple[int, int]]]:
-    """DFS Hamiltonian path with waypoint-order + end-on-max-number."""
+    """DFS Hamiltonian path with waypoint-order + end-on-max-number.
+
+    The original mechanism-free `solve()` body, renamed verbatim in B3b; its
+    behaviour is intentionally untouched (walls + waypoints + end-on-max only)."""
     cols, rows, wps, walls, start, end, max_n = compile_level(level)
     total = cols * rows
     solutions: list[list[tuple[int, int]]] = []
@@ -707,6 +888,76 @@ def solve(
     return solutions
 
 
+# Optional mechanism keys in levels.json (emitted per commit 69e810d); parity
+# is published separately as camelCase `parityEdges`, unchanged since B1.
+MECH_KEYS = (
+    "ferry",
+    "one_ways",
+    "slide_cells",
+    "seal_gates",
+    "token_cells",
+    "collapse",
+    "burden",
+)
+
+
+def _has_mechanisms(level: dict) -> bool:
+    """True when the board carries any mechanism key or parityEdges."""
+    return bool(level.get("parityEdges")) or any(level.get(k) for k in MECH_KEYS)
+
+
+def solve(
+    level: dict,
+    find_all: bool = False,
+    limit: int = 1,
+    timeout_s: float | None = None,
+) -> list[list[tuple[int, int]]]:
+    """Find up to `limit` solution paths as `(x, y)` tuples.
+
+    Mechanism-free and parity-free boards keep the original fast bit-DFS
+    (`_solve_plain`, behaviour unchanged).  Anything else is delegated to the
+    rules layer `solve_rules` so ferry/one_ways/slide/seal/token/collapse/
+    burden/parityEdges all follow the committed rules (design code is the
+    sole authority; see Rules/expand docstrings for file:line citations).
+    """
+    if not _has_mechanisms(level):
+        return _solve_plain(level, find_all=find_all, limit=limit, timeout_s=timeout_s)
+    return solve_rules(
+        level,
+        limit=limit if not find_all else max(limit, 1000),
+        timeout_s=timeout_s,
+    )
+
+
+def count_solutions(
+    level: dict,
+    limit: int = 2,
+    timeout_s: float | None = None,
+) -> tuple[int, bool, float]:
+    """Count solutions up to `limit` -> `(count<=limit, truncated_by_limit, seconds)`.
+
+    Uniformly uses the rules layer (`solve_rules`) so plain boards are counted
+    by the same code as mechanism boards.  `solve_rules` may be much slower
+    than `_solve_plain` on mechanism-free grids, so a plain board gets a 60s
+    rules budget first and then falls back to the bit-DFS count
+    (`find_all=True`, so the run actually reaches `limit` instead of stopping
+    at 1).  A timeout raised under the caller's own `timeout_s` propagates.
+    """
+    t0 = time.monotonic()
+    if not _has_mechanisms(level):
+        budget = 60.0 if timeout_s is None else min(timeout_s, 60.0)
+        try:
+            sols = solve_rules(level, limit=limit, timeout_s=budget)
+        except SolverTimeout:
+            if timeout_s is not None and time.monotonic() - t0 >= timeout_s:
+                raise  # the caller's own budget elapsed, not the 60s grace
+            sols = _solve_plain(level, find_all=True, limit=limit, timeout_s=timeout_s)
+    else:
+        sols = solve_rules(level, limit=limit, timeout_s=timeout_s)
+    n = len(sols)
+    return n, n >= limit, time.monotonic() - t0
+
+
 def format_path(path: list[tuple[int, int]]) -> str:
     return " -> ".join(f"({x},{y})" for x, y in path)
 
@@ -723,19 +974,69 @@ def report_solve_exit(total: int, unsolvable: int, timed_out: int) -> int:
     return 0
 
 
+def exit_code_strict(unsolvable: int, timed_out: int) -> int:
+    """Strict CI gate: 1 if any level is proven unsolvable, else 3 if any
+    timed out, else 0.  (`report_solve_exit` above keeps its README contract:
+    timeout never fails the run.)"""
+    if unsolvable:
+        return 1
+    if timed_out:
+        return 3
+    return 0
+
+
+MECH_COLUMN_KEYS = (
+    ("ferry", "ferry"),
+    ("one_ways", "ow"),
+    ("slide_cells", "slide"),
+    ("seal_gates", "seal"),
+    ("token_cells", "token"),
+    ("collapse", "collapse"),
+    ("burden", "burden"),
+    ("parityEdges", "parity"),
+)
+
+TABLE_HEADER = (
+    "| id | 玩家号(id+1) | 关名 | 机制 | 状态 | 解数 | 唯一 | 用时s |\n"
+    "|---|---|---|---|---|---|---|---|"
+)
+
+
+def mech_labels(level: dict) -> str:
+    """Mechanism column: present keys only; `parity` iff parityEdges non-empty."""
+    tags = [label for key, label in MECH_COLUMN_KEYS if level.get(key)]
+    return "+".join(tags) if tags else "-"
+
+
+def emit_table(rows: list[str], table_path: str | None) -> None:
+    """Print the markdown table and optionally write it to `--table PATH`."""
+    text = TABLE_HEADER + "".join(f"\n{r}" for r in rows) + "\n"
+    print(text, end="")
+    if table_path:
+        Path(table_path).write_text(text, encoding="utf-8")
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Prove every shipped level has ≥1 solution.")
+    parser = argparse.ArgumentParser(
+        description="Count solutions for every shipped level (strict ship gate)."
+    )
     parser.add_argument(
         "--json",
         default="entry/src/main/resources/rawfile/levels.json",
-        help="Path to levels.json",
+        help="Path to levels.json (default: entry/src/main/resources/rawfile/levels.json)",
     )
-    parser.add_argument("--limit", type=int, default=1, help="Max solutions to search per level")
+    parser.add_argument(
+        "--limit", type=int, default=2, help="Max solutions to count per level (default 2)"
+    )
     parser.add_argument(
         "--timeout",
         type=float,
-        default=8.0,
-        help="Seconds per level; do not invent or alter boards on timeout",
+        default=60.0,
+        help="Seconds per level; a TIMEOUT is NOT a pass (default 60)",
+    )
+    parser.add_argument("--table", default=None, help="Write the markdown result table to PATH")
+    parser.add_argument(
+        "--ids", default=None, help="Comma-separated ids to run (debug; skips the 100-level check)"
     )
     args = parser.parse_args()
 
@@ -746,35 +1047,90 @@ def main() -> int:
     if not json_path.exists():
         print(f"FAIL: missing {json_path}", file=sys.stderr)
         return 2
-
-    levels = load_levels(json_path)
-    if len(levels) != 20:
-        print(f"FAIL: need exactly 20 locked 涿郡+平原 levels, found {len(levels)}", file=sys.stderr)
+    try:
+        levels = load_levels(json_path)
+    except (ValueError, OSError) as exc:
+        print(f"FAIL: cannot load {json_path}: {exc}", file=sys.stderr)
         return 2
 
-    failed = 0
-    timed_out = 0
-    print(f"Solving {len(levels)} levels from {json_path}")
-    print("-" * 60)
-    for level in levels:
-        validate_schema(level)
-        tag = f"#{level['id']} {level['name']} {level['cols']}x{level['rows']}"
-        walls = len(level.get("walls") or [])
-        wps = len(level["waypoints"])
+    by_id = {}
+    for lv in levels:
+        if "id" not in lv:
+            print(f"FAIL: level without id: {lv.get('name')!r}", file=sys.stderr)
+            return 2
+        by_id[int(lv["id"])] = lv
+    if args.ids is not None:
+        # debug subset: ids must be 0..99, but the 100-level requirement is lifted
         try:
-            solutions = solve(level, find_all=False, limit=args.limit, timeout_s=args.timeout)
+            wanted = [int(p) for p in args.ids.split(",") if p.strip()]
+        except ValueError:
+            print(f"FAIL: bad --ids value {args.ids!r}", file=sys.stderr)
+            return 2
+        bad = [i for i in wanted if not 0 <= i <= 99]
+        if bad:
+            print(f"FAIL: ids must be 0..99, got {bad}", file=sys.stderr)
+            return 2
+        missing = [i for i in wanted if i not in by_id]
+        if missing:
+            print(f"FAIL: ids not present in {json_path}: {missing}", file=sys.stderr)
+            return 2
+        selected = [by_id[i] for i in wanted]
+    else:
+        if len(levels) != 100:
+            print(f"FAIL: need exactly 100 levels, found {len(levels)}", file=sys.stderr)
+            return 2
+        if sorted(by_id) != list(range(100)):
+            print(f"FAIL: ids must be exactly 0..99, got {sorted(by_id)}", file=sys.stderr)
+            return 2
+        selected = [by_id[i] for i in range(100)]
+
+    total = len(selected)
+    rows: list[str] = []
+    solved = unsolvable = timeout = 0
+    for k, level in enumerate(selected, 1):
+        try:
+            validate_schema(level)
+        except ValueError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 2
+        mech = mech_labels(level)
+        pid = int(level["id"]) + 1
+        name = level["name"]
+        t0 = time.monotonic()
+        try:
+            n, truncated, _dt = count_solutions(
+                level, limit=args.limit, timeout_s=args.timeout
+            )
         except SolverTimeout:
-            timed_out += 1
-            print(f"TIMEOUT {tag}  waypoints={wps} walls={walls}")
-            continue
-        if solutions:
-            print(f"OK   {tag}  waypoints={wps} walls={walls}")
-            print(f"     sample: {format_path(solutions[0])}")
+            timeout += 1
+            secs = time.monotonic() - t0
+            status, count_str, uniq, tag = "TIMEOUT", "-", "-", "TIMEOUT"
         else:
-            failed += 1
-            print(f"FAIL {tag}  waypoints={wps} walls={walls}  (no solution)")
-    print("-" * 60)
-    return report_solve_exit(len(levels), failed, timed_out)
+            secs = time.monotonic() - t0
+            if n == 0:
+                unsolvable += 1
+                status, count_str, uniq, tag = "UNSOLVABLE", "0", "-", "UNSOLVABLE"
+            else:
+                solved += 1
+                status = "SOLVED"
+                count_str = f">={args.limit}" if truncated else str(n)
+                uniq = "yes" if (args.limit >= 2 and n == 1) else "-"
+                tag = f"SOLVED({n})"
+        print(
+            f"[{k}/{total}] id={level['id']} 玩家号={pid} {name} {mech} -> {tag}"
+            f"  t={secs:.1f}s",
+            flush=True,
+        )
+        rows.append(
+            f"| {level['id']} | {pid} | {name} | {mech} | {status} |"
+            f" {count_str} | {uniq} | {secs:.1f} |"
+        )
+    emit_table(rows, args.table)
+    print(
+        f"RESULT: solved={solved} unsolvable={unsolvable} timeout={timeout}"
+        f" (total={total})"
+    )
+    return exit_code_strict(unsolvable, timeout)
 
 
 if __name__ == "__main__":
