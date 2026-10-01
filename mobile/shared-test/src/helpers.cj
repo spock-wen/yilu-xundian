@@ -119,3 +119,23 @@ public func lockedPath(id: Int64): ArrayList<Cell> {
     @Assert(cells.size > 0)
     return cells
 }
+
+/* 手工小棋盘:clues=(n,x,y) 即 (编号,列,行);机制字段留空,由用例自行赋值。 */
+public func mkLevel(cols: Int64, rows: Int64, clues: Array<(Int64, Int64, Int64)>): LevelDef {
+    let wps = ArrayList<Waypoint>()
+    for (c in clues) {
+        wps.add(Waypoint(c[0], c[1], c[2]))
+    }
+    let stepLimit = cols * rows
+    return LevelDef(0, "t", cols, rows, wps, ArrayList<Wall>(), ArrayList<ParityEdge>(), stepLimit)
+}
+
+/* 依次 tryStep 每一格;全部成功才 true,任一失败即 false。 */
+public func stepAll(game: PatrolGame, cells: Array<(Int64, Int64)>): Bool {
+    for (c in cells) {
+        if (!game.tryStep(Cell(c[0], c[1]))) {
+            return false
+        }
+    }
+    return true
+}
