@@ -313,8 +313,8 @@ public func buildBoardHeadDot(game: PatrolGame, geom: BoardGeom): Array<BoardDot
     let list = ArrayList<BoardDot>()
     let sz = game.path.size()
     if (sz >= 1) {
-        /* J14:头格是滑行「停」末格时不画自己的点,由 buildBoardSlideStopDots
-           的圆环代替(环也是头点,ruling §4)。 */
+        /* J14:头格是滑行「停」末格时不画自己的点,由 buildBoardMechPaths
+           的「停」环 fill-only 路径代替(环也是头点,ruling §4)。 */
         if (!isSlideStopIndex(game, sz - 1)) {
             let last = game.path.at(sz - 1)
             let hx = geom.centerX(last.x)

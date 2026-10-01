@@ -213,24 +213,22 @@ public func isSlideStopIndex(game: PatrolGame, idx: Int64): Bool {
     return true
 }
 
-/* J16:「停」圆环就是「路径头点」本身(ruling §4):仅当路径头(path 最后一格)
-   是停末格时画一个环 —— 外圈墨色实心 r=7k + 孔 r=3k whitePaper(同头点画法)。
-   路径已离开的历史停末格不再留环(J14 曾让所有停末格都留环,系偏差)。 */
-public func buildBoardSlideStopDots(game: PatrolGame, geom: BoardGeom): Array<BoardDot> {
-    let list = ArrayList<BoardDot>()
-    if (game.level.slideCells.size == 0) {
-        return list.toArray()
-    }
-    let k = geom.c / 36.3
-    let head = game.path.size() - 1
-    if (head >= 1 && isSlideStopIndex(game, head)) {
-        let cell = game.path.at(head)
-        let cx = geom.centerX(cell.x)
-        let cy = geom.centerY(cell.y)
-        list.add(BoardDot(cx, cy, 7.0 * k, Theme.ink, Theme.ink, 0.0, false))
-        list.add(BoardDot(cx, cy, 3.0 * k, Theme.whitePaper, Theme.whitePaper, 0.0, false))
-    }
-    return list.toArray()
+/* J17:整圆 path 命令:4 段三次贝塞尔(kappa=0.5522847498)拼成闭合
+   M…C…C…C…C…Z,坐标 ×f(pxPerVp)。「停」环外圈/孔共用。 */
+public func circlePathCmds(cx: Float64, cy: Float64, r: Float64, f: Float64): String {
+    let kr = 0.5522847498 * r
+    let x0 = (cx - r) * f
+    let x1 = cx * f
+    let y1 = (cy - r) * f
+    let x2 = (cx + r) * f
+    let y3 = (cy + r) * f
+    let kx = kr * f
+    let sb = StringBuilder()
+    sb.append("M ${x0} ${cy * f} C ${x0} ${(cy - kr) * f} ${x1 - kx} ${y1} ${x1} ${y1}")
+    sb.append(" C ${x1 + kx} ${y1} ${x2} ${(cy - kr) * f} ${x2} ${cy * f}")
+    sb.append(" C ${x2} ${(cy + kr) * f} ${x1 + kx} ${y3} ${x1} ${y3}")
+    sb.append(" C ${x1 - kx} ${y3} ${x0} ${(cy + kr) * f} ${x0} ${cy * f} Z")
+    return sb.toString()
 }
 
 func centerLabel(cx: Float64, cy: Float64, size: Float64, text: String, color: Int64): BoardLabel {
@@ -273,8 +271,8 @@ public func buildBoardMechLabels(game: PatrolGame, geom: BoardGeom): Array<Board
         let color = if (visited) { Theme.whitePaper } else { Theme.ink }
         list.add(centerLabel(geom.centerX(t.x), geom.centerY(t.y), 0.34 * c, "符", color))
     }
-    /* J14:「滑」角标改为 buildBoardMechPaths 的块笔路径,「停」改为
-       buildBoardSlideStopDots 的圆环(见 buildBoardMechDots 末尾),不再出 Text。 */
+    /* J14:「滑」角标与「停」环都改为 buildBoardMechPaths 的 fill-only
+       路径(见 c1/c3),不再出 Text。 */
     return list.toArray()
 }
 
@@ -292,8 +290,8 @@ public func buildBoardMechDots(game: PatrolGame, geom: BoardGeom): Array<BoardDo
             list.add(BoardDot(yx, yy, 0.30 * geom.c, 0x01000000, Theme.qingDeep, 1.0, true))
         case None => ()
     }
-    /* J16:路径头停末格圆环并入末尾(index.cj 的 stationCircles 层)。 */
-    return concatArr(list.toArray(), buildBoardSlideStopDots(game, geom))
+    /* J17:停环挪到 buildBoardMechPaths(chevron 之后),dots 层只回渡口 4 个。 */
+    return list.toArray()
 }
 
 /* 沿 ax,ay→bx,by 画 2vp 实 / 7vp 空虚线；坐标 ×f 转设备像素。 */
@@ -409,6 +407,19 @@ public func buildBoardMechPaths(game: PatrolGame, geom: BoardGeom, pxPerVp: Floa
             sw = 3.0
         }
         list.add(BoardPath(sbV.toString(), Theme.qingDeep, sw, stroke: Theme.qingDeep, fillOp: 0.0))
+    }
+    /* c3. J17:「停」环:路径头(path 最后一格)是停末格时,在 chevron 之后追加
+       两个 fill-only 圆 path(外圈 r=7k ink + 孔 r=3k whitePaper,圆心=格心,
+       k=c/36.3),写法同「滑」角标;挪入 paths 层使环压在 chevron 之上(ruling §4)。
+       buildBoardHeadDot 的「停末格不画自己的点」逻辑保持。 */
+    let head = game.path.size() - 1
+    if (head >= 1 && isSlideStopIndex(game, head)) {
+        let cell = game.path.at(head)
+        let cx = geom.centerX(cell.x)
+        let cy = geom.centerY(cell.y)
+        let k = c / 36.3
+        list.add(BoardPath(circlePathCmds(cx, cy, 7.0 * k, f), Theme.ink, 0.0, stroke: Theme.ink, fillOp: 1.0))
+        list.add(BoardPath(circlePathCmds(cx, cy, 3.0 * k, f), Theme.whitePaper, 0.0, stroke: Theme.whitePaper, fillOp: 1.0))
     }
     /* d. 渡口虚线：甲乙圆点间断开圆环的虚线连线；路径走过 甲→乙 则用深色加粗。 */
     match (game.level.ferry) {

@@ -102,24 +102,18 @@ func checkAll(game: PatrolGame, geom: BoardGeom, lv: LevelDef, id: Int64, step: 
     /* 3. gates */
     let gates = buildBoardGates(game, geom)
     ctx.ck(gates.size == lv.oneWays.size, "${tag} gates=${gates.size} oneWays=${lv.oneWays.size}")
-    /* 4. mech dots:渡口 4 个 + J16 路径头停末格环×2(历史停末格不留环) */
+    /* 4. mech dots:渡口 4 个(J17:停环挪到 paths 层,dots 不再含环) */
     var hasFerry = false
     match (lv.ferry) {
         case Some(_) => hasFerry = true
         case None => ()
-    }
-    /* J16:环=路径头点本身,只有头格是停末格时 stopN=1 */
-    var stopN: Int64 = 0
-    if (game.path.size() >= 2 && isSlideStopIndex(game, game.path.size() - 1)) {
-        stopN = 1
     }
     let dots = buildBoardMechDots(game, geom)
     var wantDots: Int64 = 0
     if (hasFerry) {
         wantDots = 4
     }
-    wantDots = wantDots + stopN * 2
-    ctx.ck(dots.size == wantDots, "${tag} dots=${dots.size} want=${wantDots} stop=${stopN}")
+    ctx.ck(dots.size == wantDots, "${tag} dots=${dots.size} want=${wantDots}")
     /* 4b. 头点:头格是「停」末格时空(由环代替),否则 1 个 */
     let headDots = buildBoardHeadDot(game, geom)
     var wantHead: Int64 = 0
@@ -190,8 +184,9 @@ func checkAll(game: PatrolGame, geom: BoardGeom, lv: LevelDef, id: Int64, step: 
             hasQing = true
             qingCmds = p.commands
         }
-        /* 旧白色 chevron 特征：color 与 stroke 同为 whitePaper(挂锁 path 的 stroke 是 ink) */
-        if (p.color == Theme.whitePaper && p.stroke == Theme.whitePaper) {
+        /* 旧白色 chevron 特征：线画(fillOp=0)且 color 与 stroke 同为 whitePaper
+           (挂锁 path 的 stroke 是 ink;J17 停环孔是 fill-only,不算)。 */
+        if (p.color == Theme.whitePaper && p.stroke == Theme.whitePaper && p.fillOp == 0.0) {
             hasWhiteChev = true
         }
     }
@@ -224,6 +219,10 @@ func checkAll(game: PatrolGame, geom: BoardGeom, lv: LevelDef, id: Int64, step: 
     var wantHua: Int64 = 0
     if (lv.slideCells.size > 0) {
         wantHua = 1
+    }
+    /* J17:头格为停末格时,停环外圈也是墨色 fill-only path */
+    if (game.path.size() >= 2 && isSlideStopIndex(game, game.path.size() - 1)) {
+        wantHua = wantHua + 1
     }
     ctx.ck(inkFillN == wantHua, "${tag} ink fill-only paths=${inkFillN} want=${wantHua}")
     /* 8. 无机制关：3~7 长度全 0 */
@@ -620,8 +619,9 @@ func j14SlideGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
         ci = ci + 1
     }
     /* (4) 手工构造滑行关:从 (0,0) 入 (1,0) 滑到 (2,0) → 2 chevron、hua Z 数 = 滑格数*7;
-       J16:头格=停末格 → 恰 1 个环(2 个 dot,圆心=格心,r=7k/3k)、头点为空;
-       继续走 (2,1) 离开滑行段后 → 环数 0(不留历史环)、头点恢复 1 个 */
+       J17:头格=停末格 → chevron 之后两个 fill-only 圆 path(外圈 ink 7k + 孔 whitePaper 3k,
+       圆心=格心,与 circlePathCmds 一致)、头点为空;
+       继续走 (2,1) 离开滑行段后 → 圆 path 数 0(不留历史环)、头点恢复 1 个 */
     let lvs = mkTiny(7, 7, [(1, 0, 0), (2, 0, 3)])
     lvs.slideCells.add(Cell(1, 0))
     lvs.slideCells.add(Cell(2, 0))
@@ -634,8 +634,10 @@ func j14SlideGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
         let paths = buildBoardMechPaths(g, geom, 3.0)
         var huaCmds = ""
         var chevN: Int64 = 0
+        /* J17:停环外圈也是 ink fill-only,按命令串排除,只捕获 hua */
+        let ringOuterCmds = circlePathCmds(geom.centerX(2), geom.centerY(0), 7.0 * k, 3.0)
         for (p in paths) {
-            if (p.color == Theme.ink && p.fillOp == 1.0) {
+            if (p.color == Theme.ink && p.fillOp == 1.0 && p.commands != ringOuterCmds) {
                 huaCmds = p.commands
             }
             if (p.color == Theme.qingDeep) {
@@ -662,23 +664,53 @@ func j14SlideGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
             q2 = q2 + 1
         }
         ctx.ck(zN == 14, "J14 hua Z count=${zN} want=14 (2 cells * 7 rects)")
-        /* J16:停在末格 → 1 个环 = 2 个 dot,圆心=格心,外圈 r=7k ink / 孔 r=3k whitePaper */
+        /* J17:停在末格 → dots 层无环,chevron 之后追加两个 fill-only 圆 path:
+           外圈 r=7k ink 先于孔 r=3k whitePaper,命令串与 circlePathCmds(格心,r,f) 一致 */
         let sd = buildBoardMechDots(g, geom)
         let scx = geom.centerX(2)
         let scy = geom.centerY(0)
-        ctx.ck(sd.size == 2, "J14 stop ring dots=${sd.size} want=2")
-        ctx.ck(absF(sd[0].cx - scx) < 1e-9 && absF(sd[0].cy - scy) < 1e-9,
-            "J14 stop ring center=(${sd[0].cx},${sd[0].cy}) want=(${scx},${scy})")
-        ctx.ck(absF(sd[0].r - 7.0 * k) < 1e-9 && sd[0].fill == Theme.ink,
-            "J14 stop ring outer r=${sd[0].r} want=${7.0 * k}")
-        ctx.ck(absF(sd[1].r - 3.0 * k) < 1e-9 && sd[1].fill == Theme.whitePaper,
-            "J14 stop ring hole r=${sd[1].r} want=${3.0 * k}")
+        ctx.ck(sd.size == 0, "J17 stop mech dots=${sd.size} want=0")
+        var chevIdx: Int64 = -1
+        var ringInk: Int64 = -1
+        var ringHole: Int64 = -1
+        var pi: Int64 = 0
+        while (pi < paths.size) {
+            let p = paths.get(pi).getOrThrow()
+            if (p.color == Theme.qingDeep) {
+                chevIdx = pi
+            }
+            if (p.color == Theme.ink && p.strokeW == 0.0 && p.fillOp == 1.0
+                && p.commands == circlePathCmds(scx, scy, 7.0 * k, 3.0)) {
+                ringInk = pi
+            }
+            if (p.color == Theme.whitePaper && p.strokeW == 0.0 && p.fillOp == 1.0
+                && p.commands == circlePathCmds(scx, scy, 3.0 * k, 3.0)) {
+                ringHole = pi
+            }
+            pi = pi + 1
+        }
+        ctx.ck(ringInk >= 0 && ringHole >= 0, "J17 stop ring paths missing ink=${ringInk} hole=${ringHole}")
+        ctx.ck(chevIdx >= 0 && ringInk > chevIdx && ringHole > chevIdx,
+            "J17 stop ring not after chevron ink=${ringInk} hole=${ringHole} chev=${chevIdx}")
+        ctx.ck(ringInk < ringHole, "J17 stop ring order ink=${ringInk} hole=${ringHole} want ink first")
         ctx.ck(buildBoardHeadDot(g, geom).size == 0, "J14 head dot should be empty at slide stop")
-        /* J16:走出滑行段 → 环数 0、头点恢复 1 个 */
+        /* J17:走出滑行段 → 圆 path 数 0(只剩 hua 一个 ink fill-only)、头点恢复 1 个 */
         ctx.ck(g.tryStep(Cell(2, 1)), "J14 slide leave tryStep rejected")
         let leftDots = buildBoardMechDots(g, geom)
-        let leftHead = buildBoardHeadDot(g, geom)
+        let leftPaths = buildBoardMechPaths(g, geom, 3.0)
+        var leftRingN: Int64 = 0
+        var lp: Int64 = 0
+        while (lp < leftPaths.size) {
+            let p = leftPaths.get(lp).getOrThrow()
+            if (p.strokeW == 0.0 && p.fillOp == 1.0
+                && (p.color == Theme.ink || p.color == Theme.whitePaper)) {
+                leftRingN = leftRingN + 1
+            }
+            lp = lp + 1
+        }
         ctx.ck(leftDots.size == 0, "J16 rings after leaving slide=${leftDots.size} want=0")
+        ctx.ck(leftRingN == 1, "J17 fill-only paths after leaving=${leftRingN} want=1 (hua only)")
+        let leftHead = buildBoardHeadDot(g, geom)
         ctx.ck(leftHead.size == 1, "J16 head dot after leaving=${leftHead.size} want=1")
     } else {
         ctx.ck(false, "J14 slide path size=${g.path.size()} want=3")
