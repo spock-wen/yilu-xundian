@@ -59,7 +59,7 @@ public class PatrolGame {
     /* Mechanic run-state; each UnitSnap restores these on undo. */
     public var hasToken: Bool = false
     public var laden: Bool = false
-    public var collapseDown: Bool = false /* TODO(2c): collapse trigger. */
+    public var collapseDown: Bool = false /* 踏触发格后置真，本输入起之后的输入生效. */
     /* Undo units: one successful tryStep = one entry. */
     var units: ArrayList<UnitSnap> = ArrayList<UnitSnap>()
 
@@ -146,6 +146,29 @@ public class PatrolGame {
         return None
     }
 
+    /* 塌桥边（无向）：down 真且 (a,b) 与 level.collapse 塌边相等才封。
+       纯函数、显式传 down（solve_levels.py:416-419 用 down 状态查边），
+       供 expandInput 与之后滑行逐格复用. */
+    func edgeCollapsed(a: Cell, b: Cell, down: Bool): Bool {
+        if (!down) {
+            return false
+        }
+        var hit = false
+        match (this.level.collapse) {
+            case Some(c) =>
+                let fwd = a.x == c.x1 && a.y == c.y1 && b.x == c.x2 && b.y == c.y2
+                let rev = a.x == c.x2 && a.y == c.y2 && b.x == c.x1 && b.y == c.y1
+                hit = fwd || rev
+            case None => ()
+        }
+        return hit
+    }
+
+    /* Public query: edge (x1,y1)-(x2,y2) is collapsed right now (undirected). */
+    public func isEdgeCollapsed(x1: Int64, y1: Int64, x2: Int64, y2: Int64): Bool {
+        return this.edgeCollapsed(Cell(x1, y1), Cell(x2, y2), this.collapseDown)
+    }
+
     /* 负重禁入：burden 存在且当前 laden 且 cell 在禁区
        (solve_levels.py:426-427 邻格 / :501-502 首格). */
     func burdenForbids(cell: Cell): Bool {
@@ -214,8 +237,11 @@ public class PatrolGame {
                 if (this.grid.blocked(last, cell)) {
                     return this.rejectEdge(REJECT_WALL, cell)
                 }
-                // TODO(2c collapse): collapsed edge closed here, before gates
-                //   (solve_levels.py:418-419); not implemented yet.
+                // 塌桥：已 down 则塌边封，占位为墙样式 (solve_levels.py:418-419,
+                // 墙 → 塌桥 → 闸门顺序)。进甲后的跳接豁免，不查 甲→乙 边。
+                if (this.edgeCollapsed(last, cell, this.collapseDown)) {
+                    return this.rejectEdge(REJECT_WALL, cell)
+                }
                 // TODO(2c slide): _expand step 6 forced slide segment, :563-568.
                 // 闸门：无符不过 (solve_levels.py:420-421)；hasToken 取本次输入入口值.
                 if (this.level.gateAt(last, cell) && !this.hasToken) {
@@ -348,7 +374,8 @@ public class PatrolGame {
        卸→laden=false (solve_levels.py:390-399 _cell_effects, applied cell by
        cell in apply() :594-598), then the token pickup only after the whole
        segment (:610) — a gate crossed in the same input still sees the entry
-       hasToken. TODO(2c collapse): 踏触发格 → collapseDown (:397-398). */
+       hasToken. 塌桥：踏触发格 → collapseDown (solve_levels.py:397-398)，
+       一旦为真不回退，只由 undo 快照/clear/reset 复位. */
     func applyEntryEffects(seg: ArrayList<Cell>): Unit {
         var i: Int64 = 0
         while (i < seg.size) {
@@ -363,7 +390,13 @@ public class PatrolGame {
                     }
                 case None => ()
             }
-            // TODO(2c collapse): trigger cell → collapseDown (solve_levels.py:397-398).
+            match (this.level.collapse) {
+                case Some(co) =>
+                    if (c.x == co.triggerX && c.y == co.triggerY) {
+                        this.collapseDown = true
+                    }
+                case None => ()
+            }
             i = i + 1
         }
         var tok = this.hasToken
