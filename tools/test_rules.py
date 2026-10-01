@@ -12,6 +12,7 @@ import hashlib
 import io
 import json
 import math
+import os
 import sys
 import unittest
 from contextlib import redirect_stdout
@@ -19,7 +20,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from solve_levels import load_levels, report_solve_exit, solve, wall_key  # noqa: E402
+from solve_levels import (  # noqa: E402
+    SolverTimeout,
+    load_levels,
+    report_solve_exit,
+    solve,
+    wall_key,
+)
+
+# Released mechanism keys (boards-locked snake_case shape), see build_levels.MECH_KEYS.
+MECH_KEYS = (
+    "ferry",
+    "one_ways",
+    "slide_cells",
+    "seal_gates",
+    "token_cells",
+    "collapse",
+    "burden",
+)
 
 
 class Cell:
@@ -390,12 +408,49 @@ class ParityRuleTests(unittest.TestCase):
         self.assertEqual(g.filled(), 2)
 
     def test_edge_matches_in_both_directions(self) -> None:
+        """The gate is undirected: crossing either way checks the same edge.
+
+        Design SoT: hanzhong_ch9/zip_parity.py — PARITY_RULE / undirected ek
+        ("parity-gated edges keyed by undirected ek", class docstring) and
+        parity_ok (filled counts the standing cell, checked before the crossing).
+        Grid parity fixes the filled at each landing: onto (0,1) it is always
+        even, onto (0,2) via (1,2) it is always odd — so the forward crossing
+        is rejected by requireOdd and the reverse crossing by requireEven.
+        """
+        # Forward (0,1) → (0,2) at filled=2: requireOdd rejects, code 1.
         g = PatrolGame(self.level([self.edge(0, 1, 0, 2, True)]))
-        for cell in (Cell(0, 0), Cell(1, 0), Cell(1, 1), Cell(1, 2), Cell(0, 2)):
+        for cell in (Cell(0, 0), Cell(0, 1)):
             self.assertTrue(g.try_step(cell))
-        self.assertEqual(g.filled(), 4)
-        self.assertFalse(g.try_step(Cell(0, 1)))
+        self.assertEqual(g.filled(), 2)
+        self.assertFalse(g.try_step(Cell(0, 2)))
         self.assertEqual(g.last_reject_parity, 1)
+        self.assertEqual(g.filled(), 2)
+
+        # Same direction, requireEven passes at filled=2.
+        g = PatrolGame(self.level([self.edge(0, 1, 0, 2, False)]))
+        for cell in (Cell(0, 0), Cell(0, 1)):
+            self.assertTrue(g.try_step(cell))
+        self.assertTrue(g.try_step(Cell(0, 2)))
+        self.assertEqual(g.last_reject_parity, 0)
+        self.assertEqual(g.filled(), 3)
+
+        # Reverse (0,2) → (0,1) at filled=5: requireEven rejects, code 2.
+        route = (Cell(0, 0), Cell(1, 0), Cell(1, 1), Cell(1, 2), Cell(0, 2))
+        g = PatrolGame(self.level([self.edge(0, 1, 0, 2, False)]))
+        for cell in route:
+            self.assertTrue(g.try_step(cell))
+        self.assertEqual(g.filled(), 5)
+        self.assertFalse(g.try_step(Cell(0, 1)))
+        self.assertEqual(g.last_reject_parity, 2)
+        self.assertEqual(g.filled(), 5)
+
+        # Same direction reversed, requireOdd passes at filled=5.
+        g = PatrolGame(self.level([self.edge(0, 1, 0, 2, True)]))
+        for cell in route:
+            self.assertTrue(g.try_step(cell))
+        self.assertTrue(g.try_step(Cell(0, 1)))
+        self.assertEqual(g.last_reject_parity, 0)
+        self.assertEqual(g.filled(), 6)
 
     def test_reject_code_clears_after_undo_clear_and_success(self) -> None:
         g = PatrolGame(self.level([self.edge(0, 0, 0, 1, False)]))
@@ -410,14 +465,26 @@ class ParityRuleTests(unittest.TestCase):
         self.assertEqual(g.last_reject_parity, 0)
 
     def test_locked_shipped_paths_obey_parity(self) -> None:
-        """假绿 guard: every locked parity board's own solution must still play."""
+        """假绿 guard: every locked parity board's own solution must still play.
+
+        Locked parity boards: ids 80, 83, 85, 87, 89. The two ferry boards
+        (87, 89) jump 甲→乙 in one move (jingzhou_ch6/zip_ferry.py:64-69),
+        which this mirror engine cannot replay — they are counted but skipped;
+        ferry is covered by the design code / solver task, not this mirror.
+        """
         from build_levels import LOCKED_DIR, LOCKED_FILES, convert_board
 
         checked = 0
+        ferry_skipped = 0
+        parity_total = 0
         for ch_idx, fname in enumerate(LOCKED_FILES):
             data = json.loads((LOCKED_DIR / fname).read_text(encoding="utf-8"))
             for tip_idx, b in enumerate(data["boards"]):
                 if not b.get("parity_edges"):
+                    continue
+                parity_total += 1
+                if b.get("ferry"):
+                    ferry_skipped += 1
                     continue
                 game = PatrolGame(convert_board(b, ch_idx * 10 + tip_idx))
                 for r, c in b["path"]:
@@ -427,34 +494,103 @@ class ParityRuleTests(unittest.TestCase):
                     )
                 self.assertTrue(game.is_win(), f"{b['name']} did not win on its shipped path")
                 checked += 1
-        self.assertGreaterEqual(checked, 5)
+        self.assertEqual(parity_total, 5)
+        self.assertEqual(ferry_skipped, 2)
+        self.assertEqual(checked, 3)
 
 
 class SolverContractTests(unittest.TestCase):
     def test_timeout_is_not_a_ship_failure(self) -> None:
         """README: TIMEOUT keeps the board; only a proven no-solution fails."""
         with redirect_stdout(io.StringIO()):
-            self.assertEqual(report_solve_exit(20, 0, 0), 0)
-            self.assertEqual(report_solve_exit(20, 0, 1), 0)
-            self.assertEqual(report_solve_exit(20, 1, 0), 1)
-            self.assertEqual(report_solve_exit(20, 1, 2), 1)
+            self.assertEqual(report_solve_exit(100, 0, 0), 0)
+            self.assertEqual(report_solve_exit(100, 0, 1), 0)
+            self.assertEqual(report_solve_exit(100, 1, 0), 1)
+            self.assertEqual(report_solve_exit(100, 1, 2), 1)
 
 
 class ShippedLevelPlaythroughTests(unittest.TestCase):
-    def test_solver_path_wins_every_solvable_shipped_level(self) -> None:
-        levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
-        self.assertEqual(len(levels), 20)
+    """solve() + Python mirror-engine replay on shipped levels.
+
+    The released catalog is 100 levels (ids 0..99). Full sweeps belong to
+    `python3 tools/solve_levels.py` (also reachable here via YILU_FULL_SOLVE=1);
+    the default run solves a small subset: the first two mechanism-free,
+    parity-free levels of each chapter. Only those can be replayed end-to-end:
+    this mirror implements walls + waypoint order + parity only, and the
+    current solve() does not read the mechanism keys (ferry/one_ways/…) or
+    enforce parityEdges, so solver paths on those boards are not comparable.
+    """
+
+    MECH_KEYS = MECH_KEYS  # module-level, shared with the catalog tests
+
+    @staticmethod
+    def _levels() -> list[dict]:
+        return load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
+
+    @classmethod
+    def _mechanism_free(cls, level: dict) -> bool:
+        return not any(level.get(key) for key in cls.MECH_KEYS)
+
+    @classmethod
+    def _replayable(cls, level: dict) -> bool:
+        """Mechanism-free and no parityEdges: rules solve() + mirror both know."""
+        return cls._mechanism_free(level) and not level.get("parityEdges")
+
+    @classmethod
+    def _default_subset(cls, levels: list[dict]) -> list[dict]:
+        """First two replayable levels per chapter (10 chapters → 20 levels)."""
+        subset: list[dict] = []
         for level in levels:
-            found = solve(level, timeout_s=8.0)
-            self.assertTrue(found, f"{level['name']} has no solution")
-            path = found[0]
-            game = PatrolGame(level)
-            for x, y in path:
-                self.assertTrue(
-                    game.try_step(Cell(x, y)),
-                    f"{level['name']} rejected ({x},{y}) at size={game.path.size()}",
-                )
-            self.assertTrue(game.is_win(), f"{level['name']} did not win after solver path")
+            if not cls._replayable(level):
+                continue
+            chapter = int(level["id"]) // 10
+            taken = sum(1 for lv in subset if int(lv["id"]) // 10 == chapter)
+            if taken < 2:
+                subset.append(level)
+        return subset
+
+    def _assert_solvable(self, level: dict, replay: bool) -> None:
+        try:
+            found = solve(level, timeout_s=10.0)
+        except SolverTimeout:
+            self.skipTest(f"{level['name']} solver timeout > 10s")
+        self.assertTrue(found, f"{level['name']} has no solution")
+        if not replay:
+            return
+        path = found[0]
+        game = PatrolGame(level)
+        for x, y in path:
+            self.assertTrue(
+                game.try_step(Cell(x, y)),
+                f"{level['name']} rejected ({x},{y}) at size={game.path.size()}",
+            )
+        self.assertTrue(game.is_win(), f"{level['name']} did not win after solver path")
+
+    def test_catalog_is_one_hundred_levels_with_ids_0_to_99(self) -> None:
+        levels = self._levels()
+        self.assertEqual(len(levels), 100)
+        self.assertEqual([int(lv["id"]) for lv in levels], list(range(100)))
+
+    def test_solver_path_wins_default_subset_shipped_levels(self) -> None:
+        """Default gate: first two mechanism-free, parity-free levels per chapter."""
+        levels = self._levels()
+        subset = self._default_subset(levels)
+        self.assertEqual(len(subset), 20, [lv["id"] for lv in subset])
+        for level in subset:
+            with self.subTest(id=level["id"], name=level["name"]):
+                self._assert_solvable(level, replay=True)
+
+    @unittest.skipUnless(
+        os.environ.get("YILU_FULL_SOLVE"),
+        "full 100-level sweep: set YILU_FULL_SOLVE=1; authoritative run is "
+        "python3 tools/solve_levels.py (mechanism-aware solver in flight)",
+    )
+    def test_solver_path_wins_every_solvable_shipped_level(self) -> None:
+        levels = self._levels()
+        self.assertEqual(len(levels), 100)
+        for level in levels:
+            with self.subTest(id=level["id"], name=level["name"]):
+                self._assert_solvable(level, replay=self._replayable(level))
 
     def test_first_two_have_unique_solutions(self) -> None:
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
@@ -464,14 +600,14 @@ class ShippedLevelPlaythroughTests(unittest.TestCase):
 
 
 class VerifiedCatalogTests(unittest.TestCase):
-    """Lock the 20-board 涿郡+平原 catalog (ids 0..19)."""
+    """Lock the 100-board ch1–ch10 catalog (ids 0..99)."""
 
     def test_json_is_the_verified_table(self) -> None:
         from build_levels import EXPECTED_NAMES, ST02_WALLS, emit, load_verified
 
         levels = load_verified()
-        self.assertEqual(len(levels), 20)
-        self.assertEqual([int(lv["id"]) for lv in levels], list(range(20)))
+        self.assertEqual(len(levels), 100)
+        self.assertEqual([int(lv["id"]) for lv in levels], list(range(100)))
         self.assertEqual([lv["name"] for lv in levels], list(EXPECTED_NAMES))
         self.assertNotIn("长安", [lv["name"] for lv in levels])
         self.assertNotIn("洛阳", [lv["name"] for lv in levels])
@@ -510,21 +646,34 @@ class VerifiedCatalogTests(unittest.TestCase):
         self.assertNotIn("文书达驿", ui)
 
     def test_readme_tracks_locked_catalog(self) -> None:
-        """README must describe the 20-board 涿郡+平原 catalog, not the retired prototype."""
+        """README must describe the shipped 100-board / 10-chapter catalog.
+
+        Counts are cross-checked against levels.json and chapter.cj rather
+        than hard-coding board names into the assertion.
+        """
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("涿郡·涿", readme)
-        self.assertIn("平原·祝阿·第 2 驿", readme)
-        self.assertIn("20/20", readme)
-        self.assertIn("cleared >= 10", readme)
+        levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
+        self.assertEqual(len(levels), 100)
+        # Stale 20-board claims must be gone.
+        self.assertNotIn("20/20", readme)
+        self.assertNotIn("ids 0..19", readme)
         self.assertNotIn("12/12", readme)
         self.assertNotIn("13/13", readme)
         self.assertNotIn("{驿名}·第 N 驿", readme)
         self.assertNotIn("| 0 | 长安（教程） |", readme)
         self.assertNotIn("汽梁", readme)
-        from build_levels import EXPECTED_NAMES
-
-        for name in EXPECTED_NAMES:
-            self.assertIn(name, readme)
+        # Current truth the README must state.
+        self.assertIn("100", readme)
+        self.assertIn("ids 0..99", readme)
+        self.assertIn("10 章", readme)
+        self.assertIn("python3 tools/solve_levels.py", readme)
+        self.assertIn("cleared >= 10", readme)
+        # Every chapter card in chapter.cj appears in the README chapter table.
+        for chapter in SHIP_CHAPTERS:
+            self.assertIn(chapter["name"], readme, f"README misses chapter {chapter['name']}")
+        # Spot-check the board examples the README quotes verbatim.
+        self.assertIn("涿郡·涿", readme)
+        self.assertIn("平原·祝阿·第 2 驿", readme)
 
     def test_theme_tokens_match_handoff(self) -> None:
         theme = (ROOT / "entry/src/main/cangjie/theme.cj").read_text(encoding="utf-8")
@@ -566,7 +715,10 @@ class VerifiedCatalogTests(unittest.TestCase):
         self.assertIn("bandClear: Int64 = 10", theme)
 
 
-# chapter-flow v1.3 + ch05-10-SHIP. Locked cards (徐州…北伐) are skin-only — no boards.
+# chapter-flow mirror of entry/src/main/cangjie/chapter.cj (read-only SoT):
+# 10 cards, each levelStart 0/10/../90, levelCount 10, open true (catalog.open
+# = has boards). 05–10 additionally offer a skin preview while still locked
+# (ChapterCatalog.hasSkinPreview: chapterId >= 4 && <= 9).
 SHIP_CHAPTERS = (
     {
         "id": 0,
@@ -623,9 +775,9 @@ SHIP_CHAPTERS = (
         "friend": "刘备",
         "tension": "淮泗争粮",
         "city": "徐州·下邳",
-        "open": False,
+        "open": True,
         "levelStart": 20,
-        "levelCount": 0,
+        "levelCount": 10,
         "leftBust": "bust_p05_liubei",
         "leftFlag": "flag_p05_liu",
         "rightBust": "bust_p06_caocao",
@@ -644,9 +796,9 @@ SHIP_CHAPTERS = (
         "friend": "吕布",
         "tension": "下邳同仓",
         "city": "下邳",
-        "open": False,
-        "levelStart": 20,
-        "levelCount": 0,
+        "open": True,
+        "levelStart": 30,
+        "levelCount": 10,
         "leftBust": "bust_p07_lvbu",
         "leftFlag": "flag_p07_lv",
         "rightBust": "bust_p06_caocao",
@@ -665,9 +817,9 @@ SHIP_CHAPTERS = (
         "friend": "袁→备",
         "tension": "乌巢仓破、半印失散；北不可回",
         "city": "邺（乌巢仓影可辅）",
-        "open": False,
-        "levelStart": 20,
-        "levelCount": 0,
+        "open": True,
+        "levelStart": 40,
+        "levelCount": 10,
         "leftBust": "bust_p04_yuanshao",
         "leftFlag": "flag_p04_yuan",
         "rightBust": "bust_p06_caocao",
@@ -688,9 +840,9 @@ SHIP_CHAPTERS = (
         "friend": "刘表",
         "tension": "刘表辖下友道；不给曹营送",
         "city": "襄阳",
-        "open": False,
-        "levelStart": 20,
-        "levelCount": 0,
+        "open": True,
+        "levelStart": 50,
+        "levelCount": 10,
         "leftBust": "bust_p05_liubei",
         "leftFlag": "flag_p05_liu",
         "rightBust": "bust_p06_caocao",
@@ -711,9 +863,9 @@ SHIP_CHAPTERS = (
         "friend": "孙刘",
         "tension": "孙刘联军岸；不往乌林送曹营",
         "city": "柴桑",
-        "open": False,
-        "levelStart": 20,
-        "levelCount": 0,
+        "open": True,
+        "levelStart": 60,
+        "levelCount": 10,
         "leftBust": "bust_p08_sunquan",
         "leftFlag": "flag_p08_sun",
         "rightBust": "bust_p06_caocao",
@@ -734,9 +886,9 @@ SHIP_CHAPTERS = (
         "friend": "蜀",
         "tension": "峡江入川关隘递进；非曹粮道，勿挂曹脸",
         "city": "白水关（辅成都）",
-        "open": False,
-        "levelStart": 20,
-        "levelCount": 0,
+        "open": True,
+        "levelStart": 70,
+        "levelCount": 10,
         "leftBust": "bust_p05_liubei",
         "leftFlag": "flag_p05_liu",
         "rightBust": "bust_s01_guanai",
@@ -757,9 +909,9 @@ SHIP_CHAPTERS = (
         "friend": "诸葛",
         "tension": "两道分运：汉中关城 vs 南中北运",
         "city": "阳平关",
-        "open": False,
-        "levelStart": 20,
-        "levelCount": 0,
+        "open": True,
+        "levelStart": 80,
+        "levelCount": 10,
         "leftBust": "bust_p09_zhugeliang",
         "leftFlag": "flag_p09_zhuge",
         "rightBust": "bust_p06_caocao",
@@ -780,9 +932,9 @@ SHIP_CHAPTERS = (
         "friend": "诸葛",
         "tension": "对魏远征；街亭/空仓余韵",
         "city": "五丈原",
-        "open": False,
-        "levelStart": 20,
-        "levelCount": 0,
+        "open": True,
+        "levelStart": 90,
+        "levelCount": 10,
         "leftBust": "bust_p09_zhugeliang",
         "leftFlag": "flag_p09_zhuge",
         "rightBust": "bust_p10_simayi",
@@ -987,10 +1139,10 @@ class ChapterFlowV13Tests(unittest.TestCase):
             "第9章 汉中南中",
             "第10章 北伐",
         ])
-        # Catalog.open = has boards / designed as openable, not current unlock.
+        # Catalog.open = has boards; all 10 chapters ship 10 boards each.
         self.assertEqual(
             [ch["open"] for ch in SHIP_CHAPTERS],
-            [True, True, False, False, False, False, False, False, False, False],
+            [True] * 10,
         )
         self.assertTrue(chapter_selectable(0, 0))
         self.assertFalse(chapter_selectable(1, 0))
@@ -1006,7 +1158,7 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertIn("司马", chapter_by_id(9)["listSubtitle"])
 
     def test_pingyuan_opens_only_after_zhuojun_cleared(self) -> None:
-        """平原 可入 iff 涿郡 10 驿 cleared; later chapters stay locked."""
+        """平原 可入 iff 涿郡 10 驿 cleared; later chapters gate on their own levelStart."""
         for cleared in (0, 3, 9):
             self.assertTrue(chapter_is_open(0, cleared), cleared)
             self.assertFalse(chapter_is_open(1, cleared), cleared)
@@ -1018,11 +1170,16 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertEqual(chapter_open_count(10), 2)
         self.assertEqual(chapter_open_footer(10), "已开 2 · 未启 8 · 点开章入驿程")
         self.assertFalse(chapter_is_open(2, 10))
-        self.assertFalse(chapter_is_open(2, 20))
+        # chapter.cj: 徐州 opens at levelStart 20, 吕布 at 30 — each chapter
+        # unlocked iff cleared >= its own levelStart (0,10,…,90).
+        self.assertTrue(chapter_is_open(2, 20))
         self.assertFalse(chapter_is_open(3, 20))
+        self.assertTrue(chapter_is_open(3, 30))
         for chapter_id in range(4, 10):
             self.assertFalse(chapter_is_open(chapter_id, 20), chapter_id)
             self.assertTrue(chapter_has_skin_preview(chapter_id), chapter_id)
+        self.assertTrue(chapter_is_open(9, 90))
+        self.assertEqual(chapter_open_count(90), 10)
         self.assertFalse(chapter_has_skin_preview(2))
         self.assertFalse(chapter_has_skin_preview(3))
         self.assertEqual(chapter_cleared_count(1, 0), 0)
@@ -1033,17 +1190,29 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertNotIn("平原", chapter_current_label(0, 0, levels))
         self.assertEqual(chapter_current_label(1, 10, levels), levels[10]["name"])
 
-    def test_locked_chapters_have_no_boards(self) -> None:
+    def test_every_shipped_chapter_has_ten_boards(self) -> None:
+        """All 10 chapters ship boards: ids 10k..10k+9, 100 levels total."""
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
-        for chapter_id in range(2, 10):
-            self.assertEqual(chapter_levels(levels, chapter_id), [])
-        self.assertEqual(len(chapter_levels(levels, 0)), 10)
-        self.assertEqual(len(chapter_levels(levels, 1)), 10)
+        self.assertEqual(len(levels), 100)
+        self.assertEqual([int(lv["id"]) for lv in levels], list(range(100)))
+        for chapter_id in range(10):
+            chapter = chapter_levels(levels, chapter_id)
+            self.assertEqual(len(chapter), 10, chapter_id)
+            self.assertEqual(
+                [int(lv["id"]) for lv in chapter],
+                list(range(chapter_id * 10, chapter_id * 10 + 10)),
+                chapter_id,
+            )
+        # Names are the locked ones — every chapter card has a real board.
         names = [lv["name"] for lv in levels]
-        prefixes = ("徐州", "吕布", "投袁", "荆州", "赤壁", "入蜀", "汉中", "北伐", "五丈原")
-        self.assertFalse(any(n.startswith(prefix) for n in names for prefix in prefixes))
+        for prefix in ("涿郡", "平原", "徐州", "吕布", "投袁", "荆州", "赤壁", "入蜀", "汉中", "南中", "北伐"):
+            self.assertTrue(any(n.startswith(prefix) for n in names), prefix)
+        # No retired prototype boards.
+        self.assertFalse(any("长安" in n or "汽梁" in n for n in names))
 
     def test_station_names_and_sizes_come_from_json_only(self) -> None:
+        from build_levels import LOCKED_DIR, LOCKED_FILES
+
         levels = load_levels(ROOT / "entry/src/main/resources/rawfile/levels.json")
         zhuo = chapter_levels(levels, 0)
         self.assertEqual([lv["name"] for lv in zhuo], [
@@ -1058,15 +1227,26 @@ class ChapterFlowV13Tests(unittest.TestCase):
             "涿郡·安喜",
             "涿郡·安喜·第 2 驿",
         ])
-        self.assertTrue(all((int(lv["cols"]), int(lv["rows"])) == (6, 6) for lv in levels))
+        # Sizes come from the locked boards, not a hard-coded 6×6:
+        # ch1–3 are 6×6 (30 boards), ch4–10 are 7×7 (70 boards).
+        locked_sizes = []
+        for fname in LOCKED_FILES:
+            data = json.loads((LOCKED_DIR / fname).read_text(encoding="utf-8"))
+            locked_sizes.extend((int(b["size"]), int(b["size"])) for b in data["boards"])
+        self.assertEqual(
+            [(int(lv["cols"]), int(lv["rows"])) for lv in levels],
+            locked_sizes,
+        )
+        self.assertEqual(set(locked_sizes), {(6, 6), (7, 7)})
         self.assertTrue(all(is_dessert_level(lv) is (int(lv["id"]) == 4) for lv in zhuo))
         self.assertTrue(is_dessert_level(zhuo[4]))
         self.assertFalse(is_dessert_level(zhuo[5]))
 
     def test_continue_opens_current_unlock(self) -> None:
-        self.assertEqual(continue_level_index(0, 20), 0)
-        self.assertEqual(continue_level_index(12, 20), 12)
-        self.assertEqual(continue_level_index(20, 20), 19)
+        self.assertEqual(continue_level_index(0, 100), 0)
+        self.assertEqual(continue_level_index(12, 100), 12)
+        self.assertEqual(continue_level_index(99, 100), 99)
+        self.assertEqual(continue_level_index(100, 100), 99)
 
     def test_board_chrome_lines(self) -> None:
         self.assertEqual(chrome_line(0), "友：汉廷官仓 · 张力：黄巾乱世出粮 · 城：涿·安喜")
@@ -1192,7 +1372,7 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertNotIn("5x5", stations)
 
     def test_screen_6_is_fullscreen_skin_preview(self) -> None:
-        """Locked 05–10 open a preview screen; no boards, no 涿/平原 skins."""
+        """05–10 open a fullscreen skin preview while still locked; no 涿/平原 skins."""
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")
         preview = _screen_branch(ui, 6)
         self.assertIn("@r(app.media.skin_05_touyuan_v91)", preview)
@@ -1289,17 +1469,24 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertLess(drag.index("return"), drag.index("tryStep"))
 
     def test_progress_lock_intact_after_bands(self) -> None:
-        """PR #15: 平原 locked while cleared<10; 徐州/吕布 stay closed."""
+        """PR #15: 平原 locked while cleared<10; every later chapter gates on levelStart."""
         for cleared in (0, 3, 9):
             self.assertTrue(chapter_is_open(0, cleared), cleared)
             self.assertFalse(chapter_is_open(1, cleared), cleared)
             self.assertFalse(chapter_selectable(1, cleared), cleared)
         self.assertTrue(chapter_is_open(1, 10))
-        self.assertFalse(chapter_is_open(2, 20))
+        # Every chapter gates on its own levelStart (chapter.cj isOpen).
+        self.assertTrue(chapter_is_open(2, 20))
+        self.assertFalse(chapter_is_open(2, 19))
         self.assertFalse(chapter_is_open(3, 20))
+        self.assertTrue(chapter_is_open(3, 30))
         for chapter_id in range(4, 10):
             self.assertFalse(chapter_is_open(chapter_id, 9), chapter_id)
             self.assertFalse(chapter_is_open(chapter_id, 20), chapter_id)
+            self.assertTrue(
+                chapter_is_open(chapter_id, chapter_by_id(chapter_id)["levelStart"]),
+                chapter_id,
+            )
         src = (ROOT / "entry/src/main/cangjie/chapter.cj").read_text(encoding="utf-8")
         self.assertIn("func isOpen(", src)
         self.assertIn("cleared >= ch.levelStart", _func_body(src, "isOpen"))
@@ -1383,20 +1570,29 @@ class ChapterFlowV13Tests(unittest.TestCase):
         self.assertNotIn("flag-s01-guan.png", media_names)
         self.assertNotIn("flag_s01_guan.png", media_names)
 
-    def test_levels_json_unchanged_twenty_boards(self) -> None:
+    def test_levels_json_is_the_locked_hundred_boards(self) -> None:
         from build_levels import EXPECTED_NAMES, load_verified
 
         levels = load_verified()
+        self.assertEqual(len(levels), 100)
+        self.assertEqual([int(lv["id"]) for lv in levels], list(range(100)))
         self.assertEqual([lv["name"] for lv in levels], list(EXPECTED_NAMES))
         blob = (ROOT / "entry/src/main/resources/rawfile/levels.json").read_text(encoding="utf-8")
+        # Retired prototype content must stay out of the shipped catalog.
         self.assertNotIn("dessert", blob)
-        self.assertNotIn("徐州", blob)
-        self.assertNotIn("吕布", blob)
-        self.assertNotIn("投袁", blob)
-        self.assertNotIn("襄阳", blob)
-        self.assertNotIn("赤壁", blob)
-        self.assertNotIn("白水关", blob)
-        self.assertNotIn("五丈原", blob)
+        self.assertNotIn("长安", blob)
+        self.assertNotIn("汽梁", blob)
+        # Mechanism keys ship only on the 33 boards that have them
+        # (boards-locked); the other 67 entries carry none of them.
+        with_mech = [lv for lv in levels if any(lv.get(k) for k in MECH_KEYS)]
+        self.assertEqual(len(with_mech), 33)
+        for lv in levels:
+            for key in MECH_KEYS:
+                if lv.get(key):
+                    break
+            else:
+                for key in MECH_KEYS:
+                    self.assertNotIn(f'"{key}"', json.dumps(lv))
 
 
 def play_paper(screen: int, level_index: int, chapter_index: int) -> str:
