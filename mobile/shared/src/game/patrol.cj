@@ -121,6 +121,22 @@ public class PatrolGame {
         return true
     }
 
+    /* 纯函数版奇偶：显式 filled（不读 this.filled()、不写 lastRejectParity），
+       逻辑同 checkParity / solve_levels.py:380-387 (_parity_ok). */
+    func parityOkAt(a: Cell, b: Cell, filled: Int64): Bool {
+        for (pe in this.level.parityEdges) {
+            if (pe.matches(a, b)) {
+                if (pe.requireOdd && filled % 2 == 0) {
+                    return false
+                }
+                if (pe.requireEven && filled % 2 == 1) {
+                    return false
+                }
+            }
+        }
+        return true
+    }
+
     /* Clear reject bookkeeping; called at the head of every public entry point. */
     func clearReject(): Unit {
         this.lastReject = REJECT_NONE
@@ -183,6 +199,40 @@ public class PatrolGame {
         return bad
     }
 
+    /* 显式传参的邻格开放性检查，顺序严格同 _nbr_open (solve_levels.py:401-429)：
+       墙/非邻 → 塌桥封边 → 闸门 → 奇偶 → 单向 → 负重禁区。
+       返回 0=开放，否则 REJECT_* 码。越界由调用方先查 inBounds；不写任何
+       lastReject* 字段（纯查询，拒绝登记仍由 rejectEdge 做）。 */
+    func nbrBlockedCode(cur: Cell, nxt: Cell, hasTok: Bool, filled: Int64, ladenS: Bool, downS: Bool): Int64 {
+        if (this.grid.blocked(cur, nxt)) {
+            return REJECT_WALL /* :414-415 墙（含非邻）. */
+        }
+        if (this.edgeCollapsed(cur, nxt, downS)) {
+            return REJECT_WALL /* :416-417 塌桥封边. */
+        }
+        if (this.level.gateAt(cur, nxt) && !hasTok) {
+            return REJECT_SEALED_GATE /* :418-419 闸门. */
+        }
+        if (!this.parityOkAt(cur, nxt, filled)) {
+            return REJECT_PARITY /* :420-421 奇偶，filled 用显式传入值. */
+        }
+        if (this.level.oneWayConstrains(cur, nxt) && !this.level.oneWayAllows(cur, nxt)) {
+            return REJECT_ONE_WAY /* :422-423 单向. */
+        }
+        var bad = false
+        match (this.level.burden) {
+            case Some(_) =>
+                if (ladenS && this.level.isForbiddenCell(nxt.x, nxt.y)) {
+                    bad = true /* :424-425 载态禁区. */
+                }
+            case None => ()
+        }
+        if (bad) {
+            return REJECT_BURDEN_FORBIDDEN
+        }
+        return 0
+    }
+
     /* 对段的数字约束，一次输入产生的整段一起查：
        ① 段内路标必须按序消耗 (_seg_clue_ok, solve_levels.py:472-484，不符→false→
          REJECT_WAYPOINT)；② 最大号只能是整盘最后一格 (:577-578)，且按 Python 只查
@@ -207,6 +257,78 @@ public class PatrolGame {
             return false
         }
         return true
+    }
+
+    /* cell 是否泽地格（level.slideCells）. */
+    func inSlideCells(cell: Cell): Bool {
+        for (c in this.level.slideCells) {
+            if (c.equals(cell)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /* 泽地强制滑行段，1:1 对照 _slide_segment (solve_levels.py:431-470)：
+       dx,dy = nxt-cur（调用方已保证邻格，非邻已被墙检查拒掉）；
+       hasToken 取入口值（展开期间 this.hasToken 不变，冻结等价）；
+       filled/laden/down 逐落格更新。停止顺序：越界 → 墙/闸/奇偶/单向/禁区
+       (nbrBlockedCode) → 已访 → 已入段 → 数字格 → 渡口甲/乙 → 非泽地，
+       均 break 停在前一格（无符遇闸停闸前，不整段拒绝）。 */
+    func slideSegment(cur: Cell, nxt: Cell): ArrayList<Cell> {
+        let dx = nxt.x - cur.x
+        let dy = nxt.y - cur.y
+        let seg = ArrayList<Cell>()
+        seg.add(nxt)
+        let hasTok = this.hasToken /* 入口值冻结 (rushu_ch8/zip_seal.py:115-120). */
+        var pos = nxt
+        var fcur = this.filled() + 1 /* :449 跨入 nxt 后的已铺数. */
+        var (ladenS, downS) = this.cellEffectsAt(nxt, this.laden, this.collapseDown) /* :450 */
+        while (true) {
+            let npos = Cell(pos.x + dx, pos.y + dy)
+            if (!this.grid.inBounds(npos)) {
+                break /* :453-454 越界. */
+            }
+            if (this.nbrBlockedCode(pos, npos, hasTok, fcur, ladenS, downS) != 0) {
+                break /* :456-457 墙/闸/奇偶/单向/禁区. */
+            }
+            if (this.path.contains(npos)) {
+                break /* :459 已访. */
+            }
+            var inSeg = false
+            for (s in seg) {
+                if (s.equals(npos)) {
+                    inSeg = true
+                }
+            }
+            if (inSeg) {
+                break /* :460 已入本段. */
+            }
+            if (this.level.numberAt(npos.x, npos.y) != 0) {
+                break /* :462 数字格. */
+            }
+            var isFerry = false
+            match (this.level.ferry) {
+                case Some(f) =>
+                    if ((npos.x == f.jiaX && npos.y == f.jiaY) || (npos.x == f.yiX && npos.y == f.yiY)) {
+                        isFerry = true /* :464-465 渡口甲/乙. */
+                    }
+                case None => ()
+            }
+            if (isFerry) {
+                break
+            }
+            if (!this.inSlideCells(npos)) {
+                break /* :467 非泽地. */
+            }
+            seg.add(npos)
+            let (l2, d2) = this.cellEffectsAt(npos, ladenS, downS) /* :468-469 逐落格更新. */
+            ladenS = l2
+            downS = d2
+            pos = npos
+            fcur = fcur + 1
+        }
+        return seg
     }
 
     /* Cells visited by one input `cell`, or None when illegal (sets lastReject*).
@@ -242,7 +364,6 @@ public class PatrolGame {
                 if (this.edgeCollapsed(last, cell, this.collapseDown)) {
                     return this.rejectEdge(REJECT_WALL, cell)
                 }
-                // TODO(2c slide): _expand step 6 forced slide segment, :563-568.
                 // 闸门：无符不过 (solve_levels.py:420-421)；hasToken 取本次输入入口值.
                 if (this.level.gateAt(last, cell) && !this.hasToken) {
                     return this.rejectEdge(REJECT_SEALED_GATE, cell)
@@ -280,7 +401,19 @@ public class PatrolGame {
                     case None => ()
                 }
                 if (seg.size == 0) {
-                    seg.add(cell)
+                    // 泽地强制滑行（_expand step 6, solve_levels.py:563-568）：
+                    // 目标 ∈ slideCells → 从 last 沿 last→cell 方向滑到底；
+                    // 否则普通单格。起点分支在上面已早退，首格不滑。
+                    if (this.inSlideCells(cell)) {
+                        let slid = this.slideSegment(last, cell)
+                        var k: Int64 = 0
+                        while (k < slid.size) {
+                            seg.add(slid[k])
+                            k = k + 1
+                        }
+                    } else {
+                        seg.add(cell)
+                    }
                 }
                 if (!this.segClueOk(seg)) {
                     return this.rejectEdge(REJECT_WAYPOINT, cell)
@@ -370,33 +503,43 @@ public class PatrolGame {
         this.collapseDown = false
     }
 
-    /* State changes caused by landing a whole input: per-cell 装→laden=true、
-       卸→laden=false (solve_levels.py:390-399 _cell_effects, applied cell by
-       cell in apply() :594-598), then the token pickup only after the whole
-       segment (:610) — a gate crossed in the same input still sees the entry
-       hasToken. 塌桥：踏触发格 → collapseDown (solve_levels.py:397-398)，
-       一旦为真不回退，只由 undo 快照/clear/reset 复位. */
+    /* 逐格 装→laden=true、卸→laden=false、塌桥触发格→down=true（只置真不回退），
+       纯函数 1:1 对照 _cell_effects (solve_levels.py:390-399)；装/卸同格时后写的
+       卸生效（与 Python 顺序一致），塌桥在 burden 之后判定。 */
+    func cellEffectsAt(c: Cell, laden: Bool, down: Bool): (Bool, Bool) {
+        var l = laden
+        var d = down
+        match (this.level.burden) {
+            case Some(b) =>
+                if (c.x == b.loadX && c.y == b.loadY) {
+                    l = true
+                }
+                if (c.x == b.unloadX && c.y == b.unloadY) {
+                    l = false
+                }
+            case None => ()
+        }
+        match (this.level.collapse) {
+            case Some(co) =>
+                if (c.x == co.triggerX && c.y == co.triggerY) {
+                    d = true
+                }
+            case None => ()
+        }
+        return (l, d)
+    }
+
+    /* State changes caused by landing a whole input: per-cell 装/卸/塌桥经
+       cellEffectsAt 逐格推进 (solve_levels.py:390-399 _cell_effects, applied
+       cell by cell in apply() :594-598)，then the token pickup only after the
+       whole segment (:610) — a gate crossed in the same input still sees the
+       entry hasToken. 塌桥一旦为真不回退，只由 undo 快照/clear/reset 复位. */
     func applyEntryEffects(seg: ArrayList<Cell>): Unit {
         var i: Int64 = 0
         while (i < seg.size) {
-            let c = seg[i]
-            match (this.level.burden) {
-                case Some(b) =>
-                    if (c.x == b.loadX && c.y == b.loadY) {
-                        this.laden = true
-                    }
-                    if (c.x == b.unloadX && c.y == b.unloadY) {
-                        this.laden = false
-                    }
-                case None => ()
-            }
-            match (this.level.collapse) {
-                case Some(co) =>
-                    if (c.x == co.triggerX && c.y == co.triggerY) {
-                        this.collapseDown = true
-                    }
-                case None => ()
-            }
+            let (l, d) = this.cellEffectsAt(seg[i], this.laden, this.collapseDown)
+            this.laden = l
+            this.collapseDown = d
             i = i + 1
         }
         var tok = this.hasToken
