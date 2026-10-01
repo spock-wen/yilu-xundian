@@ -42,6 +42,36 @@ public func loadAllLevels(): ArrayList<LevelDef> {
 }
 
 /* 与 tools/build_levels.py 的 LOCKED_FILES 相同的 10 个文件名,顺序一致。 */
+/* 引擎 JsonParser.parseNumber 只读整数(shared/src/game/json_level.cj:281-311):
+   吃完整数位就返回,若下一位是 '.',parseObject 随即 markFailed("expected , or ]")。
+   boards-locked 有少量浮点元数据(decision_span/on_path_pct/mean_deg 等),与解法无关。
+   JSON 中 '.' 只出现在数字和字符串内;本测试只读 boards[tip].path(整数数组),
+   结构与整数不受影响,故解析前删掉全部 '.' 作为测试侧规避。引擎不改,限制另行报告。 */
+public func stripDecimalDots(text: String): String {
+    let out = ArrayList<UInt8>()
+    var i: Int64 = 0
+    while (i < text.size) {
+        match (text.get(i)) {
+            case Some(b) =>
+                if (b != 46u8) { /* '.' */
+                    out.add(b)
+                }
+            case None => ()
+        }
+        i = i + 1
+    }
+    if (out.size == 0) {
+        return ""
+    }
+    let arr = Array<UInt8>(out.size, {idx =>
+        match (out.get(idx)) {
+            case Some(b) => b
+            case None => 0u8
+        }
+    })
+    return unsafe { String.fromUtf8Unchecked(arr) }
+}
+
 public func lockedFiles(): Array<String> {
     return ["ch1_zhuo.json", "ch2_pingyuan.json", "ch3_xuzhou.json",
             "ch4_lvbu.json", "ch5_touyuan.json", "ch6_jingzhou.json",
@@ -90,8 +120,11 @@ public func lockedPath(id: Int64): ArrayList<Cell> {
     let files = lockedFiles()
     @Assert(id >= 0 && id / 10 < files.size)
     let tip = id % 10
-    let parser = JsonParser(readTextFileAny(lockedFileCandidates(files[id / 10])))
+    let parser = JsonParser(stripDecimalDots(readTextFileAny(lockedFileCandidates(files[id / 10]))))
     let root = parser.parseValue()
+    if (parser.failed || root.kind != 5) { /* 先打印再断言:断言会中止用例,留下定位线索 */
+        println("LOCKED_PATH_PARSE_FAIL id=${id} failed=${parser.failed} rootKind=${root.kind} msg=${parser.message}")
+    }
     @Assert(!parser.failed && root.kind == 5)
     let cells = ArrayList<Cell>()
     match (field(root, "boards")) {
