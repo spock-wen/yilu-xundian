@@ -7,3 +7,12 @@ public func rawImg(name: String): String {
 public func rawSvg(name: String): String {
     return "resource://RAWFILE/" + name + ".svg"
 }
+
+/* 单向门「乙·闸门栅」idle 切片(oneway-gate-B-locked/assets/oneway-B-idle-{0,90}@48.png 原样拷贝)。
+   两个字面量分开写,sync_to_keels.sh 的 rawImg("...") 正则需要字面量。 */
+public func gateImgSrc(vertical: Bool): String {
+    if (vertical) {
+        return rawImg("oneway_b_idle_v")
+    }
+    return rawImg("oneway_b_idle_h")
+}

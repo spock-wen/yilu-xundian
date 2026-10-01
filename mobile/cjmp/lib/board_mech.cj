@@ -3,7 +3,7 @@ package ohos_app_cangjie_entry
 import std.math.*
 import std.collection.ArrayList
 import ohos_app_cangjie_entry.engine.Cell
-import ohos_app_cangjie_entry.game.{PatrolGame, LevelDef}
+import ohos_app_cangjie_entry.game.{PatrolGame, LevelDef, REJECT_PARITY, REJECT_ONE_WAY, REJECT_SEALED_GATE, REJECT_BURDEN_FORBIDDEN, REJECT_FERRY}
 
 /*
  * Pure builders for mechanic board pieces (slide / seal gates / one-way gates /
@@ -341,4 +341,41 @@ public func buildBoardMechPaths(game: PatrolGame, geom: BoardGeom, pxPerVp: Floa
         case None => ()
     }
     return list.toArray()
+}
+
+/* 该次拒绝是否应当在 from→to 这条边上闪烁提示。
+   仅机制类拒绝（奇偶/单向/闸门/负禁/进甲）且 from/to 都有效并曼哈顿相邻才闪；
+   WALL/VISITED/WAYPOINT/BOUNDS/START 与塌桥断边不闪。 */
+public func rejectShouldFlash(game: PatrolGame): Bool {
+    let code = game.lastReject
+    if (code != REJECT_PARITY && code != REJECT_ONE_WAY && code != REJECT_SEALED_GATE
+        && code != REJECT_BURDEN_FORBIDDEN && code != REJECT_FERRY) {
+        return false
+    }
+    if (game.lastRejectFromX < 0 || game.lastRejectFromY < 0
+        || game.lastRejectToX < 0 || game.lastRejectToY < 0) {
+        return false
+    }
+    let dx = game.lastRejectToX - game.lastRejectFromX
+    let dy = game.lastRejectToY - game.lastRejectFromY
+    var ax = dx
+    if (ax < 0) {
+        ax = -ax
+    }
+    var ay = dy
+    if (ay < 0) {
+        ay = -ay
+    }
+    return ax + ay == 1
+}
+
+/* 奇偶拒绝的 toast 文案；非奇偶拒绝返回 ""。 */
+public func parityToastText(game: PatrolGame): String {
+    if (game.lastRejectParity == 1) {
+        return "此步须奇"
+    }
+    if (game.lastRejectParity == 2) {
+        return "此步须偶"
+    }
+    return ""
 }
