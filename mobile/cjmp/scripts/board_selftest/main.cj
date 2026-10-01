@@ -102,18 +102,31 @@ func checkAll(game: PatrolGame, geom: BoardGeom, lv: LevelDef, id: Int64, step: 
     /* 3. gates */
     let gates = buildBoardGates(game, geom)
     ctx.ck(gates.size == lv.oneWays.size, "${tag} gates=${gates.size} oneWays=${lv.oneWays.size}")
-    /* 4. mech dots：渡口 4 个 */
+    /* 4. mech dots:渡口 4 个 + J16 路径头停末格环×2(历史停末格不留环) */
     var hasFerry = false
     match (lv.ferry) {
         case Some(_) => hasFerry = true
         case None => ()
+    }
+    /* J16:环=路径头点本身,只有头格是停末格时 stopN=1 */
+    var stopN: Int64 = 0
+    if (game.path.size() >= 2 && isSlideStopIndex(game, game.path.size() - 1)) {
+        stopN = 1
     }
     let dots = buildBoardMechDots(game, geom)
     var wantDots: Int64 = 0
     if (hasFerry) {
         wantDots = 4
     }
-    ctx.ck(dots.size == wantDots, "${tag} dots=${dots.size} want=${wantDots}")
+    wantDots = wantDots + stopN * 2
+    ctx.ck(dots.size == wantDots, "${tag} dots=${dots.size} want=${wantDots} stop=${stopN}")
+    /* 4b. 头点:头格是「停」末格时空(由环代替),否则 1 个 */
+    let headDots = buildBoardHeadDot(game, geom)
+    var wantHead: Int64 = 0
+    if (game.path.size() >= 1 && !isSlideStopIndex(game, game.path.size() - 1)) {
+        wantHead = 1
+    }
+    ctx.ck(headDots.size == wantHead, "${tag} headDots=${headDots.size} want=${wantHead}")
     /* 5. mech walls：闸(sealGates×1/2) + 塌桥断边 */
     var sealN: Int64 = 0
     if (game.hasToken) {
@@ -132,7 +145,7 @@ func checkAll(game: PatrolGame, geom: BoardGeom, lv: LevelDef, id: Int64, step: 
     let walls = buildBoardMechWalls(game, geom)
     let wantWalls = sealN + colN
     ctx.ck(walls.size == wantWalls, "${tag} walls=${walls.size} want=${wantWalls}")
-    /* 6. labels = 渡3 + 开闸 + 符 + 滑 + 停[0..滑数] */
+    /* 6. labels = 渡3 + 开闸 + 符(J14:滑/停不再出 Text) */
     let labels = buildBoardMechLabels(game, geom)
     var base: Int64 = 0
     if (hasFerry) {
@@ -141,9 +154,8 @@ func checkAll(game: PatrolGame, geom: BoardGeom, lv: LevelDef, id: Int64, step: 
     if (game.hasToken) {
         base = base + lv.sealGates.size
     }
-    base = base + lv.tokenCells.size + lv.slideCells.size
-    let stopN = labels.size - base
-    ctx.ck(stopN >= 0 && stopN <= lv.slideCells.size, "${tag} labels=${labels.size} base=${base} stop=${stopN} slides=${lv.slideCells.size}")
+    base = base + lv.tokenCells.size
+    ctx.ck(labels.size == base, "${tag} labels=${labels.size} base=${base}")
     /* 7. paths：commands 非空且以 M 起头 */
     let paths = buildBoardMechPaths(game, geom, 3.0)
     for (p in paths) {
@@ -186,16 +198,34 @@ func checkAll(game: PatrolGame, geom: BoardGeom, lv: LevelDef, id: Int64, step: 
     if (wantChev > 0) {
         ctx.ck(hasQing && qingCmds.size > 0, "${tag} chevron qingDeep missing want=${wantChev}")
         ctx.ck(!hasWhiteChev, "${tag} white slide chevron still present")
+        /* J14:chevron 笔画 sw = max(3, 4k),k=c/36.3(本测试 c=43) */
+        var wantSw = 4.0 * (43.0 / 36.3)
+        if (wantSw < 3.0) {
+            wantSw = 3.0
+        }
+        for (p in paths) {
+            if (p.color == Theme.qingDeep) {
+                ctx.ck(absF(p.strokeW - wantSw) < 1e-9, "${tag} chevron sw=${p.strokeW} want=${wantSw}")
+            }
+        }
     } else {
         ctx.ck(!hasQing, "${tag} qingDeep chevron without slide entry")
     }
-    /* 7c. J13 滑 标记：墨色、字号 12.2vp 绝对值 */
+    /* 7c. J14:滑/停 不再是 Text;「滑」= 墨色 fill-only BoardPath(仅当有滑行格) */
     for (l in labels) {
-        if (l.text == "滑") {
-            ctx.ck(l.color == Theme.ink, "${tag} hua label color=${l.color} want=${Theme.ink}")
-            ctx.ck(absF(l.size - 12.2) < 0.01, "${tag} hua label size=${l.size} want=12.2")
+        ctx.ck(l.text != "滑" && l.text != "停", "${tag} stray slide label '${l.text}'")
+    }
+    var inkFillN: Int64 = 0
+    for (p in paths) {
+        if (p.color == Theme.ink && p.strokeW == 0.0 && p.fillOp == 1.0) {
+            inkFillN = inkFillN + 1
         }
     }
+    var wantHua: Int64 = 0
+    if (lv.slideCells.size > 0) {
+        wantHua = 1
+    }
+    ctx.ck(inkFillN == wantHua, "${tag} ink fill-only paths=${inkFillN} want=${wantHua}")
     /* 8. 无机制关：3~7 长度全 0 */
     if (!lv.hasMechanics()) {
         ctx.ck(gates.size == 0 && dots.size == 0 && walls.size == 0 && labels.size == 0 && paths.size == 0,
@@ -526,6 +556,145 @@ func j13RejectGateTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     ctx.ck(found, "J13 no one_way level in catalog")
 }
 
+/* ===== J14 定向检查：boardGeomFor 比例 + 滑行 chevron/hua 几何 + 停环 ===== */
+func j14SlideGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
+    /* (1) boardGeomFor:cols=7 → c=32/38/40/43/43,托盘宽=7c+36+16(即 7c+6*6+2*8) */
+    let ws = [320.0, 360.0, 375.0, 393.0, 430.0]
+    let wantC = [32.0, 38.0, 40.0, 43.0, 43.0]
+    let wantTw = [276.0, 318.0, 332.0, 353.0, 353.0]
+    var i: Int64 = 0
+    while (i < 5) {
+        let g7 = boardGeomFor(7, 7, ws[i])
+        ctx.ck(absF(g7.c - wantC[i]) < 1e-9, "J14 7col W=${ws[i]} c=${g7.c} want=${wantC[i]}")
+        ctx.ck(absF(g7.trayW() - wantTw[i]) < 1e-9, "J14 7col W=${ws[i]} trayW=${g7.trayW()} want=${wantTw[i]}")
+        i = i + 1
+    }
+    /* cols=6:同一 c 公式 → W=320 得 c=39、托盘 6c+46=280 */
+    let g6 = boardGeomFor(6, 6, 320.0)
+    ctx.ck(absF(g6.c - 39.0) < 1e-9, "J14 6col W=320 c=${g6.c} want=39")
+    ctx.ck(absF(g6.trayW() - 280.0) < 1e-9, "J14 6col W=320 trayW=${g6.trayW()} want=280")
+    /* (2) 滑行 chevron 几何 helper:入向左/上时中心相对格心偏 0.16c,其余居中 */
+    let c = 43.0
+    let k = c / 36.3
+    let ccx = 100.0
+    let ccy = 90.0
+    var dirs: Array<(Int64, Int64)> = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    for (d in dirs) {
+        let pts = slideChevronPts(ccx, ccy, c, d[0], d[1])
+        /* base = 两臂中点,chevron 中心 = (tip+base)/2 */
+        let basex = (pts[0] + pts[4]) * 0.5
+        let basey = (pts[1] + pts[5]) * 0.5
+        let cenx = (pts[2] + basex) * 0.5
+        let ceny = (pts[3] + basey) * 0.5
+        let shift = if (d[0] < 0 || d[1] < 0) { 0.16 * c } else { 0.0 }
+        ctx.ck(absF(cenx - (ccx + Float64(d[0]) * shift)) < 1e-9 && absF(ceny - (ccy + Float64(d[1]) * shift)) < 1e-9,
+            "J14 chev cen=(${cenx},${ceny}) dir=${d[0]},${d[1]} shift=${shift}")
+        /* 深度 dep=18k:tip 与 base 距离 */
+        let dep = sqrt((pts[2] - basex) * (pts[2] - basex) + (pts[3] - basey) * (pts[3] - basey))
+        ctx.ck(absF(dep - 18.0 * k) < 1e-9, "J14 chev dep=${dep} want=${18.0 * k}")
+        /* 臂展 h=25k:两臂距离 */
+        let h = sqrt((pts[0] - pts[4]) * (pts[0] - pts[4]) + (pts[1] - pts[5]) * (pts[1] - pts[5]))
+        ctx.ck(absF(h - 25.0 * k) < 1e-9, "J14 chev h=${h} want=${25.0 * k}")
+    }
+    /* (3) hua 角标:右边缘=格右-2k(全体最大 x1);名义 gh 盒(右钩右下角)下边缘=格下-1k。
+       注:脚本 hua() 的下短横 ink 到 0.78gh+s,略超出名义 gh 盒(照脚本,不改)。 */
+    var ci: Int64 = 0
+    let cs = [43.0, 32.0]
+    while (ci < 2) {
+        let hc = cs[ci]
+        let hk = hc / 36.3
+        let rects = slideHuaRects(hc)
+        var maxX = 0.0
+        var r: Int64 = 0
+        while (r + 3 < rects.size) {
+            if (rects[r + 2] > maxX) {
+                maxX = rects[r + 2]
+            }
+            r = r + 4
+        }
+        ctx.ck(rects.size == 28, "J14 hua rects=${rects.size} want=28 (7*4)")
+        ctx.ck(absF(maxX - (hc - 2.0 * hk)) < 1e-9, "J14 hua c=${hc} right=${maxX} want=${hc - 2.0 * hk}")
+        /* 右钩 = 第 7 个矩形:右下角锚在名义盒 (gw,gh) */
+        ctx.ck(absF(rects[26] - (hc - 2.0 * hk)) < 1e-9, "J14 hua c=${hc} hook right=${rects[26]} want=${hc - 2.0 * hk}")
+        ctx.ck(absF(rects[27] - (hc - 1.0 * hk)) < 1e-9, "J14 hua c=${hc} hook bottom=${rects[27]} want=${hc - 1.0 * hk}")
+        ci = ci + 1
+    }
+    /* (4) 手工构造滑行关:从 (0,0) 入 (1,0) 滑到 (2,0) → 2 chevron、hua Z 数 = 滑格数*7;
+       J16:头格=停末格 → 恰 1 个环(2 个 dot,圆心=格心,r=7k/3k)、头点为空;
+       继续走 (2,1) 离开滑行段后 → 环数 0(不留历史环)、头点恢复 1 个 */
+    let lvs = mkTiny(7, 7, [(1, 0, 0), (2, 0, 3)])
+    lvs.slideCells.add(Cell(1, 0))
+    lvs.slideCells.add(Cell(2, 0))
+    let g = PatrolGame(lvs)
+    ctx.ck(g.tryStep(Cell(0, 0)), "J14 slide setup start rejected")
+    ctx.ck(g.tryStep(Cell(1, 0)), "J14 slide setup tryStep rejected")
+    if (g.path.size() == 3) {
+        ctx.ck(g.path.at(1).x == 1 && g.path.at(2).x == 2, "J14 slide path unexpected")
+        let geom = BoardGeom(43.0, 7, 7)
+        let paths = buildBoardMechPaths(g, geom, 3.0)
+        var huaCmds = ""
+        var chevN: Int64 = 0
+        for (p in paths) {
+            if (p.color == Theme.ink && p.fillOp == 1.0) {
+                huaCmds = p.commands
+            }
+            if (p.color == Theme.qingDeep) {
+                /* 数 M 次数 = chevron 个数 */
+                var q: Int64 = 0
+                chevN = 0
+                while (q < p.commands.size) {
+                    match (p.commands.get(q)) {
+                        case Some(b) => if (b == 77u8) { chevN = chevN + 1 }
+                        case None => ()
+                    }
+                    q = q + 1
+                }
+            }
+        }
+        ctx.ck(chevN == 2, "J14 chevron count=${chevN} want=2")
+        var zN: Int64 = 0
+        var q2: Int64 = 0
+        while (q2 < huaCmds.size) {
+            match (huaCmds.get(q2)) {
+                case Some(b) => if (b == 90u8) { zN = zN + 1 }
+                case None => ()
+            }
+            q2 = q2 + 1
+        }
+        ctx.ck(zN == 14, "J14 hua Z count=${zN} want=14 (2 cells * 7 rects)")
+        /* J16:停在末格 → 1 个环 = 2 个 dot,圆心=格心,外圈 r=7k ink / 孔 r=3k whitePaper */
+        let sd = buildBoardMechDots(g, geom)
+        let scx = geom.centerX(2)
+        let scy = geom.centerY(0)
+        ctx.ck(sd.size == 2, "J14 stop ring dots=${sd.size} want=2")
+        ctx.ck(absF(sd[0].cx - scx) < 1e-9 && absF(sd[0].cy - scy) < 1e-9,
+            "J14 stop ring center=(${sd[0].cx},${sd[0].cy}) want=(${scx},${scy})")
+        ctx.ck(absF(sd[0].r - 7.0 * k) < 1e-9 && sd[0].fill == Theme.ink,
+            "J14 stop ring outer r=${sd[0].r} want=${7.0 * k}")
+        ctx.ck(absF(sd[1].r - 3.0 * k) < 1e-9 && sd[1].fill == Theme.whitePaper,
+            "J14 stop ring hole r=${sd[1].r} want=${3.0 * k}")
+        ctx.ck(buildBoardHeadDot(g, geom).size == 0, "J14 head dot should be empty at slide stop")
+        /* J16:走出滑行段 → 环数 0、头点恢复 1 个 */
+        ctx.ck(g.tryStep(Cell(2, 1)), "J14 slide leave tryStep rejected")
+        let leftDots = buildBoardMechDots(g, geom)
+        let leftHead = buildBoardHeadDot(g, geom)
+        ctx.ck(leftDots.size == 0, "J16 rings after leaving slide=${leftDots.size} want=0")
+        ctx.ck(leftHead.size == 1, "J16 head dot after leaving=${leftHead.size} want=1")
+    } else {
+        ctx.ck(false, "J14 slide path size=${g.path.size()} want=3")
+    }
+    /* (5) 目录里确实有 slide 关(防止 (4) 之外全部走空) */
+    var found = false
+    var li: Int64 = 0
+    while (li < levels.size && !found) {
+        if (levels.get(li).getOrThrow().slideCells.size > 0) {
+            found = true
+        }
+        li = li + 1
+    }
+    ctx.ck(found, "J14 no slide level in catalog")
+}
+
 main(args: Array<String>): Int64 {
     if (args.size < 2) {
         println("usage: main <levels.json> <inputs.txt>")
@@ -568,6 +737,8 @@ main(args: Array<String>): Int64 {
     }
     /* J13 定向纯函数检查。 */
     j13RejectGateTests(levels, ctx)
+    /* J14 定向几何/滑行检查。 */
+    j14SlideGeomTests(levels, ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("SELFTEST levels=${ctx.levels} steps=${ctx.steps} checks=${ctx.checks} rejects=[${sb.toString()}] failures=${ctx.failures.size}")
     println("DIRECTED flash=${dStat.flash} noflash=${dStat.noflash} failures=${dStat.fails}")

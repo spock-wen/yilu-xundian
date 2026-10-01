@@ -108,6 +108,131 @@ public func rejectGateImg(geom: BoardGeom, fromX: Int64, fromY: Int64, toX: Int6
     return BoardImg(mx - len * 0.5, my - thick * 0.5, len, thick, false)
 }
 
+/* J14:滑行 chevron 折线三点(格心 cx,cy,格宽 c,入向单位向量 dx,dy)。
+   k=c/36.3:dep=18k、h=25k;入向左/上时中心沿入向整体偏 0.16c,
+   避让右下「滑」角标(SLIDE_CELL_RULINGS_20261002 §2)。
+   返回 [arm1x,arm1y,tipx,tipy,arm2x,arm2y](vp,未乘 pxPerVp)。 */
+public func slideChevronPts(cx: Float64, cy: Float64, c: Float64, dx: Int64, dy: Int64): Array<Float64> {
+    let k = c / 36.3
+    let dep = 18.0 * k
+    let h = 25.0 * k
+    let fdx = Float64(dx)
+    let fdy = Float64(dy)
+    let perpx = -fdy
+    let perpy = fdx
+    let shift = if (dx < 0 || dy < 0) { 0.16 * c } else { 0.0 }
+    let cenx = cx + fdx * shift
+    let ceny = cy + fdy * shift
+    let tipx = cenx + fdx * dep * 0.5
+    let tipy = ceny + fdy * dep * 0.5
+    let basex = tipx - fdx * dep
+    let basey = tipy - fdy * dep
+    return [basex + perpx * h * 0.5, basey + perpy * h * 0.5,
+        tipx, tipy,
+        basex - perpx * h * 0.5, basey - perpy * h * 0.5]
+}
+
+/* J14:「滑」块笔角标矩形(格局部坐标,原点=格左上,已含右下偏移 ox,oy)。
+   k=c/36.3:gw=11k、gh=12k、距右 2k、距下 1k、笔画 s=max(2,3.4k)。
+   返回 [x0,y0,x1,y1]*7,与 render_slide_cell_spec.py 的 hua() 一致(以脚本为准)。 */
+public func slideHuaRects(c: Float64): Array<Float64> {
+    let k = c / 36.3
+    let gw = 11.0 * k
+    let gh = 12.0 * k
+    let ox = c - gw - 2.0 * k
+    let oy = c - gh - 1.0 * k
+    var s = 3.4 * k
+    if (s < 2.0) {
+        s = 2.0
+    }
+    let m = 0.42 * gh
+    let by = 0.78 * gh
+    let rects = ArrayList<Float64>()
+    /* 顶横、竖干、中横 */
+    rects.add(ox)
+    rects.add(oy)
+    rects.add(ox + gw)
+    rects.add(oy + s)
+    rects.add(ox + gw / 2.0 - s / 2.0)
+    rects.add(oy)
+    rects.add(ox + gw / 2.0 + s / 2.0)
+    rects.add(oy + 0.72 * gh)
+    rects.add(ox + 1.0 * k)
+    rects.add(oy + m)
+    rects.add(ox + gw - 1.0 * k)
+    rects.add(oy + m + s)
+    /* 三个下短横 */
+    var i: Int64 = 0
+    while (i < 3) {
+        let x0 = 1.0 * k + 3.0 * k * Float64(i)
+        rects.add(ox + x0)
+        rects.add(oy + by)
+        rects.add(ox + x0 + 2.0 * k)
+        rects.add(oy + by + s)
+        i = i + 1
+    }
+    /* 右钩 */
+    rects.add(ox + gw - s)
+    rects.add(oy + 0.35 * gh)
+    rects.add(ox + gw)
+    rects.add(oy + gh)
+    return rects.toArray()
+}
+
+/* J14:路径 idx 处的滑行格是否为「停」末格:idx>=1、前格相邻(曼哈顿 1)、
+   且路径下一格不是同方向继续的滑行格(或已到路径末尾)。原「停」Text 判据。 */
+public func isSlideStopIndex(game: PatrolGame, idx: Int64): Bool {
+    if (idx < 1 || idx >= game.path.size()) {
+        return false
+    }
+    let cell = game.path.at(idx)
+    if (!isSlideCellOf(game.level, cell.x, cell.y)) {
+        return false
+    }
+    let prev = game.path.at(idx - 1)
+    let dx = cell.x - prev.x
+    let dy = cell.y - prev.y
+    var adx = dx
+    if (adx < 0) {
+        adx = -adx
+    }
+    var ady = dy
+    if (ady < 0) {
+        ady = -ady
+    }
+    if (adx + ady != 1) {
+        return false
+    }
+    if (idx + 1 >= game.path.size()) {
+        return true
+    }
+    let nx = game.path.at(idx + 1)
+    if (nx.x == cell.x + dx && nx.y == cell.y + dy && isSlideCellOf(game.level, nx.x, nx.y)) {
+        return false
+    }
+    return true
+}
+
+/* J16:「停」圆环就是「路径头点」本身(ruling §4):仅当路径头(path 最后一格)
+   是停末格时画一个环 —— 外圈墨色实心 r=7k + 孔 r=3k whitePaper(同头点画法)。
+   路径已离开的历史停末格不再留环(J14 曾让所有停末格都留环,系偏差)。 */
+public func buildBoardSlideStopDots(game: PatrolGame, geom: BoardGeom): Array<BoardDot> {
+    let list = ArrayList<BoardDot>()
+    if (game.level.slideCells.size == 0) {
+        return list.toArray()
+    }
+    let k = geom.c / 36.3
+    let head = game.path.size() - 1
+    if (head >= 1 && isSlideStopIndex(game, head)) {
+        let cell = game.path.at(head)
+        let cx = geom.centerX(cell.x)
+        let cy = geom.centerY(cell.y)
+        list.add(BoardDot(cx, cy, 7.0 * k, Theme.ink, Theme.ink, 0.0, false))
+        list.add(BoardDot(cx, cy, 3.0 * k, Theme.whitePaper, Theme.whitePaper, 0.0, false))
+    }
+    return list.toArray()
+}
+
 func centerLabel(cx: Float64, cy: Float64, size: Float64, text: String, color: Int64): BoardLabel {
     return BoardLabel(cx - size * 0.5, cy - 0.53 * size, size * 3.0, size * 1.5, text, color, size)
 }
@@ -148,39 +273,8 @@ public func buildBoardMechLabels(game: PatrolGame, geom: BoardGeom): Array<Board
         let color = if (visited) { Theme.whitePaper } else { Theme.ink }
         list.add(centerLabel(geom.centerX(t.x), geom.centerY(t.y), 0.34 * c, "符", color))
     }
-    for (s in game.level.slideCells) {
-        /* 官方稿:块笔约 11.3vp,字号 12.2vp(字形占字号≈0.93),墨色。 */
-        list.add(BoardLabel(geom.cellX(s.x) + 0.08 * c, geom.cellY(s.y) + 0.06 * c, c, 12.2 * 1.5, "滑", Theme.ink, 12.2))
-        var idx: Int64 = -1
-        var i: Int64 = 0
-        while (i < game.path.size()) {
-            let p = game.path.at(i)
-            if (p.x == s.x && p.y == s.y) {
-                idx = i
-                break
-            }
-            i = i + 1
-        }
-        if (idx >= 1) {
-            let prev = game.path.at(idx - 1)
-            let dx = s.x - prev.x
-            let dy = s.y - prev.y
-            let adx = if (dx < 0) { -dx } else { dx }
-            let ady = if (dy < 0) { -dy } else { dy }
-            if (adx + ady == 1) {
-                var continues = false
-                if (idx + 1 < game.path.size()) {
-                    let nx = game.path.at(idx + 1)
-                    if (nx.x == s.x + dx && nx.y == s.y + dy && isSlideCellOf(game.level, nx.x, nx.y)) {
-                        continues = true
-                    }
-                }
-                if (!continues) {
-                    list.add(BoardLabel(geom.cellX(s.x) + 0.60 * c, geom.cellY(s.y) + 0.72 * c, c, 0.3 * c, "停", Theme.inkMuted, 0.2 * c))
-                }
-            }
-        }
-    }
+    /* J14:「滑」角标改为 buildBoardMechPaths 的块笔路径,「停」改为
+       buildBoardSlideStopDots 的圆环(见 buildBoardMechDots 末尾),不再出 Text。 */
     return list.toArray()
 }
 
@@ -198,7 +292,8 @@ public func buildBoardMechDots(game: PatrolGame, geom: BoardGeom): Array<BoardDo
             list.add(BoardDot(yx, yy, 0.30 * geom.c, 0x01000000, Theme.qingDeep, 1.0, true))
         case None => ()
     }
-    return list.toArray()
+    /* J16:路径头停末格圆环并入末尾(index.cj 的 stationCircles 层)。 */
+    return concatArr(list.toArray(), buildBoardSlideStopDots(game, geom))
 }
 
 /* 沿 ax,ay→bx,by 画 2vp 实 / 7vp 空虚线；坐标 ×f 转设备像素。 */
@@ -266,7 +361,28 @@ public func buildBoardMechPaths(game: PatrolGame, geom: BoardGeom, pxPerVp: Floa
         }
         list.add(BoardPath(sbT.toString(), Theme.gold, 1.2, stroke: Theme.gold, fillOp: 0.0))
     }
-    /* c. 滑行 chevron：路径上每个泽地格（从相邻前格滑入）画一个指向滑行方向的箭头，合并成一个 BoardPath。 */
+    /* c1. 「滑」角标:每个滑行格(无论是否已入路径)右下的 draw_hua_block 块笔,
+       墨色 fill-only,合并成一个 BoardPath(几何见 slideHuaRects,ruling §3)。 */
+    if (game.level.slideCells.size > 0) {
+        let sbH = StringBuilder()
+        let rects = slideHuaRects(c)
+        for (s in game.level.slideCells) {
+            let bx = geom.cellX(s.x)
+            let by = geom.cellY(s.y)
+            var r: Int64 = 0
+            while (r + 3 < rects.size) {
+                if (sbH.size > 0) {
+                    sbH.append(" ")
+                }
+                sbH.append("M ${(bx + rects[r]) * f} ${(by + rects[r + 1]) * f} L ${(bx + rects[r + 2]) * f} ${(by + rects[r + 1]) * f} L ${(bx + rects[r + 2]) * f} ${(by + rects[r + 3]) * f} L ${(bx + rects[r]) * f} ${(by + rects[r + 3]) * f} Z")
+                r = r + 4
+            }
+        }
+        list.add(BoardPath(sbH.toString(), Theme.ink, 0.0, stroke: Theme.ink, fillOp: 1.0))
+    }
+    /* c2. 滑行 chevron:路径上每个从相邻前格滑入的滑行格画一个指向滑行方向的
+       实心青深箭头,k=c/36.3(dep=18k、h=25k、sw=max(3,4k)),合并成一个
+       BoardPath;圆头线端由 index.cj Layer 的 strokeLineCap(Round) 全局提供。 */
     let sbV = StringBuilder()
     var i: Int64 = 1
     while (i < game.path.size()) {
@@ -278,33 +394,21 @@ public func buildBoardMechPaths(game: PatrolGame, geom: BoardGeom, pxPerVp: Floa
             let adx = if (dx < 0) { -dx } else { dx }
             let ady = if (dy < 0) { -dy } else { dy }
             if (adx + ady == 1) {
-                let cx = geom.centerX(cell.x)
-                let cy = geom.centerY(cell.y)
-                let fdx = Float64(dx)
-                let fdy = Float64(dy)
-                let perpx = -fdy
-                let perpy = fdx
-                /* 官方稿 hard-fx 41/44 实心青深 chevron:局部坐标(前进向右,原点=包围盒左上)
-                   P1=(1.8,1.8)→顶点 P2=(16.5,12.35)→P3=(1.8,22.9),开放折线,圆端点外接盒
-                   恰为 18.3(前进)×24.7(垂直)vp;包围盒中心=格心沿前进方向前移 2.2vp。
-                   点=center+f*(u-9.15+2.2)+perp*(v-12.35);常量为 vp 绝对值,不随 c 缩放。 */
-                let p1x = cx + fdx * (1.8 - 9.15 + 2.2) + perpx * (1.8 - 12.35)
-                let p1y = cy + fdy * (1.8 - 9.15 + 2.2) + perpy * (1.8 - 12.35)
-                let p2x = cx + fdx * (16.5 - 9.15 + 2.2) + perpx * (12.35 - 12.35)
-                let p2y = cy + fdy * (16.5 - 9.15 + 2.2) + perpy * (12.35 - 12.35)
-                let p3x = cx + fdx * (1.8 - 9.15 + 2.2) + perpx * (22.9 - 12.35)
-                let p3y = cy + fdy * (1.8 - 9.15 + 2.2) + perpy * (22.9 - 12.35)
+                let pts = slideChevronPts(geom.centerX(cell.x), geom.centerY(cell.y), c, dx, dy)
                 if (sbV.size > 0) {
                     sbV.append(" ")
                 }
-                sbV.append("M ${p1x * f} ${p1y * f} L ${p2x * f} ${p2y * f} L ${p3x * f} ${p3y * f}")
+                sbV.append("M ${pts[0] * f} ${pts[1] * f} L ${pts[2] * f} ${pts[3] * f} L ${pts[4] * f} ${pts[5] * f}")
             }
         }
         i = i + 1
     }
     if (sbV.size > 0) {
-        /* 实心青深 chevron:描边折线,线宽 3.6vp,fillOp 0(视觉由粗描边构成)。 */
-        list.add(BoardPath(sbV.toString(), Theme.qingDeep, 3.6, stroke: Theme.qingDeep, fillOp: 0.0))
+        var sw = 4.0 * (c / 36.3)
+        if (sw < 3.0) {
+            sw = 3.0
+        }
+        list.add(BoardPath(sbV.toString(), Theme.qingDeep, sw, stroke: Theme.qingDeep, fillOp: 0.0))
     }
     /* d. 渡口虚线：甲乙圆点间断开圆环的虚线连线；路径走过 甲→乙 则用深色加粗。 */
     match (game.level.ferry) {
