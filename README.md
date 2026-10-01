@@ -86,7 +86,11 @@ python3 tools/solve_levels.py
 python3 tools/test_rules.py
 ```
 
-`solve_levels.py` 与应用代码无关，用回溯证明每关至少一条解。未通过的关不得入库。全量求解：`python3 tools/solve_levels.py`（对 100 关逐关求解）。若 DFS 超时：关卡仍保留、驿站坐标不改，求解器打印 `TIMEOUT` 且退出码为 0。
+`solve_levels.py` 与应用代码无关，用回溯证明每关至少一条解。未通过的关不得入库。全量求解：`python3 tools/solve_levels.py`（对 100 关逐关求解）。若 DFS 超时：关卡仍保留、驿站坐标不改，结果表中该关标 `TIMEOUT`（超时**不算**通过），退出码为 3。
+
+退出码（`exit_code_strict` / `main`）：`0` = 全部有解；`1` = 存在已证明无解的关；`2` = 数据或参数错误（缺文件、非 100 关、坏 `--ids`、schema 不合法）；`3` = 不存在无解关但有超时关。
+
+生成的 `entry/src/main/cangjie/levels.cj` 目前**不携带**新增机制键（`ferry` / `one_ways` / `slide_cells` / `seal_gates` / `token_cells` / `collapse` / `burden`；HarmonyOS 路径不在这些机制的范围内）。CJMP / iOS / Android 路径经 `mobile/shared/src/game/json_level.cj` 读取 `levels.json`。
 
 `tools/build_levels.py` **只**把已验证的 `levels.json` 抄成仓颉字面量，不生成路径、不发明关卡。改关后必须先改 JSON，再：
 
