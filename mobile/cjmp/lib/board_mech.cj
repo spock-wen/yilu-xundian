@@ -119,8 +119,16 @@ public func buildBoardMechLabels(game: PatrolGame, geom: BoardGeom): Array<Board
             let jy = geom.centerY(f.jiaY)
             let yx = geom.centerX(f.yiX)
             let yy = geom.centerY(f.yiY)
-            list.add(centerLabel(jx, jy, 0.30 * c, "甲", Theme.qingDeep))
-            list.add(centerLabel(yx, yy, 0.30 * c, "乙", Theme.qingDeep))
+            if (game.level.numberAt(f.jiaX, f.jiaY) != 0) {
+                list.add(BoardLabel(geom.cellX(f.jiaX) + 0.08 * c, geom.cellY(f.jiaY) + 0.06 * c, c, 0.2 * c * 1.5, "甲", Theme.qingDeep, 0.2 * c))
+            } else {
+                list.add(centerLabel(jx, jy, 0.30 * c, "甲", Theme.qingDeep))
+            }
+            if (game.level.numberAt(f.yiX, f.yiY) != 0) {
+                list.add(BoardLabel(geom.cellX(f.yiX) + 0.08 * c, geom.cellY(f.yiY) + 0.06 * c, c, 0.2 * c * 1.5, "乙", Theme.qingDeep, 0.2 * c))
+            } else {
+                list.add(centerLabel(yx, yy, 0.30 * c, "乙", Theme.qingDeep))
+            }
             list.add(centerLabel((jx + yx) * 0.5, (jy + yy) * 0.5, 0.24 * c, "渡", Theme.qing))
         case None => ()
     }
