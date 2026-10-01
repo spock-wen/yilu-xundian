@@ -91,16 +91,21 @@ public func buildBoardGates(game: PatrolGame, geom: BoardGeom): Array<BoardImg> 
     }
     let list = ArrayList<BoardImg>()
     for (ow in game.level.oneWays) {
-        let (mx, my) = geom.seamMid(ow.fromX, ow.fromY, ow.toX, ow.toY)
-        let len = 0.72 * geom.c
-        let thick = len * 27.0 / 60.0
-        if (ow.fromY == ow.toY) {
-            list.add(BoardImg(mx - thick * 0.5, my - len * 0.5, thick, len, true))
-        } else {
-            list.add(BoardImg(mx - len * 0.5, my - thick * 0.5, len, thick, false))
-        }
+        list.add(rejectGateImg(geom, ow.fromX, ow.fromY, ow.toX, ow.toY))
     }
     return list.toArray()
+}
+
+/* J13:单向门切片几何(idle 与 reject 共用):缝中点、len=0.72c、thick=len*27/60,
+   左右相邻(fromY==toY)竖放 vertical=true,否则横放。 */
+public func rejectGateImg(geom: BoardGeom, fromX: Int64, fromY: Int64, toX: Int64, toY: Int64): BoardImg {
+    let (mx, my) = geom.seamMid(fromX, fromY, toX, toY)
+    let len = 0.72 * geom.c
+    let thick = len * 27.0 / 60.0
+    if (fromY == toY) {
+        return BoardImg(mx - thick * 0.5, my - len * 0.5, thick, len, true)
+    }
+    return BoardImg(mx - len * 0.5, my - thick * 0.5, len, thick, false)
 }
 
 func centerLabel(cx: Float64, cy: Float64, size: Float64, text: String, color: Int64): BoardLabel {
@@ -144,7 +149,8 @@ public func buildBoardMechLabels(game: PatrolGame, geom: BoardGeom): Array<Board
         list.add(centerLabel(geom.centerX(t.x), geom.centerY(t.y), 0.34 * c, "符", color))
     }
     for (s in game.level.slideCells) {
-        list.add(BoardLabel(geom.cellX(s.x) + 0.08 * c, geom.cellY(s.y) + 0.06 * c, c, 0.2 * c * 1.5, "滑", Theme.inkMuted, 0.2 * c))
+        /* 官方稿:块笔约 11.3vp,字号 12.2vp(字形占字号≈0.93),墨色。 */
+        list.add(BoardLabel(geom.cellX(s.x) + 0.08 * c, geom.cellY(s.y) + 0.06 * c, c, 12.2 * 1.5, "滑", Theme.ink, 12.2))
         var idx: Int64 = -1
         var i: Int64 = 0
         while (i < game.path.size()) {
@@ -278,22 +284,27 @@ public func buildBoardMechPaths(game: PatrolGame, geom: BoardGeom, pxPerVp: Floa
                 let fdy = Float64(dy)
                 let perpx = -fdy
                 let perpy = fdx
-                let tipx = cx + fdx * 0.08 * c
-                let tipy = cy + fdy * 0.08 * c
-                let a1x = cx - fdx * 0.06 * c + perpx * 0.10 * c
-                let a1y = cy - fdy * 0.06 * c + perpy * 0.10 * c
-                let a2x = cx - fdx * 0.06 * c - perpx * 0.10 * c
-                let a2y = cy - fdy * 0.06 * c - perpy * 0.10 * c
+                /* 官方稿 hard-fx 41/44 实心青深 chevron:局部坐标(前进向右,原点=包围盒左上)
+                   P1=(1.8,1.8)→顶点 P2=(16.5,12.35)→P3=(1.8,22.9),开放折线,圆端点外接盒
+                   恰为 18.3(前进)×24.7(垂直)vp;包围盒中心=格心沿前进方向前移 2.2vp。
+                   点=center+f*(u-9.15+2.2)+perp*(v-12.35);常量为 vp 绝对值,不随 c 缩放。 */
+                let p1x = cx + fdx * (1.8 - 9.15 + 2.2) + perpx * (1.8 - 12.35)
+                let p1y = cy + fdy * (1.8 - 9.15 + 2.2) + perpy * (1.8 - 12.35)
+                let p2x = cx + fdx * (16.5 - 9.15 + 2.2) + perpx * (12.35 - 12.35)
+                let p2y = cy + fdy * (16.5 - 9.15 + 2.2) + perpy * (12.35 - 12.35)
+                let p3x = cx + fdx * (1.8 - 9.15 + 2.2) + perpx * (22.9 - 12.35)
+                let p3y = cy + fdy * (1.8 - 9.15 + 2.2) + perpy * (22.9 - 12.35)
                 if (sbV.size > 0) {
                     sbV.append(" ")
                 }
-                sbV.append("M ${a1x * f} ${a1y * f} L ${tipx * f} ${tipy * f} L ${a2x * f} ${a2y * f}")
+                sbV.append("M ${p1x * f} ${p1y * f} L ${p2x * f} ${p2y * f} L ${p3x * f} ${p3y * f}")
             }
         }
         i = i + 1
     }
     if (sbV.size > 0) {
-        list.add(BoardPath(sbV.toString(), Theme.whitePaper, 1.6, stroke: Theme.whitePaper, fillOp: 0.0))
+        /* 实心青深 chevron:描边折线,线宽 3.6vp,fillOp 0(视觉由粗描边构成)。 */
+        list.add(BoardPath(sbV.toString(), Theme.qingDeep, 3.6, stroke: Theme.qingDeep, fillOp: 0.0))
     }
     /* d. 渡口虚线：甲乙圆点间断开圆环的虚线连线；路径走过 甲→乙 则用深色加粗。 */
     match (game.level.ferry) {

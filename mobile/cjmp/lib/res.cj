@@ -16,3 +16,12 @@ public func gateImgSrc(vertical: Bool): String {
     }
     return rawImg("oneway_b_idle_h")
 }
+
+/* 单向门「乙·闸门栅」reject 切片(官方锁定包 oneway-B-reject-{0,90}@48.png 原样拷贝,sha256 已核对;
+   与 idle 同画布)。两个字面量分开写,sync_to_keels.sh 的 rawImg("...") 正则需要字面量。 */
+public func gateRejectImgSrc(vertical: Bool): String {
+    if (vertical) {
+        return rawImg("oneway_b_reject_v")
+    }
+    return rawImg("oneway_b_reject_h")
+}

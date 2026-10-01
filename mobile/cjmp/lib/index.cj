@@ -49,6 +49,8 @@ class EntryView {
     @State var rejectToX: Int64 = 0
     @State var rejectToY: Int64 = 0
     var rejectPlace: ToastPlacement = ToastPlacement(0.0, 0.0, false, 0, 0.0)
+    // J13: 本次拒绝是否为单向门拒绝(改画官方 reject PNG 而非朱红 Line)
+    var rejectOneWay: Bool = false
     @State var winW: Float64 = 360.0
     // A2: back button pressed ripple opacity
     @State var backPressedOpacity: Float64 = 0.0
@@ -263,6 +265,11 @@ class EntryView {
 
     func rejectEdgeMid(): (Float64, Float64) {
         return this.boardGeom().seamMid(this.rejectFromX, this.rejectFromY, this.rejectToX, this.rejectToY)
+    }
+
+    // J13: 单向门 reject PNG 的几何(与 idle 门切片同几何)
+    func rejectGateImgNow(): BoardImg {
+        return rejectGateImg(this.boardGeom(), this.rejectFromX, this.rejectFromY, this.rejectToX, this.rejectToY)
     }
 
     func rejectEdgeStartPoint(): (Float64, Float64) {
@@ -683,6 +690,7 @@ class EntryView {
                         this.rejectFromY = this.game.lastRejectFromY
                         this.rejectToX = this.game.lastRejectToX
                         this.rejectToY = this.game.lastRejectToY
+                        this.rejectOneWay = (this.game.lastReject == REJECT_ONE_WAY)
                         this.showReject()
                         this.refresh()
                     }
@@ -1808,15 +1816,24 @@ class EntryView {
                             )
 
                             // Parity reject overlay: flashing edge line + toast
+                            // J13: 单向门拒绝改画官方 oneway-B-reject PNG(几何与 idle 门一致)
                             if (this.parityRejectFlash) {
-                                Line(width: this.boardW(), height: this.boardH())
-                                    .startPoint(this.rejectEdgeStartPoint())
-                                    .endPoint(this.rejectEdgeEndPoint())
-                                    .stroke(Theme.vermillion)
-                                    .strokeWidth(3)
-                                    .strokeLineCap(LineCapStyle.Round)
-                                    .antiAlias(true)
-                                    .position(x: 0, y: 0)
+                                if (this.rejectOneWay) {
+                                    Image(gateRejectImgSrc(this.rejectGateImgNow().vertical))
+                                        .width(this.rejectGateImgNow().w)
+                                        .height(this.rejectGateImgNow().h)
+                                        .objectFit(ImageFit.Fill)
+                                        .position(x: this.rejectGateImgNow().x, y: this.rejectGateImgNow().y)
+                                } else {
+                                    Line(width: this.boardW(), height: this.boardH())
+                                        .startPoint(this.rejectEdgeStartPoint())
+                                        .endPoint(this.rejectEdgeEndPoint())
+                                        .stroke(Theme.vermillion)
+                                        .strokeWidth(3)
+                                        .strokeLineCap(LineCapStyle.Round)
+                                        .antiAlias(true)
+                                        .position(x: 0, y: 0)
+                                }
                                 if (this.parityRejectText.size > 0) {
                                     Text(this.parityRejectText)
                                         .fontSize(14)

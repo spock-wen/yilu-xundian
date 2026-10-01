@@ -149,6 +149,53 @@ func checkAll(game: PatrolGame, geom: BoardGeom, lv: LevelDef, id: Int64, step: 
     for (p in paths) {
         ctx.ck(startsWithM(p.commands), "${tag} path cmds not M: '${p.commands}'")
     }
+    /* 7b. J13 滑行 chevron：qingDeep 粗折线出现(滑入时)、白色 chevron 不再出现 */
+    var wantChev: Int64 = 0
+    var ci: Int64 = 1
+    while (ci < game.path.size()) {
+        let pc = game.path.at(ci)
+        if (isSlideCellOf(lv, pc.x, pc.y)) {
+            let pr = game.path.at(ci - 1)
+            var adx = pc.x - pr.x
+            var ady = pc.y - pr.y
+            if (adx < 0) {
+                adx = -adx
+            }
+            if (ady < 0) {
+                ady = -ady
+            }
+            if (adx + ady == 1) {
+                wantChev = wantChev + 1
+            }
+        }
+        ci = ci + 1
+    }
+    var hasQing = false
+    var qingCmds = ""
+    var hasWhiteChev = false
+    for (p in paths) {
+        if (p.color == Theme.qingDeep) {
+            hasQing = true
+            qingCmds = p.commands
+        }
+        /* 旧白色 chevron 特征：color 与 stroke 同为 whitePaper(挂锁 path 的 stroke 是 ink) */
+        if (p.color == Theme.whitePaper && p.stroke == Theme.whitePaper) {
+            hasWhiteChev = true
+        }
+    }
+    if (wantChev > 0) {
+        ctx.ck(hasQing && qingCmds.size > 0, "${tag} chevron qingDeep missing want=${wantChev}")
+        ctx.ck(!hasWhiteChev, "${tag} white slide chevron still present")
+    } else {
+        ctx.ck(!hasQing, "${tag} qingDeep chevron without slide entry")
+    }
+    /* 7c. J13 滑 标记：墨色、字号 12.2vp 绝对值 */
+    for (l in labels) {
+        if (l.text == "滑") {
+            ctx.ck(l.color == Theme.ink, "${tag} hua label color=${l.color} want=${Theme.ink}")
+            ctx.ck(absF(l.size - 12.2) < 0.01, "${tag} hua label size=${l.size} want=12.2")
+        }
+    }
     /* 8. 无机制关：3~7 长度全 0 */
     if (!lv.hasMechanics()) {
         ctx.ck(gates.size == 0 && dots.size == 0 && walls.size == 0 && labels.size == 0 && paths.size == 0,
@@ -441,6 +488,44 @@ func directedRejectTests(): String {
     return sb.toString()
 }
 
+/* ===== J13 定向纯函数检查：rejectGateImg 几何 + 与 buildBoardGates 一致 ===== */
+func j13RejectGateTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
+    let geom = BoardGeom(43.0, 5, 5)
+    /* (3) 竖缝(左右相邻)→ vertical=true、h=0.72c、w=h*27/60；横缝 → vertical=false */
+    let rv = rejectGateImg(geom, 1, 1, 2, 1)
+    ctx.ck(rv.vertical == true, "J13 rv.vertical=${rv.vertical} want=true")
+    ctx.ck(absF(rv.h - 0.72 * 43.0) < 1e-9, "J13 rv.h=${rv.h} want=${0.72 * 43.0}")
+    ctx.ck(absF(rv.w - rv.h * 27.0 / 60.0) < 1e-9, "J13 rv.w=${rv.w} want=${rv.h * 27.0 / 60.0}")
+    let rh = rejectGateImg(geom, 1, 1, 1, 2)
+    ctx.ck(rh.vertical == false, "J13 rh.vertical=${rh.vertical} want=false")
+    ctx.ck(absF(rh.h - rh.w * 27.0 / 60.0) < 1e-9, "J13 rh aspect w=${rh.w} h=${rh.h}")
+    /* (4) 与 buildBoardGates 对同一 one_way 关同一逐边一致(x/y/w/h 差<1e-9) */
+    var li: Int64 = 0
+    var found = false
+    while (li < levels.size && !found) {
+        let lv = levels.get(li).getOrThrow()
+        if (lv.oneWays.size > 0) {
+            found = true
+            let g = PatrolGame(lv)
+            let gates = buildBoardGates(g, geom)
+            ctx.ck(gates.size == lv.oneWays.size, "J13 gates=${gates.size} oneWays=${lv.oneWays.size}")
+            var k: Int64 = 0
+            while (k < gates.size) {
+                let ow = lv.oneWays.get(k).getOrThrow()
+                let gi = rejectGateImg(geom, ow.fromX, ow.fromY, ow.toX, ow.toY)
+                let gt = gates.get(k).getOrThrow()
+                ctx.ck(absF(gi.x - gt.x) < 1e-9 && absF(gi.y - gt.y) < 1e-9
+                    && absF(gi.w - gt.w) < 1e-9 && absF(gi.h - gt.h) < 1e-9
+                    && gi.vertical == gt.vertical,
+                    "J13 gate[${k}] mismatch gi=(${gi.x},${gi.y},${gi.w},${gi.h},${gi.vertical}) gt=(${gt.x},${gt.y},${gt.w},${gt.h},${gt.vertical})")
+                k = k + 1
+            }
+        }
+        li = li + 1
+    }
+    ctx.ck(found, "J13 no one_way level in catalog")
+}
+
 main(args: Array<String>): Int64 {
     if (args.size < 2) {
         println("usage: main <levels.json> <inputs.txt>")
@@ -481,6 +566,8 @@ main(args: Array<String>): Int64 {
     if (dirMsg != "") {
         ctx.failures.add(dirMsg)
     }
+    /* J13 定向纯函数检查。 */
+    j13RejectGateTests(levels, ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("SELFTEST levels=${ctx.levels} steps=${ctx.steps} checks=${ctx.checks} rejects=[${sb.toString()}] failures=${ctx.failures.size}")
     println("DIRECTED flash=${dStat.flash} noflash=${dStat.noflash} failures=${dStat.fails}")
