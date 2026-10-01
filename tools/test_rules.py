@@ -21,10 +21,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from solve_levels import (  # noqa: E402
+    Rules,
     SolverTimeout,
+    check_path,
     load_levels,
     report_solve_exit,
     solve,
+    validate_schema,
     wall_key,
 )
 
@@ -1909,6 +1912,810 @@ class StationNumberSkinTests(unittest.TestCase):
         self.assertRegex(names, r"Bold|SemiBold", "thin Regular/ExtraLight is not enough contrast")
         ofl = list(ROOT.rglob("OFL.txt")) + list(ROOT.rglob("**/OFL-NotoSerifSC*"))
         self.assertTrue(ofl, "SIL Open Font License file must be in the repo")
+
+
+class MechanicRulesTests(unittest.TestCase):
+    """Rules layer (Rules/State/initial_state/expand/apply/check_path) on
+    hand-built minimal boards in the released schema.
+
+    Waypoints/walls/parityEdges use published x/y (x=col, y=row); mechanism
+    keys keep the boards-locked [r, c] shape. Design SoT is read-only — every
+    test cites file:line: jingzhou_ch6/zip_ferry.py (ferry), lvbu_ch4/
+    zip_oneway.py (one_ways), hanzhong_ch9/zip_parity.py (parity).
+    """
+
+    # -- construction helpers --------------------------------------------
+
+    @staticmethod
+    def level(cols: int, rows: int, wps: list, **mech) -> dict:
+        """Minimal released-schema level. `wps` = [(n, x, y), ...]; `mech`
+        holds optional mechanism keys verbatim (ferry/one_ways as [r, c],
+        parityEdges as published x/y camelCase)."""
+        lv = {
+            "id": 900,
+            "name": "机制试驿",
+            "cols": cols,
+            "rows": rows,
+            "waypoints": [{"n": n, "x": x, "y": y} for n, x, y in wps],
+            "walls": [],
+            "stepLimit": 0,
+        }
+        lv.update(mech)
+        validate_schema(lv)
+        return lv
+
+    @staticmethod
+    def wall(x1: int, y1: int, x2: int, y2: int) -> dict:
+        """Published wall entry (x/y)."""
+        return {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
+
+    @staticmethod
+    def pedge(x1: int, y1: int, x2: int, y2: int, odd: bool) -> dict:
+        """Published parityEdges entry (x/y, camelCase requireOdd/requireEven)."""
+        return {
+            "x1": x1, "y1": y1, "x2": x2, "y2": y2,
+            "requireOdd": odd, "requireEven": not odd,
+        }
+
+    def walk(self, rules: Rules, moves: list):
+        """Replay inputs through initial_state/expand/apply; fail on reject."""
+        state = rules.initial_state()
+        self.assertIsNotNone(state, "start state rejected")
+        for mv in moves:
+            seg = rules.expand(state, mv)
+            self.assertIsNotNone(
+                seg, f"expand rejected {mv} standing at {state.path[-1]}"
+            )
+            state = rules.apply(state, seg)
+        return state
+
+    # -- ferry 渡口 --------------------------------------------------------
+    # jingzhou_ch6/zip_ferry.py — 单向渡口: 走上甲 → 强制 [甲, 乙].
+
+    def ferry_level(self, **extra) -> dict:
+        """3x3 ferry board: 甲=(x2,y1), 乙=(x1,y1) (both unnumbered,
+        zip_ferry.py / flags F7; validate_mechanics enforces it).
+
+        Valid snake path (xy): (0,0)(1,0)(2,0) [jump] (1,1)(0,1)(0,2)(1,2)(2,2)
+        → stored rc: [[0,0],[0,1],[0,2],[1,2],[1,1],[1,0],[2,0],[2,1],[2,2]]"""
+        mech = {"ferry": {"jia": [1, 2], "yi": [1, 1]}}
+        mech.update(extra)
+        return self.level(3, 3, [(1, 0, 0), (2, 2, 2)], **mech)
+
+    FERRY_PATH = [
+        [0, 0], [0, 1], [0, 2], [1, 2], [1, 1], [1, 0], [2, 0], [2, 1], [2, 2],
+    ]
+
+    def test_ferry_step_on_jia_returns_jia_yi_in_one_input(self) -> None:
+        """踏上甲的一次输入返回 [甲, 乙] (forced, not optional).
+
+        Design: zip_ferry.py:64-69 `if nxt == jia: ... return [jia, yi]`;
+        filled 一次 +2: zip_ferry.py:249 `dfs(seg[-1], nvis, filled + len(seg), ...)`."""
+        rules = Rules(self.ferry_level())
+        state = self.walk(rules, [(1, 0), (2, 0)])  # filled = 3, stand before 甲
+        seg = rules.expand(state, (2, 1))  # the single input = step onto 甲
+        self.assertEqual(seg, [(2, 1), (1, 1)])  # [甲, 乙]
+        state2 = rules.apply(state, seg)
+        self.assertEqual(state2.filled, state.filled + 2)  # 跳接使已铺格数 +2
+        self.assertEqual(state2.path[-1], (1, 1))  # lands on 乙
+        self.assertTrue(state2.ferry_used)
+        self.assertEqual(len(state2.path), state.filled + 2)
+
+    def test_ferry_enter_jia_rejected_when_yi_already_visited(self) -> None:
+        """乙已访时走上甲被拒 — zip_ferry.py:65-66
+        (`if (vis >> yi) & 1: return None`).
+
+        Walk into 乙 as a plain cell first (design allows a normal entry into
+        乙), then stepping onto 甲 must be rejected."""
+        rules = Rules(self.ferry_level())
+        state = self.walk(rules, [(0, 1), (1, 1)])  # stand on 乙 the plain way
+        self.assertEqual(state.path[-1], (1, 1))
+        seg, reason = rules._expand(state, (2, 1))  # step onto 甲
+        self.assertIsNone(seg)
+        self.assertIn("乙", reason)
+
+    def test_ferry_check_path_requires_exactly_one_jump(self) -> None:
+        """路线恰好一次甲→乙 — zip_ferry.py:126-128
+        (`jumps = sum(...); if jumps != 1: return False`).
+
+        - the shipped-style snake path (exactly one 甲→乙 pair) passes;
+        - zero jumps (path dies on 甲, jump never completed) fails;
+        - two 甲→乙 pairs (甲/乙 duplicated) fails."""
+        lv = self.ferry_level()
+        ok, reason, _ = check_path(lv, self.FERRY_PATH)
+        self.assertTrue(ok, reason)
+
+        # 0 jumps: ends on 甲, the forced [甲, 乙] segment cannot be consumed
+        # (design-side jumps == 0 → False at zip_ferry.py:127).
+        zero = self.FERRY_PATH[:4]  # ... (0,2) [1,2]=甲 as last cell
+        self.assertEqual(zero[-1], [1, 2])
+        ok0, reason0, _ = check_path(lv, zero)
+        self.assertFalse(ok0)
+        self.assertTrue(reason0)
+
+        # 2 jumps: insert a second (甲, 乙) pair right after the first.
+        twice = self.FERRY_PATH[:5] + [[1, 2], [1, 1]] + self.FERRY_PATH[5:]
+        self.assertEqual(twice.count([1, 2]), 2)
+        ok2, reason2, _ = check_path(lv, twice)
+        self.assertFalse(ok2)
+        self.assertTrue(reason2)
+
+    def test_ferry_jump_exempt_from_wall_between_jia_and_yi(self) -> None:
+        """跳接本体豁免墙: 甲乙之间的墙不影响跳接 — the jump branch runs
+        before `nbr_open`, zip_ferry.py:49-57 vs :58 (wall check lives in
+        nbr_open, zip_oneway.py:115). Entering 甲 from (2,0) is still open."""
+        lv = self.ferry_level(walls=[self.wall(2, 1, 1, 1)])  # wall on 甲-乙 edge
+        rules = Rules(lv)
+        state = self.walk(rules, [(1, 0), (2, 0)])
+        seg = rules.expand(state, (2, 1))
+        self.assertEqual(seg, [(2, 1), (1, 1)])  # jump ignores the wall
+
+    def test_ferry_jump_exempt_from_oneway_on_jia_yi_edge(self) -> None:
+        """跳接本体豁免单向: reverse one-way 乙→甲 on the jump edge still
+        allows the 甲→乙 jump — jump branch before nbr_open's one-way check
+        (zip_ferry.py:49-57 vs :58; one-way test zip_oneway.py:117-119)."""
+        # one_ways shape: boards-locked [{"from":[r,c],"to":[r,c]}] = 乙→甲.
+        lv = self.ferry_level(one_ways=[{"from": [1, 1], "to": [1, 2]}])
+        rules = Rules(lv)
+        state = self.walk(rules, [(1, 0), (2, 0)])
+        seg = rules.expand(state, (2, 1))
+        self.assertEqual(seg, [(2, 1), (1, 1)])
+
+    def test_ferry_jump_skips_parity_on_jia_yi_edge(self) -> None:
+        """跳接边不查奇偶: the ferry branch returns before nbr_open_parity
+        (zip_parity.py:107-117 jump branch vs :113-117 nbr_open_parity;
+        PHASE0 §1 ferry row). The 甲-乙 edge requires EVEN but filled is 3
+        (odd) when stepping onto 甲 — the jump still goes through."""
+        lv = self.ferry_level(parityEdges=[self.pedge(2, 1, 1, 1, odd=False)])
+        rules = Rules(lv)
+        state = self.walk(rules, [(1, 0), (2, 0)])
+        self.assertEqual(state.filled, 3)
+        seg = rules.expand(state, (2, 1))
+        self.assertEqual(seg, [(2, 1), (1, 1)])
+
+    def test_no_yi_to_jia_input_from_yi_is_rejected(self) -> None:
+        """没有 乙→甲: standing on 乙, input 甲 is rejected — 甲 is already
+        visited (zip_ferry.py:60 `if (vis >> nxt) & 1: return None`); the
+        jump branch is only 甲→乙 (zip_ferry.py:52 `cur == jia and nxt == yi`).
+        """
+        rules = Rules(self.ferry_level())
+        state = self.walk(rules, [(1, 0), (2, 0), (2, 1)])  # jump → stand on 乙
+        self.assertEqual(state.path[-1], (1, 1))
+        seg, reason = rules._expand(state, (2, 1))  # try "jump back" to 甲
+        self.assertIsNone(seg)
+        self.assertIn("visited", reason)
+
+    def test_entering_jia_is_blocked_by_wall(self) -> None:
+        """进入甲受墙约束: the entry edge (2,0)-甲 is a wall, so stepping onto
+        甲 is rejected — nbr_open runs for entering 甲 (zip_ferry.py:58, wall
+        first at zip_oneway.py:115)."""
+        lv = self.ferry_level(walls=[self.wall(2, 0, 2, 1)])
+        rules = Rules(lv)
+        state = self.walk(rules, [(1, 0), (2, 0)])
+        self.assertIsNone(rules.expand(state, (2, 1)))
+
+    def test_entering_jia_is_blocked_by_reverse_oneway(self) -> None:
+        """进入甲受单向约束: one-way marked 甲→(2,0) forbids the reverse move
+        (2,0)→甲 — zip_oneway.py:108-121 (`nbr_open`: constrained edge passes
+        only when `(i, j) in ow`)."""
+        # 甲=(x2,y1)→rc [1,2]; (2,0)→rc [0,2]; direction 甲→(2,0).
+        lv = self.ferry_level(one_ways=[{"from": [1, 2], "to": [0, 2]}])
+        rules = Rules(lv)
+        state = self.walk(rules, [(1, 0), (2, 0)])
+        self.assertIsNone(rules.expand(state, (2, 1)))  # reverse of the mark
+        # The marked forward direction is fine where reachable: from 甲 you
+        # could never stand anyway (forced jump), so assert on a twin edge —
+        # an unmarked neighbour stays open:
+        state2 = self.walk(rules, [(0, 1)])  # (0,0)→(0,1) unmarked edge
+        self.assertIsNotNone(rules.expand(state2, (0, 2)))
+
+    def test_entering_jia_is_blocked_by_parity(self) -> None:
+        """进入甲受奇偶约束: edge (2,0)-甲 requires EVEN, filled is 3 (odd,
+        counted with the standing cell, before crossing — zip_parity.py:59-64
+        `parity_ok`, filled passed in at :113-117) → rejected."""
+        lv = self.ferry_level(parityEdges=[self.pedge(2, 0, 2, 1, odd=False)])
+        rules = Rules(lv)
+        state = self.walk(rules, [(1, 0), (2, 0)])
+        self.assertEqual(state.filled, 3)
+        self.assertIsNone(rules.expand(state, (2, 1)))
+        # Same edge with requireOdd passes at filled=3 → jump goes through.
+        lv2 = self.ferry_level(parityEdges=[self.pedge(2, 0, 2, 1, odd=True)])
+        rules2 = Rules(lv2)
+        state2 = self.walk(rules2, [(1, 0), (2, 0)])
+        self.assertEqual(
+            rules2.expand(state2, (2, 1)), [(2, 1), (1, 1)]
+        )
+
+    # -- one_ways 单向 -----------------------------------------------------
+    # lvbu_ch4/zip_oneway.py:108-121 (`nbr_open`): 先墙后单向, 反向即拒.
+
+    OW_LEVEL = {"from": [1, 1], "to": [0, 1]}  # rc → allowed (x1,y1)→(x1,y0)
+
+    def test_one_way_forward_is_open(self) -> None:
+        """标记方向可过: standing on the marked `from` cell, moving to `to`
+        is allowed — zip_oneway.py:117-119 (`if (i, j) not in ow: continue`
+        passes for the marked direction)."""
+        lv = self.level(3, 3, [(1, 0, 0), (2, 2, 2)], one_ways=[self.OW_LEVEL])
+        rules = Rules(lv)
+        state = self.walk(rules, [(0, 1), (1, 1)])  # stand on `from` (x1,y1)
+        self.assertEqual(rules.expand(state, (1, 0)), [(1, 0)])  # → `to`
+
+    def test_one_way_reverse_is_rejected(self) -> None:
+        """反向被拒: moving opposite to the marked direction is rejected —
+        zip_oneway.py:117-119 (constrained edge, `(i, j) not in ow`)."""
+        lv = self.level(3, 3, [(1, 0, 0), (2, 2, 2)], one_ways=[self.OW_LEVEL])
+        rules = Rules(lv)
+        state = self.walk(rules, [(1, 0)])  # stand on `to` (x1,y0)
+        seg, reason = rules._expand(state, (1, 1))  # reverse of the mark
+        self.assertIsNone(seg)
+        self.assertIn("one-way", reason)
+
+    def test_one_way_does_not_affect_unmarked_edges(self) -> None:
+        """未标记的边不受影响: with the same mark in place, every unmarked
+        edge around the marked one still opens — nbr_open only skips edges
+        whose undirected key is in the constrained set (zip_oneway.py:106,
+        :117-119)."""
+        lv = self.level(3, 3, [(1, 0, 0), (2, 2, 2)], one_ways=[self.OW_LEVEL])
+        rules = Rules(lv)
+        state = self.walk(rules, [(0, 1), (1, 1)])  # stand on the `from` cell
+        self.assertEqual(rules.expand(state, (2, 1)), [(2, 1)])  # unmarked
+        state = self.walk(rules, [(1, 0), (2, 0)])  # other unmarked edges
+        self.assertEqual(rules.expand(state, (2, 1)), [(2, 1)])
+
+    # -- parity 奇偶 -------------------------------------------------------
+    # hanzhong_ch9/zip_parity.py:59-64 (`parity_ok`): filled 含当前站立格,
+    # 跨边前; 边为无向 edge_key (:19-26, parity_from_json :30-43).
+
+    def test_parity_filled_counts_standing_cell_before_crossing(self) -> None:
+        """filled 口径 = 已铺格数含当前格, 在跨边前判定 — zip_parity.py:59-64
+        (`is_odd = (filled % 2) == 1`), filled 实参在 :113-117 传入
+        (`nbr_open_parity(..., filled, parity)`).
+
+        At the start filled == 1 (the standing cell): requireOdd opens,
+        requireEven rejects the very first step."""
+        edge = self.pedge(0, 0, 0, 1, odd=True)  # (0,0)-(0,1) needs odd
+        rules = Rules(self.level(3, 3, [(1, 0, 0), (2, 2, 2)], parityEdges=[edge]))
+        state = rules.initial_state()
+        self.assertEqual(state.filled, 1)  # standing cell counted
+        self.assertEqual(rules.expand(state, (0, 1)), [(0, 1)])
+
+        edge_even = self.pedge(0, 0, 0, 1, odd=False)  # same edge, needs even
+        rules2 = Rules(self.level(3, 3, [(1, 0, 0), (2, 2, 2)], parityEdges=[edge_even]))
+        state2 = rules2.initial_state()
+        self.assertEqual(state2.filled, 1)
+        self.assertIsNone(rules2.expand(state2, (0, 1)))  # odd filled → rejected
+
+        # After one more cell filled == 2 (even) on the next edge.
+        edge2 = self.pedge(1, 0, 2, 0, odd=False)  # (1,0)-(2,0) needs even
+        rules3 = Rules(self.level(3, 3, [(1, 0, 0), (2, 2, 2)], parityEdges=[edge2]))
+        state3 = self.walk(rules3, [(1, 0)])
+        self.assertEqual(state3.filled, 2)
+        self.assertEqual(rules3.expand(state3, (2, 0)), [(2, 0)])
+        # Same edge, requireOdd → rejected at even filled.
+        edge2_odd = self.pedge(1, 0, 2, 0, odd=True)
+        rules4 = Rules(self.level(3, 3, [(1, 0, 0), (2, 2, 2)], parityEdges=[edge2_odd]))
+        state4 = self.walk(rules4, [(1, 0)])
+        self.assertIsNone(rules4.expand(state4, (2, 0)))
+
+    def test_parity_edge_matches_both_directions(self) -> None:
+        """requireOdd/requireEven 双向匹配: the edge key is undirected, so a
+        crossing either way checks the same requirement — zip_parity.py:59-64
+        (`parity_ok(e, filled, parity)` keyed by undirected ek, parse
+        :30-43). Single waypoint n=1 at the start so no max-waypoint rule
+        interferes with the long reverse walk."""
+        # Forward: stand (0,1) at filled=2 → cross to (0,2).
+        fwd_even = self.level(
+            3, 3, [(1, 0, 0)], parityEdges=[self.pedge(0, 1, 0, 2, odd=False)]
+        )
+        rules = Rules(fwd_even)
+        state = self.walk(rules, [(0, 1)])
+        self.assertEqual(state.filled, 2)
+        self.assertEqual(rules.expand(state, (0, 2)), [(0, 2)])
+        fwd_odd = self.level(
+            3, 3, [(1, 0, 0)], parityEdges=[self.pedge(0, 1, 0, 2, odd=True)]
+        )
+        self.assertIsNone(Rules(fwd_odd).expand(state, (0, 2)))
+
+        # Reverse: reach (0,2) the long way with (0,1) still unvisited,
+        # filled=7 (odd) → requireOdd opens, requireEven rejects.
+        route = [(1, 0), (2, 0), (2, 1), (2, 2), (1, 2), (0, 2)]
+        rev_odd = self.level(
+            3, 3, [(1, 0, 0)], parityEdges=[self.pedge(0, 1, 0, 2, odd=True)]
+        )
+        rules_r = Rules(rev_odd)
+        state_r = self.walk(rules_r, route)
+        self.assertEqual(state_r.filled, 7)
+        self.assertEqual(rules_r.expand(state_r, (0, 1)), [(0, 1)])
+        rev_even = self.level(
+            3, 3, [(1, 0, 0)], parityEdges=[self.pedge(0, 1, 0, 2, odd=False)]
+        )
+        self.assertIsNone(Rules(rev_even).expand(state_r, (0, 1)))
+
+    # -- seal_gates / token_cells 封印符节 ---------------------------------
+    # rushu_ch8/zip_seal.py — 闸: 无符不可过 (:68 `if e in gates and not
+    # has_token: continue`); 符在整段输入之后才生效 (:237-240 `has_token =
+    # True` after the segment); 起点即符 = 已得符 (:206-211).
+
+    def seal_level(self, **extra) -> dict:
+        """3x3 seal board: gate on the (x1,y0)-(x1,y1) edge (rc [[0,1],[1,1]]),
+        token at (x0,y1) (rc [1,0])."""
+        mech = {
+            "seal_gates": [{"between": [[0, 1], [1, 1]], "locked_until_token": True}],
+            "token_cells": [[1, 0]],
+        }
+        mech.update(extra)
+        return self.level(3, 3, [(1, 0, 0), (2, 2, 2)], **mech)
+
+    def test_seal_gate_rejects_crossing_without_token(self) -> None:
+        """未得符过闸被拒: the gated edge (1,0)-(1,1) is closed while
+        has_token is False — zip_seal.py:68 (`if e in gates and not has_token:
+        continue`) inside nbr_open_seal, used by expand_move_seal:94."""
+        rules = Rules(self.seal_level())
+        state = self.walk(rules, [(1, 0)])  # stand on the near side, no token
+        self.assertFalse(state.has_token)
+        seg, reason = rules._expand(state, (1, 1))  # cross the gate
+        self.assertIsNone(seg)
+        self.assertIn("gate", reason)
+
+    def test_seal_token_step_unlocks_the_next_input_only(self) -> None:
+        """踩符那一次输入之后,下一次输入才可过闸 — has_token flips after the
+        whole segment is applied (zip_seal.py:237-240), so the input that
+        lands on the token cannot itself use it; the very next input can.
+
+        Walk (0,0)→(0,1) picks the token, then the following input crosses
+        the gate from (1,1) back to (1,0)."""
+        rules = Rules(self.seal_level())
+        self.assertFalse(rules.initial_state().has_token)  # before the token
+        state = self.walk(rules, [(0, 1), (1, 1)])  # token input, then next
+        self.assertTrue(state.has_token)  # ...applied after the token input
+        self.assertEqual(rules.expand(state, (1, 0)), [(1, 0)])  # gate opens
+
+    def test_seal_start_on_token_counts_as_picked(self) -> None:
+        """起点即符格视为已得符: has_token is seeded from the start cell —
+        zip_seal.py:206-211 (`has_token = path[0] in tokens ...`, with the
+        explicit "start on token is ok" note at :206-208)."""
+        rules = Rules(self.seal_level(token_cells=[[0, 0]]))  # token = start
+        state = rules.initial_state()
+        self.assertTrue(state.has_token)
+        state = self.walk(rules, [(1, 0)])  # no token picked along the way
+        self.assertEqual(rules.expand(state, (1, 1)), [(1, 1)])  # gate open
+
+    def test_seal_slide_stops_before_gate_without_token(self) -> None:
+        """滑行遇闸且未得符 = 停在闸前一格,不整段拒绝 — the slide loop breaks
+        on the closed gate edge instead of rejecting the whole move:
+        zip_seal.py:123 (`if npos not in self.nbr_open_seal(...)`) with the
+        gate test at :68.
+
+        3x4 board: slide column x=1 rows 1..2 (rc [[1,1],[2,1]]), gate on the
+        (x1,y2)-(x1,y3) edge (rc [[2,1],[3,1]]), token far away at (0,3)."""
+        lv = self.level(
+            3, 4,
+            [(1, 0, 0), (2, 2, 3)],
+            slide_cells=[[1, 1], [2, 1]],
+            seal_gates=[{"between": [[2, 1], [3, 1]], "locked_until_token": True}],
+            token_cells=[[3, 0]],
+        )
+        rules = Rules(lv)
+        state = self.walk(rules, [(1, 0)])  # stand above the marsh
+        seg = rules.expand(state, (1, 1))  # one input enters the marsh
+        self.assertIsNotNone(seg, "slide hitting a gate must not be rejected")
+        self.assertEqual(seg, [(1, 1), (1, 2)])  # stopped one cell before 闸
+
+    # -- collapse 塌桥 -----------------------------------------------------
+    # beifa_ch10/zip_burden.py:146-147 (`if down and collapse.active() and
+    # e == collapse.edge: continue` in nbr_open_bc) — down 只在踏上触发格后
+    # 置位 (apply_cell_effects :113-123), 滑行段内在落格当步即生效
+    # (:214-215 与 :235, 传入 :221-222 的 nbr_open_bc).
+
+    def collapse_level(self, **extra) -> dict:
+        """3x3 collapse board: trigger (x0,y1) rc [1,0], collapsing edge
+        (x1,y1)-(x1,y2) rc [[1,1],[2,1]]."""
+        mech = {
+            "collapse": {
+                "schema": "step_on_trigger",
+                "trigger_rc": [1, 0],
+                "collapse_edge": {"between": [[1, 1], [2, 1]]},
+            }
+        }
+        mech.update(extra)
+        return self.level(3, 3, [(1, 0, 0), (2, 2, 2)], **mech)
+
+    def test_collapse_edge_closes_after_stepping_on_trigger(self) -> None:
+        """踏触发格之后,指定边不可再过(普通步:下一步起) — the edge is only
+        skipped while `down` is set (zip_burden.py:146-147), i.e. from the
+        step after the trigger was entered.
+
+        Control (same board, route avoiding the trigger) keeps the edge open."""
+        rules = Rules(self.collapse_level())
+        state = self.walk(rules, [(0, 1), (1, 1)])  # (0,1) is the trigger
+        self.assertTrue(state.down)
+        self.assertIsNone(rules.expand(state, (1, 2)))  # edge now closed
+
+        state2 = self.walk(rules, [(1, 0), (1, 1)])  # never touch the trigger
+        self.assertFalse(state2.down)
+        self.assertEqual(rules.expand(state2, (1, 2)), [(1, 2)])  # still open
+
+    def test_collapse_takes_effect_mid_slide_from_that_step_on(self) -> None:
+        """滑行段内当步起影响同段后续: landing on the trigger mid-segment sets
+        `down` immediately, so the *next* cell of the same segment is blocked
+        by the collapsing edge — zip_burden.py:214-215 (`laden_s, down_s =
+        apply_cell_effects(nxt, ...)` before the loop), :235 (re-applied per
+        landed cell) and :221-222 (`nbr_open_bc(..., down_s, ...)`).
+
+        Board: marsh column x=1 rows 1..2; the trigger is the first marsh cell
+        and the collapsing edge is the next one along the slide direction."""
+        base = dict(
+            slide_cells=[[1, 1], [2, 1]],
+            collapse={
+                "schema": "step_on_trigger",
+                "trigger_rc": [1, 1],
+                "collapse_edge": {"between": [[1, 1], [2, 1]]},
+            },
+        )
+        rules = Rules(self.level(3, 3, [(1, 0, 0), (2, 2, 2)], **base))
+        state = self.walk(rules, [(1, 0)])  # stand above the marsh
+        seg = rules.expand(state, (1, 1))  # one input: enter marsh + trigger
+        self.assertIsNotNone(seg, "collapse mid-slide must not reject the move")
+        self.assertEqual(seg, [(1, 1)])  # same segment stops right there
+
+        # Control: identical board without the collapse key slides on.
+        ctrl = dict(base)
+        del ctrl["collapse"]
+        rules_c = Rules(self.level(3, 3, [(1, 0, 0), (2, 2, 2)], **ctrl))
+        state_c = self.walk(rules_c, [(1, 0)])
+        self.assertEqual(rules_c.expand(state_c, (1, 1)), [(1, 1), (1, 2)])
+
+    # -- burden 负重 -------------------------------------------------------
+    # beifa_ch10/zip_burden.py — 禁区 while laden (:154-155 in nbr_open_bc),
+    # 装/卸点效果 apply_cell_effects (:113-123), start_laden (:336-339), 起点
+    # 即禁区且 laden 则无解 (:331-332).
+
+    def burden_level(self, burden: dict | None = None, **extra) -> dict:
+        """3x3 burden board: 装粮点 (x1,y0) rc [0,1], 卸粮点 (x2,y0) rc [0,2],
+        禁区 (x1,y1) rc [1,1] — load/unload are not forbidden and none is a
+        waypoint (zip_burden.py:325-330). `burden` overrides those defaults."""
+        mech_burden = {
+            "forbidden_cells": [[1, 1]],
+            "load_cell": [0, 1],
+            "unload_cell": [0, 2],
+            "start_laden": False,
+        }
+        if burden:
+            mech_burden.update(burden)
+        mech = {"burden": mech_burden}
+        mech.update(extra)
+        return self.level(3, 3, [(1, 0, 0), (2, 2, 2)], **mech)
+
+    def test_burden_laden_cannot_enter_forbidden_cell(self) -> None:
+        """laden 时不可进入禁区格; empty 时同一格可进 — zip_burden.py:154-155
+        (`if burden.active() and laden and j in burden.forbidden: continue`
+        inside nbr_open_bc, the last check before the neighbour is open)."""
+        rules = Rules(self.burden_level())
+        # empty: (0,1)→禁区 (1,1) is open.
+        state = self.walk(rules, [(0, 1)])
+        self.assertFalse(state.laden)
+        self.assertEqual(rules.expand(state, (1, 1)), [(1, 1)])
+        # laden: step on the 装粮点 first, then the very edge closes.
+        state2 = self.walk(rules, [(1, 0)])
+        self.assertTrue(state2.laden)
+        seg, reason = rules._expand(state2, (1, 1))
+        self.assertIsNone(seg)
+        self.assertIn("禁区", reason)
+
+    def test_burden_load_cell_ladens_and_unload_cell_empties(self) -> None:
+        """装粮点→laden、卸粮点→empty — per-cell effects applied on every
+        landed cell, zip_burden.py:113-123 (`apply_cell_effects`), folded in
+        apply() cell by cell (solve_levels.apply)."""
+        rules = Rules(self.burden_level())
+        state = rules.initial_state()
+        self.assertFalse(state.laden)  # start_laden: false
+        state = self.walk(rules, [(1, 0)])  # 装粮点
+        self.assertTrue(state.laden)
+        state = self.walk(rules, [(1, 0), (2, 0)])  # ...then 卸粮点
+        self.assertFalse(state.laden)
+
+    def test_burden_start_laden_and_unwinnable_start(self) -> None:
+        """start_laden: 初始即 laden (zip_burden.py:336-339 `laden = bool(
+        burden.start_laden)` + start effects); 起点即禁区且 laden →
+        initial_state 无解 (zip_burden.py:331-332)."""
+        rules = Rules(self.burden_level(burden={"start_laden": True}))
+        state = rules.initial_state()
+        self.assertIsNotNone(state)
+        self.assertTrue(state.laden)
+        # same board but the start cell itself sits in 禁区 → no solution.
+        lv = self.burden_level(
+            burden={"start_laden": True, "forbidden_cells": [[0, 0]]}
+        )  # 起点 = 禁区
+        self.assertIsNone(Rules(lv).initial_state())
+
+    def test_burden_ferry_landing_forbidden_while_laden_rejects_jia(self) -> None:
+        """渡口落点乙在禁区且 laden 时进甲被拒 — zip_burden.py:183-184
+        (`if burden.active() and laden and yi in burden.forbidden: return
+        None`) in the entering-甲 branch of expand_move_bc, and the same test
+        in the jump branch at :199-200.
+
+        Control: same board where the burden is inactive (start_laden false,
+        no load) → the jump goes through."""
+        lv = self.ferry_level(
+            burden={"forbidden_cells": [[1, 1]], "start_laden": True}
+        )  # 乙 = rc [1,1] is the 禁区 cell
+        rules = Rules(lv)
+        state = self.walk(rules, [(1, 0), (2, 0)])  # stand before 甲, laden
+        self.assertTrue(state.laden)
+        seg, reason = rules._expand(state, (2, 1))  # step onto 甲
+        self.assertIsNone(seg)
+        self.assertIn("乙", reason)
+
+        ctrl = self.ferry_level(
+            burden={
+                "forbidden_cells": [[1, 1]],
+                "load_cell": [2, 0],  # makes the burden active...
+                "start_laden": False,
+                "unload_cell": [1, 0],
+            }
+        )
+        rules_c = Rules(ctrl)
+        state_c = self.walk(rules_c, [(1, 0), (2, 0)])  # load is elsewhere
+        self.assertFalse(state_c.laden)
+        self.assertEqual(
+            rules_c.expand(state_c, (2, 1)), [(2, 1), (1, 1)]
+        )  # jump allowed
+
+    # -- slide_cells 滑行 --------------------------------------------------
+    # chibi_ch7/zip_slide.py:49-74 (`expand_move`): 入泽后沿入向直滑;
+    # 停止条件 :60-70 越界 / 墙或单向 / 已访 / 数字格前停 / 非泽地格,
+    # 遇甲/乙即停 chibi_ch7/zip_full.py:84-85;每格计入 filled
+    # (zip_slide.py:1-6 模块注释 "滑过每一格计入铺满").
+
+    def slide_level(self, slide_rc: list, **extra) -> dict:
+        """3x3 slide board; `slide_rc` = 泽地 cells as boards-locked [r, c]."""
+        mech = {"slide_cells": slide_rc}
+        mech.update(extra)
+        return self.level(3, 3, [(1, 0, 0), (2, 2, 2)], **mech)
+
+    def test_slide_runs_along_entry_direction_until_board_edge(self) -> None:
+        """沿入向滑到受阻 + 越界即停: entering the marsh moving right, the
+        segment keeps going right past the marsh cells and stops at the board
+        boundary — zip_slide.py:58-61 (`while True` … `if not (0 <= nr < N …):
+        break`), direction from the entry vector :51-52."""
+        rules = Rules(self.slide_level([[0, 1], [0, 2]]))  # xy (1,0),(2,0)
+        state = rules.initial_state()
+        seg = rules.expand(state, (1, 0))  # one input enters the marsh
+        self.assertIsNotNone(seg)
+        self.assertEqual(seg, [(1, 0), (2, 0)])  # slid right to the edge
+
+    def test_slide_cells_count_into_filled(self) -> None:
+        """滑行格计入 filled: the whole segment folds in, filled +len(seg) —
+        zip_slide.py:107-109 (`i += len(seg)`, one path entry per slid cell)."""
+        rules = Rules(self.slide_level([[0, 1], [0, 2]]))
+        state = rules.initial_state()
+        self.assertEqual(state.filled, 1)
+        seg = rules.expand(state, (1, 0))
+        state2 = rules.apply(state, seg)
+        self.assertEqual(state2.filled, state.filled + len(seg))  # 1 + 2
+        self.assertEqual(len(state2.path), 3)
+        self.assertEqual(state2.path[-1], (2, 0))
+
+    def test_slide_stops_before_a_wall(self) -> None:
+        """墙: the slide stops on the last free marsh cell before the wall —
+        the neighbour test inside the loop (zip_slide.py:63-64) uses nbr_open,
+        whose first check is the wall (zip_oneway.py:115)."""
+        rules = Rules(
+            self.slide_level([[0, 1], [0, 2]], walls=[self.wall(1, 0, 2, 0)])
+        )
+        state = rules.initial_state()
+        seg = rules.expand(state, (1, 0))  # enter moving right toward the wall
+        self.assertIsNotNone(seg, "hitting a wall mid-slide is a stop, not a reject")
+        self.assertEqual(seg, [(1, 0)])  # stopped one cell before the wall
+
+    def test_slide_stops_before_an_already_visited_cell(self) -> None:
+        """已访: the slide stops before stepping onto a visited cell —
+        zip_slide.py:65-66 (`if (vis >> npos) & 1 or (seen >> npos) & 1:
+        break`).
+
+        Walk to (2,0) the long way (entering that marsh cell slides upward
+        into the boundary and stops), then slide left: (0,0) is visited, so
+        the segment is only (1,0)."""
+        rules = Rules(self.slide_level([[0, 1], [0, 2]]))  # xy (1,0),(2,0)
+        state = self.walk(rules, [(0, 1), (1, 1), (2, 1), (2, 0)])
+        self.assertEqual(state.path[-1], (2, 0))
+        seg = rules.expand(state, (1, 0))  # slide left toward the start cell
+        self.assertIsNotNone(seg)
+        self.assertEqual(seg, [(1, 0)])  # stops before the visited (0,0)
+
+    def test_slide_stops_before_a_numbered_cell(self) -> None:
+        """数字格前停: the slide stops on the marsh cell before the waypoint,
+        which is then entered by the *next* input as a plain step —
+        zip_slide.py:67-68 (`if clue_of[npos]: break`).
+
+        3x3 with waypoints 1@(0,0) 2@(1,2) 3@(2,2); marsh column x=1 rows
+        0..1 (rc [[0,1],[1,1]])."""
+        lv = self.level(
+            3, 3, [(1, 0, 0), (2, 1, 2), (3, 2, 2)], slide_cells=[[0, 1], [1, 1]]
+        )
+        rules = Rules(lv)
+        state = self.walk(rules, [(1, 0)])  # enter marsh row 0, slide stops at once
+        self.assertEqual(state.path[-1], (1, 0))
+        seg = rules.expand(state, (1, 1))  # slide down toward waypoint 2
+        self.assertEqual(seg, [(1, 1)])  # stopped before the number
+        state2 = rules.apply(state, seg)
+        self.assertEqual(rules.expand(state2, (1, 2)), [(1, 2)])  # next input
+
+    def test_slide_stops_at_a_non_marsh_cell(self) -> None:
+        """非泽地格: 泽地之外的普通格也构成受阻 — zip_slide.py:69-70
+        (`if npos not in slide: break`). Only (1,0) is marsh, so the slide
+        stops before (2,0) even though that cell is open and unvisited."""
+        rules = Rules(self.slide_level([[0, 1]]))  # xy (1,0) only
+        state = rules.initial_state()
+        self.assertEqual(rules.expand(state, (1, 0)), [(1, 0)])
+
+    def test_slide_stops_before_ferry_jia_or_yi(self) -> None:
+        """遇甲乙即停: a slide pointing at 乙 stops one marsh cell short and
+        does *not* perform the forced jump — chibi_ch7/zip_full.py:84-85
+        (`if ferry and (npos == ferry[0] or npos == ferry[1]): break`).
+
+        3x4 board: marsh cell (x1,y2) rc [2,1], 乙 = rc [1,1] sits directly
+        above it; waypoint 1@(0,0), 2@(2,3)."""
+        lv = self.level(
+            3, 4,
+            [(1, 0, 0), (2, 2, 3)],
+            ferry={"jia": [1, 2], "yi": [1, 1]},
+            slide_cells=[[2, 1]],
+        )
+        rules = Rules(lv)
+        state = self.walk(rules, [(0, 1), (0, 2), (0, 3), (1, 3)])
+        seg = rules.expand(state, (1, 2))  # slide up toward 乙
+        self.assertIsNotNone(seg)
+        self.assertEqual(seg, [(1, 2)])  # stopped, no [甲, 乙] jump here
+
+    def test_start_cell_on_marsh_is_allowed(self) -> None:
+        """起点在泽地允许: standing on marsh at t=0 is fine — no enter-slide
+        has happened yet (design comment verbatim at chibi_ch7/zip_slide.py:
+        163 `# start on marsh is allowed (no enter-slide yet)`; expand only
+        reacts to the *entered* cell, zip_slide.py:47-48).
+
+        Built without validate_schema: the generator contract rejects numbers
+        on marsh (zip_slide.py:376-378 `raise ValueError("number on marsh")`,
+        zip_full.py:143-146), which is what validate_mechanics enforces."""
+        lv = {
+            "id": 901,
+            "name": "起点泽地",
+            "cols": 3,
+            "rows": 3,
+            "waypoints": [{"n": 1, "x": 0, "y": 0}, {"n": 2, "x": 2, "y": 2}],
+            "walls": [],
+            "stepLimit": 0,
+            "slide_cells": [[0, 0]],  # the start cell itself is marsh
+        }
+        rules = Rules(lv)
+        state = rules.initial_state()
+        self.assertIsNotNone(state, "start on marsh must not be rejected")
+        self.assertEqual(state.path, ((0, 0),))
+        # first move off the marsh is a plain step (no forced slide at t=0)
+        self.assertEqual(rules.expand(state, (0, 1)), [(0, 1)])
+
+
+class ShippedMechanicsAllLevelsTests(unittest.TestCase):
+    """Released-data guard for the mechanism layer over all 100 shipped levels.
+
+    Reads boards-locked (archived `path` per board) and the published
+    entry/src/main/resources/rawfile/levels.json. Design SoT directories are
+    never imported — they are read-only references for the rules layer."""
+
+    LEVELS_PATH = ROOT / "entry/src/main/resources/rawfile/levels.json"
+    LOCKED_DIR = ROOT / "boards-locked"
+
+    # The 6 boards that had no solution before the ferry-aware solver.
+    PREVIOUSLY_UNSOLVABLE = (52, 59, 60, 63, 67, 89)
+
+    @classmethod
+    def locked_boards(cls) -> list:
+        """[(global_id, locked board dict), ...] for ids 0..99, same order as
+        build_levels.LOCKED_FILES (chapter_index * 10 + board_index)."""
+        from build_levels import LOCKED_FILES
+
+        out = []
+        for ch_idx, fname in enumerate(LOCKED_FILES):
+            data = json.loads(
+                (cls.LOCKED_DIR / fname).read_text(encoding="utf-8")
+            )
+            for tip_idx, board in enumerate(data["boards"]):
+                out.append((ch_idx * 10 + tip_idx, board))
+        return out
+
+    @classmethod
+    def levels_by_id(cls) -> dict:
+        return {int(lv["id"]): lv for lv in load_levels(cls.LEVELS_PATH)}
+
+    def test_replay_all_100_stored_paths(self) -> None:
+        """Every boards-locked solution path must replay cleanly through
+        check_path on the matching released level (100/100)."""
+        levels = self.levels_by_id()
+        boards = self.locked_boards()
+        self.assertEqual(len(boards), 100, "boards-locked must hold 100 boards")
+        self.assertEqual(len(levels), 100, "levels.json must hold 100 levels")
+        bad = []
+        for gid, board in boards:
+            path = board.get("path")
+            self.assertIsNotNone(path, f"locked board {gid} has no path")
+            ok, reason, idx = check_path(levels[gid], path)
+            if not ok:
+                bad.append(f"id {gid}: {reason} (first_bad_index={idx})")
+        self.assertEqual(bad, [], "stored paths rejected:\n" + "\n".join(bad))
+
+    def test_mechanic_key_counts(self) -> None:
+        """Published data carries the mechanism keys on exactly the boards
+        that have the mechanic: 33 mechanism boards out of 100, with ferry 8,
+        one_ways 19, slide 9, seal 6, token 6, collapse 3, burden 2.
+
+        PM: only boards with the mechanic carry the (non-empty) key; every
+        other entry stays byte-identical to the pre-mechanics release."""
+        levels = load_levels(self.LEVELS_PATH)
+        expected = {
+            "ferry": 8,
+            "one_ways": 19,
+            "slide_cells": 9,
+            "seal_gates": 6,
+            "token_cells": 6,
+            "collapse": 3,
+            "burden": 2,
+        }
+        self.assertEqual(len(levels), 100)
+        counts = {key: 0 for key in expected}
+        mech_levels = 0
+        for lv in levels:
+            carry = False
+            for key, want in expected.items():
+                if lv.get(key):
+                    counts[key] += 1
+                    carry = True
+            if carry:
+                mech_levels += 1
+        self.assertEqual(mech_levels, 33, "33 mechanism boards expected")
+        self.assertEqual(counts, expected)
+
+    def test_six_previously_unsolvable_paths_pass_and_ship_ferry(self) -> None:
+        """ids 52/59/60/63/67/89: their archived paths replay through
+        check_path, and each released level carries the渡口 ferry key (these
+        are the boards that needed the ferry-aware expansion to solve)."""
+        levels = self.levels_by_id()
+        locked = dict(self.locked_boards())
+        for gid in self.PREVIOUSLY_UNSOLVABLE:
+            lv = levels[gid]
+            self.assertTrue(lv.get("ferry"), f"id {gid} must ship a ferry key")
+            ok, reason, idx = check_path(lv, locked[gid]["path"])
+            self.assertTrue(ok, f"id {gid}: {reason} (first_bad_index={idx})")
+
+    @unittest.skipUnless(
+        os.environ.get("YILU_FULL_SOLVE"),
+        "full 100-level solve is slow — set YILU_FULL_SOLVE=1 to run it; "
+        "the default run only replays the archived boards-locked paths "
+        "(test_replay_all_100_stored_paths)",
+    )
+    def test_all_100_levels_solved(self) -> None:
+        """Full solve over the released catalog (opt-in via YILU_FULL_SOLVE).
+
+        Uses solve_levels.count_solutions when that API exists; skips with a
+        clear reason otherwise, so the default test run stays fast."""
+        import solve_levels
+
+        counter = getattr(solve_levels, "count_solutions", None)
+        if counter is None:
+            self.skipTest(
+                "solve_levels.count_solutions is not available in this "
+                "checkout — full-catalog solve cannot be counted yet"
+            )
+        levels = load_levels(self.LEVELS_PATH)
+        self.assertEqual(len(levels), 100)
+        unsolved = []
+        for lv in levels:
+            try:
+                n = counter(lv)
+            except TypeError as exc:
+                self.skipTest(f"count_solutions signature not usable: {exc}")
+            if not n:
+                unsolved.append(int(lv["id"]))
+        self.assertEqual(unsolved, [], f"levels with 0 solutions: {unsolved}")
 
 
 if __name__ == "__main__":
