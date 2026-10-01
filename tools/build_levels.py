@@ -8,6 +8,7 @@ already including ·第 N 驿).
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
 from pathlib import Path
@@ -35,6 +36,53 @@ ST02_WALLS = [
 ]
 
 
+# Optional mechanism keys, emitted after stepLimit in this fixed order.
+# Only boards that actually have the mechanism (value present and non-empty:
+# not None, not [], not {}) carry the key; every other level entry stays
+# byte-identical to before.
+MECH_KEYS = (
+    "ferry",
+    "one_ways",
+    "slide_cells",
+    "seal_gates",
+    "token_cells",
+    "collapse",
+    "burden",
+)
+
+# collapse/burden also carry a prose `rule` text (and burden a `forbidden_count`
+# statistic) in boards-locked; those are not part of the released schema.
+# Keep only the rule-essential fields — see locked samples:
+# collapse {schema, trigger_rc, collapse_edge, rule}, burden
+# {forbidden_cells, load_cell, unload_cell, start_laden, forbidden_count, rule}.
+_MECH_KEEP = {
+    "collapse": ("schema", "trigger_rc", "collapse_edge"),
+    "burden": ("forbidden_cells", "load_cell", "unload_cell", "start_laden"),
+}
+
+
+def extract_mechanisms(b: dict) -> dict:
+    """Extract the mechanism keys from a boards-locked board.
+
+    Shared verbatim by convert_board (emit into levels.json) and load_verified
+    (compare levels.json against the locked source).
+    """
+    out = {}
+    for key in MECH_KEYS:
+        if key not in b:
+            continue
+        value = b[key]
+        if value is None or value == [] or value == {}:
+            continue
+        if key in _MECH_KEEP:
+            keep = _MECH_KEEP[key]
+            value = {k: copy.deepcopy(v) for k, v in value.items() if k in keep}
+        else:
+            value = copy.deepcopy(value)
+        out[key] = value
+    return out
+
+
 def convert_board(b: dict, global_id: int) -> dict:
     wps = [{"n": int(n), "x": int(c), "y": int(r)} for r, c, n in b["numbers_rc"]]
     wps.sort(key=lambda item: item["n"])
@@ -57,7 +105,7 @@ def convert_board(b: dict, global_id: int) -> dict:
                 "requireEven": bool(e["require_even"]),
             }
         )
-    return {
+    out = {
         "id": global_id,
         "name": b["name"],
         "cols": int(b["size"]),
@@ -67,6 +115,9 @@ def convert_board(b: dict, global_id: int) -> dict:
         "parityEdges": parity_edges,
         "stepLimit": int(b.get("step_limit") or 0),
     }
+    # Mechanism keys go after stepLimit, in MECH_KEYS order.
+    out.update(extract_mechanisms(b))
+    return out
 
 
 def load_source_levels() -> list[dict]:
@@ -203,6 +254,17 @@ def load_verified() -> list[dict]:
             raise SystemExit(f"level {idx} parityEdges mismatch with locked source")
         if int(lv.get("stepLimit") or 0) != int(src_lv.get("stepLimit") or 0):
             raise SystemExit(f"level {idx} stepLimit mismatch with locked source")
+        # Mechanism keys: same extraction as convert_board (src_lv was built
+        # from boards-locked by extract_mechanisms). Boards without the
+        # mechanism must not carry the key at all in levels.json.
+        for key in MECH_KEYS:
+            if key in src_lv:
+                if lv.get(key) != src_lv[key]:
+                    raise SystemExit(f"level {idx} {key} mismatch with locked source")
+            elif key in lv:
+                raise SystemExit(
+                    f"level {idx} has {key} but locked source has no such mechanism"
+                )
     st01 = levels[0]
     if (
         st01["name"] != "涿郡·涿"
