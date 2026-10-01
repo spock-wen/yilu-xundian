@@ -48,6 +48,7 @@ class EntryView {
     @State var rejectFromY: Int64 = 0
     @State var rejectToX: Int64 = 0
     @State var rejectToY: Int64 = 0
+    var rejectPlace: ToastPlacement = ToastPlacement(0.0, 0.0, false, 0, 0.0)
     @State var winW: Float64 = 360.0
     // A2: back button pressed ripple opacity
     @State var backPressedOpacity: Float64 = 0.0
@@ -64,6 +65,8 @@ class EntryView {
     @State var boardStationCircles: Array<BoardDot> = Array<BoardDot>()
     @State var boardNextLabels: Array<BoardLabel> = Array<BoardLabel>()
     @State var boardDigits: Array<BoardPath> = Array<BoardPath>()
+    @State var boardGates: Array<BoardImg> = Array<BoardImg>()
+    var obstacleNextCnt: Int64 = 0
 
     func homeMarkFontVp(): Float64 { return 12.0 / this.getPxFactor() }
     func homeMarkTop(baseline: Float64): Float64 { return baseline - 0.88 * this.homeMarkFontVp() }
@@ -191,25 +194,22 @@ class EntryView {
         this.parityRejectGen = this.parityRejectGen + 1
         this.parityRejectText = ""
         this.parityRejectFlash = false
+        this.rejectPlace = ToastPlacement(0.0, 0.0, false, 0, 0.0)
         if (PERF_LOG) { perfLog("toast clear gen=${this.parityRejectGen}") }
     }
 
-    func showParityReject(): Unit {
-        let r = this.game.lastRejectParity
-        if (r == 1) {
-            this.parityRejectText = "此步须奇"
-        } else if (r == 2) {
-            this.parityRejectText = "此步须偶"
-        } else {
-            return
-        }
+    func showReject(): Unit {
+        let txt = parityToastText(this.game)
+        this.parityRejectText = txt
         this.parityRejectFlash = true
-        let p = this.rejectPlacement()
-        if (!p.shown) {
-            println("TOAST_NOT_PLACED level=${this.curLevel().id} edge=(${this.rejectFromX},${this.rejectFromY})-(${this.rejectToX},${this.rejectToY})")
-        }
-        if (PERF_LOG) {
-            perfLog("toast place step=${p.step} lift=${p.lift} x=${p.x} y=${p.y}")
+        if (txt.size > 0) {
+            this.rejectPlace = this.rejectPlacement()
+            if (!this.rejectPlace.shown) {
+                println("TOAST_NOT_PLACED level=${this.curLevel().id} edge=(${this.rejectFromX},${this.rejectFromY})-(${this.rejectToX},${this.rejectToY})")
+            }
+            if (PERF_LOG) {
+                perfLog("toast place step=${this.rejectPlace.step} lift=${this.rejectPlace.lift} x=${this.rejectPlace.x} y=${this.rejectPlace.y}")
+            }
         }
         this.parityRejectGen = this.parityRejectGen + 1
         let gen = this.parityRejectGen
@@ -308,9 +308,12 @@ class EntryView {
         }
 
         // 4. 下一驿 labels: anchored at left edge and baseline (cy+r+12)
-        for (lbl in this.boardNextLabels) {
+        var ni: Int64 = 0
+        while (ni < this.obstacleNextCnt && ni < this.boardNextLabels.size) {
+            let lbl = this.boardNextLabels[ni]
             let baseline = lbl.y + 0.88 * lbl.size
             list.add(ToastBox(lbl.x - 0.5, baseline - 10.0, lbl.x + 35.0, baseline + 3.5))
+            ni = ni + 1
         }
 
         // 5. Parity labels: glyph centred on seam midpoint (mx, my)
@@ -350,15 +353,23 @@ class EntryView {
     }
 
     func rejectToastX(): Float64 {
-        return this.rejectPlacement().x
+        return this.rejectPlace.x
     }
 
     func rejectToastY(): Float64 {
-        return this.rejectPlacement().y
+        return this.rejectPlace.y
     }
 
     func hasParityBoard(): Bool {
         return this.curLevel().parityEdges.size > 0
+    }
+
+    func hasBurden(): Bool {
+        return this.curLevel().burden.isSome()
+    }
+
+    func ladenNow(): Bool {
+        return this.tick >= 0 && this.game.laden
     }
 
     func stepChipLabel(): String {
@@ -407,13 +418,16 @@ class EntryView {
 
         let tBuild0 = MonoTime.now()
         let tmpCells = buildBoardCells(this.game, geom)
-        let tmpWalls = buildBoardWalls(this.game, geom)
+        let tmpWalls = concatArr(buildBoardWalls(this.game, geom), buildBoardMechWalls(this.game, geom))
         let tmpParityLabels = buildBoardParityLabels(this.game, geom, factor)
         let tmpRoute = buildBoardRoute(this.game, geom)
         let tmpDots = buildBoardHeadDot(this.game, geom)
-        let tmpStationCircles = buildBoardStationCircles(this.game, geom)
-        let tmpNextLabels = buildBoardNextLabels(this.game, geom, factor)
-        let tmpDigits = buildBoardDigits(this.game, geom, factor)
+        let tmpStationCircles = concatArr(buildBoardStationCircles(this.game, geom), buildBoardMechDots(this.game, geom))
+        let nextOnly = buildBoardNextLabels(this.game, geom, factor)
+        this.obstacleNextCnt = nextOnly.size
+        let tmpNextLabels = concatArr(nextOnly, buildBoardMechLabels(this.game, geom))
+        let tmpDigits = concatArr(buildBoardDigits(this.game, geom, factor), buildBoardMechPaths(this.game, geom, factor))
+        let tmpGates = buildBoardGates(this.game, geom)
         this.lastBuildUs = (MonoTime.now() - tBuild0).toMicroseconds()
 
         let tAssign0 = MonoTime.now()
@@ -425,6 +439,7 @@ class EntryView {
         this.boardStationCircles = tmpStationCircles
         this.boardNextLabels = tmpNextLabels
         this.boardDigits = tmpDigits
+        this.boardGates = tmpGates
         this.lastAssignUs = (MonoTime.now() - tAssign0).toMicroseconds()
     }
 
@@ -663,15 +678,12 @@ class EntryView {
                     }
                     this.refresh()
                 } else {
-                    if (this.game.lastRejectParity != 0) {
-                        if (this.game.path.size() > 0) {
-                            let lastCell = this.game.path.at(this.game.path.size() - 1)
-                            this.rejectFromX = lastCell.x
-                            this.rejectFromY = lastCell.y
-                            this.rejectToX = cell.x
-                            this.rejectToY = cell.y
-                        }
-                        this.showParityReject()
+                    if (rejectShouldFlash(this.game)) {
+                        this.rejectFromX = this.game.lastRejectFromX
+                        this.rejectFromY = this.game.lastRejectFromY
+                        this.rejectToX = this.game.lastRejectToX
+                        this.rejectToY = this.game.lastRejectToY
+                        this.showReject()
                         this.refresh()
                     }
                 }
@@ -1528,6 +1540,17 @@ class EntryView {
                         // A2: 48vp hit area — in-page back: iOS edge swipe does not pop on Keels 0.2.2
                         this.backButton({ => this.leaveBoard() }, true)
                         Blank()
+                        Text("负重")
+                            .fontSize(12)
+                            .fontColor(if (this.ladenNow()) { Theme.whitePaper } else { Theme.ink })
+                            .fontFamily(this.sansFamily())
+                            .padding(left: 8, right: 8)
+                            .height(24)
+                            .borderRadius(4)
+                            .border(width: 1, color: Theme.qingDeep)
+                            .backgroundColor(if (this.ladenNow()) { Theme.qingDeep } else { Theme.whitePaper })
+                            .textAlign(TextAlign.Center)
+                            .visibility(if (this.hasBurden()) { Visibility.Visible } else { Visibility.None })
                     }
                     .width(100.percent)
                     .height(48)
@@ -1635,13 +1658,13 @@ class EntryView {
                                     Rect(width: item.w, height: item.h)
                                         .radius(2)
                                         .fill(item.color)
-                                        .stroke(Theme.paperLine)
-                                        .strokeWidth(1)
+                                        .stroke(item.stroke)
+                                        .strokeWidth(item.strokeW)
                                         .position(x: item.x, y: item.y)
                                 },
                                 // Keels 0.2.2: ForEach key label is keyGeneratorFunc (macro passes it to forEachUpdateFunction)
                                 keyGeneratorFunc: { item: BoardRect, idx: Int64 =>
-                                    "${idx}-${item.x}-${item.y}-${item.color}"
+                                    "${idx}-${item.x}-${item.y}-${item.color}-${item.stroke}"
                                 }
                             )
 
@@ -1660,6 +1683,21 @@ class EntryView {
                                 },
                                 keyGeneratorFunc: { item: BoardSeg, idx: Int64 =>
                                     "${idx}-${item.x1}-${item.y1}-${item.x2}-${item.y2}-${item.color}"
+                                }
+                            )
+
+                            // Layer 3b: One-way gates (PNG per gate, device px)
+                            ForEach(
+                                this.boardGates,
+                                itemGenerator: { item: BoardImg, idx: Int64 =>
+                                    Image(gateImgSrc(item.vertical))
+                                        .width(item.w)
+                                        .height(item.h)
+                                        .objectFit(ImageFit.Fill)
+                                        .position(x: item.x, y: item.y)
+                                },
+                                keyGeneratorFunc: { item: BoardImg, idx: Int64 =>
+                                    "${idx}-${item.x}-${item.y}-${item.vertical}"
                                 }
                             )
 
@@ -1737,7 +1775,7 @@ class EntryView {
                             ForEach(
                                 this.boardNextLabels,
                                 itemGenerator: { item: BoardLabel, idx: Int64 =>
-                                    Text("下一驿")
+                                    Text(item.text)
                                         .fontSize(item.size)
                                         .fontColor(item.color)
                                         .fontFamily(this.sansFamily())
@@ -1756,18 +1794,21 @@ class EntryView {
                                 itemGenerator: { item: BoardPath, idx: Int64 =>
                                     Path(width: this.boardW(), height: this.boardH(), commands: item.commands)
                                         .fill(item.color)
-                                        .fillOpacity(1.0)
-                                        .strokeWidth(0)
+                                        .fillOpacity(item.fillOp)
+                                        .stroke(item.stroke)
+                                        .strokeWidth(item.strokeW)
+                                        .strokeLineCap(LineCapStyle.Round)
+                                        .strokeLineJoin(LineJoinStyle.Round)
                                         .antiAlias(true)
                                         .position(x: 0, y: 0)
                                 },
                                 keyGeneratorFunc: { item: BoardPath, idx: Int64 =>
-                                    "${idx}-${item.color}-${item.commands}"
+                                    "${idx}-${item.color}-${item.commands}-${item.stroke}-${item.fillOp}"
                                 }
                             )
 
                             // Parity reject overlay: flashing edge line + toast
-                            if (this.parityRejectFlash && this.parityRejectText.size > 0) {
+                            if (this.parityRejectFlash) {
                                 Line(width: this.boardW(), height: this.boardH())
                                     .startPoint(this.rejectEdgeStartPoint())
                                     .endPoint(this.rejectEdgeEndPoint())
@@ -1776,20 +1817,22 @@ class EntryView {
                                     .strokeLineCap(LineCapStyle.Round)
                                     .antiAlias(true)
                                     .position(x: 0, y: 0)
-                                Text(this.parityRejectText)
-                                    .fontSize(14)
-                                    .fontFamily(this.serifBoldFamily())
-                                    .fontColor(Theme.vermillion)
-                                    .maxLines(1)
-                                    .width(86)
-                                    .height(28)
-                                    .textAlign(TextAlign.Center)
-                                    .padding(left: 14, right: 14)
-                                    .borderRadius(4)
-                                    .border(width: 1, color: Theme.vermillion)
-                                    .backgroundColor(Theme.whitePaper)
-                                    .position(x: this.rejectToastX(), y: this.rejectToastY())
-                                    .visibility(if (this.rejectPlacement().shown) { Visibility.Visible } else { Visibility.None })
+                                if (this.parityRejectText.size > 0) {
+                                    Text(this.parityRejectText)
+                                        .fontSize(14)
+                                        .fontFamily(this.serifBoldFamily())
+                                        .fontColor(Theme.vermillion)
+                                        .maxLines(1)
+                                        .width(86)
+                                        .height(28)
+                                        .textAlign(TextAlign.Center)
+                                        .padding(left: 14, right: 14)
+                                        .borderRadius(4)
+                                        .border(width: 1, color: Theme.vermillion)
+                                        .backgroundColor(Theme.whitePaper)
+                                        .position(x: this.rejectToastX(), y: this.rejectToastY())
+                                        .visibility(if (this.rejectPlace.shown) { Visibility.Visible } else { Visibility.None })
+                                }
                             }
                         }
                         .width(this.boardW())
