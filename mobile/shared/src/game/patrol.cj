@@ -15,7 +15,7 @@ public let REJECT_WALL: Int64 = 5
 public let REJECT_VISITED: Int64 = 6
 public let REJECT_WAYPOINT: Int64 = 7
 public let REJECT_BOUNDS: Int64 = 8
-public let REJECT_FERRY: Int64 = 9 /* TODO(2b): ferry rejections. */
+public let REJECT_FERRY: Int64 = 9 /* 进甲被拒：乙已在 path 里（或 乙==甲）. */
 public let REJECT_START: Int64 = 10 /* 首格必须是 1 号. */
 
 /* Snapshot taken right before one input is applied; one input = one undo unit. */
@@ -160,6 +160,32 @@ public class PatrolGame {
         return bad
     }
 
+    /* 对段的数字约束，一次输入产生的整段一起查：
+       ① 段内路标必须按序消耗 (_seg_clue_ok, solve_levels.py:472-484，不符→false→
+         REJECT_WAYPOINT)；② 最大号只能是整盘最后一格 (:577-578)，且按 Python 只查
+         nxt（=seg[0]，渡口段即甲），不推广到段内其他格。
+       need 取 nextRequired()（跨边前、未 push 的路径），单格段与旧实现逐位一致。 */
+    func segClueOk(seg: ArrayList<Cell>): Bool {
+        var n = this.nextRequired()
+        var i: Int64 = 0
+        while (i < seg.size) {
+            let cv = this.level.numberAt(seg[i].x, seg[i].y)
+            if (cv != 0 && cv != n) {
+                return false
+            }
+            if (cv == n) {
+                n = n + 1
+            }
+            i = i + 1
+        }
+        let head = seg[0]
+        let headNum = this.level.numberAt(head.x, head.y)
+        if (headNum == this.level.maxNumber() && this.filled() + seg.size != this.grid.cellCount()) {
+            return false
+        }
+        return true
+    }
+
     /* Cells visited by one input `cell`, or None when illegal (sets lastReject*).
        Mirrors Rules.expand in tools/solve_levels.py, keeping the legacy canEnter
        check order (已访 before 奇偶 so lastRejectParity behaves as before). */
@@ -190,8 +216,6 @@ public class PatrolGame {
                 }
                 // TODO(2c collapse): collapsed edge closed here, before gates
                 //   (solve_levels.py:418-419); not implemented yet.
-                // TODO(2b ferry): _expand steps 1 & 4 (jump onto 乙 / forced enter 甲),
-                //   tools/solve_levels.py:532-560.
                 // TODO(2c slide): _expand step 6 forced slide segment, :563-568.
                 // 闸门：无符不过 (solve_levels.py:420-421)；hasToken 取本次输入入口值.
                 if (this.level.gateAt(last, cell) && !this.hasToken) {
@@ -208,16 +232,33 @@ public class PatrolGame {
                 if (this.burdenForbids(cell)) {
                     return this.rejectEdge(REJECT_BURDEN_FORBIDDEN, cell)
                 }
-                let num = this.level.numberAt(cell.x, cell.y)
-                let nxt = this.nextRequired()
-                if (num != 0 && num != nxt) {
-                    return this.rejectEdge(REJECT_WAYPOINT, cell)
-                }
-                if (num == this.level.maxNumber() && this.path.size() + 1 != this.grid.cellCount()) {
-                    return this.rejectEdge(REJECT_WAYPOINT, cell)
-                }
+                // 渡口步骤 4（进甲，solve_levels.py:552-560）：墙/闸/奇偶/单向/负重
+                // 禁区均是针对「当前头→甲」这条边（filled 取跨边前），已访查在函数头。
                 let seg = ArrayList<Cell>()
-                seg.add(cell)
+                match (this.level.ferry) {
+                    case Some(f) =>
+                        if (cell.x == f.jiaX && cell.y == f.jiaY) {
+                            let yi = Cell(f.yiX, f.yiY)
+                            // 乙已在 path 里（或 乙==甲）→ 拒绝，端点 to=甲.
+                            if (this.path.contains(yi) || (f.yiX == f.jiaX && f.yiY == f.jiaY)) {
+                                return this.rejectEdge(REJECT_FERRY, cell)
+                            }
+                            // burden 存在且 laden 且 乙 在禁区 → 拒绝，端点 to=甲.
+                            if (this.burdenForbids(yi)) {
+                                return this.rejectEdge(REJECT_BURDEN_FORBIDDEN, cell)
+                            }
+                            // 跳接甲→乙豁免墙/单向/闸/奇偶/塌桥；一次输入推两格.
+                            seg.add(cell)
+                            seg.add(yi)
+                        }
+                    case None => ()
+                }
+                if (seg.size == 0) {
+                    seg.add(cell)
+                }
+                if (!this.segClueOk(seg)) {
+                    return this.rejectEdge(REJECT_WAYPOINT, cell)
+                }
                 return Some(seg)
         }
     }
@@ -241,8 +282,10 @@ public class PatrolGame {
                 this.undoUnit()
                 return true
             }
-            var u: Int64 = unit.startLen + 1 /* skip the unit head: only pre-input head & non-head cells rewind. */
-            while (u < this.path.size()) {
+            // 本单元除头（末格）以外的格（1 格单元该范围为空）→ 撤销整个单元：
+            // 2 格渡口单元 [甲,乙] 只查甲（乙是头，落头不撤销，走已访拒绝）.
+            var u: Int64 = unit.startLen
+            while (u <= this.path.size() - 2) {
                 if (cell.equals(this.path.at(u))) {
                     this.undoUnit()
                     return true
@@ -334,6 +377,8 @@ public class PatrolGame {
         this.hasToken = tok
     }
 
+    /* 渡口关「必须走甲→乙 才算赢」保持为设计解的有效性条件，不在引擎 isWin 里查：
+       甲只能经跳接触发进入，满盘铺满即隐含已用渡口 (对照 solve_levels.py:625-626). */
     public func isWin(): Bool {
         let lastOpt = this.path.last()
         match (lastOpt) {
