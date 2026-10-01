@@ -35,6 +35,28 @@ func absF(v: Float64): Float64 {
     return v
 }
 
+/* 点到线段距离 ≤ r(用于 chevron 胶囊体采样,J14 3b)。 */
+func segDistLE(px: Float64, py: Float64, ax: Float64, ay: Float64, bx: Float64, by: Float64, r: Float64): Bool {
+    let vx = bx - ax
+    let vy = by - ay
+    let l2 = vx * vx + vy * vy
+    var t = 0.0
+    if (l2 > 0.0) {
+        t = ((px - ax) * vx + (py - ay) * vy) / l2
+        if (t < 0.0) {
+            t = 0.0
+        }
+        if (t > 1.0) {
+            t = 1.0
+        }
+    }
+    let qx = ax + t * vx
+    let qy = ay + t * vy
+    let ddx = px - qx
+    let ddy = py - qy
+    return ddx * ddx + ddy * ddy <= r * r
+}
+
 /* commands 是否以 'M' 起头（String.get 按字节取，同 helpers.cj/digits.cj）。 */
 func startsWithM(s: String): Bool {
     if (s.size == 0) {
@@ -572,7 +594,7 @@ func j14SlideGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     let g6 = boardGeomFor(6, 6, 320.0)
     ctx.ck(absF(g6.c - 39.0) < 1e-9, "J14 6col W=320 c=${g6.c} want=39")
     ctx.ck(absF(g6.trayW() - 280.0) < 1e-9, "J14 6col W=320 trayW=${g6.trayW()} want=280")
-    /* (2) 滑行 chevron 几何 helper:入向左/上时中心相对格心偏 0.16c,其余居中 */
+    /* (2) 滑行 chevron 几何 helper:入向左/上时中心相对格心偏 0.18c,其余居中 */
     let c = 43.0
     let k = c / 36.3
     let ccx = 100.0
@@ -585,7 +607,7 @@ func j14SlideGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
         let basey = (pts[1] + pts[5]) * 0.5
         let cenx = (pts[2] + basex) * 0.5
         let ceny = (pts[3] + basey) * 0.5
-        let shift = if (d[0] < 0 || d[1] < 0) { 0.16 * c } else { 0.0 }
+        let shift = if (d[0] < 0 || d[1] < 0) { 0.18 * c } else { 0.0 }
         ctx.ck(absF(cenx - (ccx + Float64(d[0]) * shift)) < 1e-9 && absF(ceny - (ccy + Float64(d[1]) * shift)) < 1e-9,
             "J14 chev cen=(${cenx},${ceny}) dir=${d[0]},${d[1]} shift=${shift}")
         /* 深度 dep=18k:tip 与 base 距离 */
@@ -595,8 +617,9 @@ func j14SlideGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
         let h = sqrt((pts[0] - pts[4]) * (pts[0] - pts[4]) + (pts[1] - pts[5]) * (pts[1] - pts[5]))
         ctx.ck(absF(h - 25.0 * k) < 1e-9, "J14 chev h=${h} want=${25.0 * k}")
     }
-    /* (3) hua 角标:右边缘=格右-2k(全体最大 x1);名义 gh 盒(右钩右下角)下边缘=格下-1k。
-       注:脚本 hua() 的下短横 ink 到 0.78gh+s,略超出名义 gh 盒(照脚本,不改)。 */
+    /* (3) hua 角标:墨迹包围盒定位(FOLLOWUP §1)——全体矩形最大 x1 = 格右-2k,
+       最大 y1(含下探的三短横)= 格下-1k;ink 宽 = x1max-x0min = 11k,
+       ink 高 = y1max-y0min = 12.76k(s=3.4k 时,c=43/32 均如此)。 */
     var ci: Int64 = 0
     let cs = [43.0, 32.0]
     while (ci < 2) {
@@ -604,19 +627,104 @@ func j14SlideGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
         let hk = hc / 36.3
         let rects = slideHuaRects(hc)
         var maxX = 0.0
+        var maxY = 0.0
+        var minX = rects[0]
+        var minY = rects[1]
         var r: Int64 = 0
         while (r + 3 < rects.size) {
             if (rects[r + 2] > maxX) {
                 maxX = rects[r + 2]
             }
+            if (rects[r + 3] > maxY) {
+                maxY = rects[r + 3]
+            }
+            if (rects[r] < minX) {
+                minX = rects[r]
+            }
+            if (rects[r + 1] < minY) {
+                minY = rects[r + 1]
+            }
             r = r + 4
         }
         ctx.ck(rects.size == 28, "J14 hua rects=${rects.size} want=28 (7*4)")
         ctx.ck(absF(maxX - (hc - 2.0 * hk)) < 1e-9, "J14 hua c=${hc} right=${maxX} want=${hc - 2.0 * hk}")
-        /* 右钩 = 第 7 个矩形:右下角锚在名义盒 (gw,gh) */
+        ctx.ck(absF(maxY - (hc - 1.0 * hk)) < 1e-9, "J14 hua c=${hc} ink bottom=${maxY} want=${hc - 1.0 * hk}")
+        ctx.ck(absF((maxX - minX) - 11.0 * hk) < 1e-9, "J14 hua c=${hc} ink w=${maxX - minX} want=${11.0 * hk}")
+        ctx.ck(absF((maxY - minY) - 12.76 * hk) < 1e-9, "J14 hua c=${hc} ink h=${maxY - minY} want=${12.76 * hk}")
+        /* 右钩 = 第 7 个矩形:右缘锚在墨迹右缘 */
         ctx.ck(absF(rects[26] - (hc - 2.0 * hk)) < 1e-9, "J14 hua c=${hc} hook right=${rects[26]} want=${hc - 2.0 * hk}")
-        ctx.ck(absF(rects[27] - (hc - 1.0 * hk)) < 1e-9, "J14 hua c=${hc} hook bottom=${rects[27]} want=${hc - 1.0 * hk}")
         ci = ci + 1
+    }
+    /* (3b) FOLLOWUP §1:chevron 折线(含圆头半径 sw/2,胶囊体)与 hua 墨迹包围盒
+       的重叠面积 ≤ 0.8 u²(设计栅格实测最大 0.67u²);chevron 折线包围盒(含 sw/2
+       外扩)须留在 [0,c] 内。胶囊体用 0.05u 网格中点采样近似(含圆头)。 */
+    var oc: Int64 = 0
+    let ocs = [32.0, 38.0, 43.0]
+    while (oc < 3) {
+        let cc = ocs[oc]
+        let ok = cc / 36.3
+        var sw = 4.0 * ok
+        if (sw < 3.0) {
+            sw = 3.0
+        }
+        var ohs = 3.4 * ok
+        if (ohs < 2.0) {
+            ohs = 2.0
+        }
+        var oinkH = 0.78 * 12.0 * ok + ohs
+        if (oinkH < 12.0 * ok) {
+            oinkH = 12.0 * ok
+        }
+        let huaX0 = cc - 13.0 * ok
+        let huaY0 = cc - 1.0 * ok - oinkH
+        for (d in dirs) {
+            let pts = slideChevronPts(cc / 2.0, cc / 2.0, cc, d[0], d[1])
+            /* 包围盒(含 sw/2 外扩)在 [0,c] 内 */
+            var bx0 = pts[0]
+            var bx1 = pts[0]
+            var by0 = pts[1]
+            var by1 = pts[1]
+            var pi: Int64 = 0
+            while (pi < 3) {
+                if (pts[pi * 2] < bx0) {
+                    bx0 = pts[pi * 2]
+                }
+                if (pts[pi * 2] > bx1) {
+                    bx1 = pts[pi * 2]
+                }
+                if (pts[pi * 2 + 1] < by0) {
+                    by0 = pts[pi * 2 + 1]
+                }
+                if (pts[pi * 2 + 1] > by1) {
+                    by1 = pts[pi * 2 + 1]
+                }
+                pi = pi + 1
+            }
+            ctx.ck(bx0 - sw / 2.0 >= 0.0 && by0 - sw / 2.0 >= 0.0 && bx1 + sw / 2.0 <= cc && by1 + sw / 2.0 <= cc,
+                "J14 chev bbox out of cell c=${cc} dir=${d[0]},${d[1]} bbox=(${bx0},${by0},${bx1},${by1})")
+            /* 胶囊体 ∩ hua 墨迹包围盒:0.05u 网格中点采样 */
+            let stp = 0.05
+            let nx = Int64((cc - 2.0 * ok - huaX0) / stp)
+            let ny = Int64((cc - 1.0 * ok - huaY0) / stp)
+            var hit: Int64 = 0
+            var gy: Int64 = 0
+            while (gy < ny) {
+                let py = huaY0 + (Float64(gy) + 0.5) * stp
+                var gx: Int64 = 0
+                while (gx < nx) {
+                    let px = huaX0 + (Float64(gx) + 0.5) * stp
+                    if (segDistLE(px, py, pts[0], pts[1], pts[2], pts[3], sw / 2.0) ||
+                        segDistLE(px, py, pts[2], pts[3], pts[4], pts[5], sw / 2.0)) {
+                        hit = hit + 1
+                    }
+                    gx = gx + 1
+                }
+                gy = gy + 1
+            }
+            let area = Float64(hit) * stp * stp
+            ctx.ck(area <= 0.8, "J14 chev/hua overlap c=${cc} dir=${d[0]},${d[1]} area=${area} want<=0.8")
+        }
+        oc = oc + 1
     }
     /* (4) 手工构造滑行关:从 (0,0) 入 (1,0) 滑到 (2,0) → 2 chevron、hua Z 数 = 滑格数*7;
        J17:头格=停末格 → chevron 之后两个 fill-only 圆 path(外圈 ink 7k + 孔 whitePaper 3k,

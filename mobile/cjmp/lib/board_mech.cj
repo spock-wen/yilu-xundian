@@ -109,8 +109,8 @@ public func rejectGateImg(geom: BoardGeom, fromX: Int64, fromY: Int64, toX: Int6
 }
 
 /* J14:滑行 chevron 折线三点(格心 cx,cy,格宽 c,入向单位向量 dx,dy)。
-   k=c/36.3:dep=18k、h=25k;入向左/上时中心沿入向整体偏 0.16c,
-   避让右下「滑」角标(SLIDE_CELL_RULINGS_20261002 §2)。
+   k=c/36.3:dep=18k、h=25k;入向左/上时中心沿入向整体偏 0.18c,
+   避让右下「滑」角标(SLIDE_GATE_FOLLOWUP_20261002 §1,原 0.16c)。
    返回 [arm1x,arm1y,tipx,tipy,arm2x,arm2y](vp,未乘 pxPerVp)。 */
 public func slideChevronPts(cx: Float64, cy: Float64, c: Float64, dx: Int64, dy: Int64): Array<Float64> {
     let k = c / 36.3
@@ -120,7 +120,7 @@ public func slideChevronPts(cx: Float64, cy: Float64, c: Float64, dx: Int64, dy:
     let fdy = Float64(dy)
     let perpx = -fdy
     let perpy = fdx
-    let shift = if (dx < 0 || dy < 0) { 0.16 * c } else { 0.0 }
+    let shift = if (dx < 0 || dy < 0) { 0.18 * c } else { 0.0 } /* FOLLOWUP §1:0.16c→0.18c */
     let cenx = cx + fdx * shift
     let ceny = cy + fdy * shift
     let tipx = cenx + fdx * dep * 0.5
@@ -134,17 +134,23 @@ public func slideChevronPts(cx: Float64, cy: Float64, c: Float64, dx: Int64, dy:
 
 /* J14:「滑」块笔角标矩形(格局部坐标,原点=格左上,已含右下偏移 ox,oy)。
    k=c/36.3:gw=11k、gh=12k、距右 2k、距下 1k、笔画 s=max(2,3.4k)。
+   定位以墨迹包围盒为准(FOLLOWUP §1):墨迹高=max(gh,0.78gh+s)(最下排三短横
+   下探到 0.78gh+s=12.76k),oy = 格下 - 1k - 墨迹高。
    返回 [x0,y0,x1,y1]*7,与 render_slide_cell_spec.py 的 hua() 一致(以脚本为准)。 */
 public func slideHuaRects(c: Float64): Array<Float64> {
     let k = c / 36.3
     let gw = 11.0 * k
     let gh = 12.0 * k
     let ox = c - gw - 2.0 * k
-    let oy = c - gh - 1.0 * k
     var s = 3.4 * k
     if (s < 2.0) {
         s = 2.0
     }
+    var inkH = 0.78 * gh + s
+    if (inkH < gh) {
+        inkH = gh
+    }
+    let oy = c - 1.0 * k - inkH
     let m = 0.42 * gh
     let by = 0.78 * gh
     let rects = ArrayList<Float64>()
