@@ -518,8 +518,7 @@ class EntryView {
     }
 
     func chromeLine(): String {
-        let ch = this.currentChapter()
-        return "友：${ch.friendLine} · 张力：${ch.tensionLine} · 城：${ch.cityLine}"
+        return this.currentChapter().chromeLine()
     }
 
     func chromeCaption(): String {

@@ -59,8 +59,16 @@ public class ChapterDef {
         this.open = open
     }
 
+    // chapter 8 caption copy: city shown without the 城： label, PM decision 2026-10-01
+    public func cityPrefix(): String {
+        if (this.id == 7) {
+            return ""
+        }
+        return "城："
+    }
+
     public func chromeLine(): String {
-        return "友：${this.friendLine} · 张力：${this.tensionLine} · 城：${this.cityLine}"
+        return "友：${this.friendLine} · 张力：${this.tensionLine} · ${this.cityPrefix()}${this.cityLine}"
     }
 }
 
@@ -181,8 +189,8 @@ public class ChapterCatalog {
             "刘备×关隘影 · 刘×纹样 · 白水关",
             "刘备×关隘影 · 刘×纹样 · 白水关",
             "蜀",
-            "峡江入川关隘递进；非曹粮道，勿挂曹脸",
-            "白水关（辅成都）",
+            "峡江入川关隘递进；非曹粮道勿挂曹脸",
+            "白水关辅成都",
             70,
             10,
             true
