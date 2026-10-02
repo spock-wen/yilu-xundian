@@ -110,10 +110,3 @@ python3 mobile/cjmp/scripts/subset_yilu_fonts.py verify --old-dir <旧字体目�
 字表在保留原有全部字符的基础上新增 13 个字：`甲乙符滑渡负塌泽停闸门禁此`（YiluSerif 与 YiluSans 均已收录；`此` 原本已在 YiluSerif 中，故 YiluSerif 实际新增 12 字、YiluSans 新增 13 字）。`verify` 结果：原有字符（serif 357、sans 346）的字形轮廓与横/纵向 advance 与旧子集逐字一致（0 差异），OpenType 特性标签不变。以后增字只需在字表文件中追加字符后重跑 `build`。
 
 字体大小（字节）：YiluSerif-Regular 89780→93508，YiluSerif-Bold 89336→93132，YiluSans-Regular 134796→138048，YiluSans-Medium 134732→137984。
-
-**P4 皮肤字体核对（2026-10-03，设计 addendum-serif）**
-
-- 设计交付的 `fonts-d03/addendum-serif/YiluSerif-Bold.otf`（sha256 `ab5000e9…8bf64b`，358 码位 = 设计旧 Serif Bold 的 357 码位 + U+8D1F「负」，同源 NotoSerifSC-Bold.otf）只是为「设计旧子集缺负」补的；本仓库 `fonts/YiluSerif-Bold.otf`（sha256 `6255a612…4539b`，369 码位）自 bd9e8e8 起已按 `subset_yilu_fonts.py` 的 ADDED_CHARS 收录「负」。
-- fontTools 4.66 核对：addendum 的 358 个码位在仓库字体中全部存在，逐字 outline 与 advance 差异 0（含「负」，2 个轮廓）；仓库字体比 addendum 多 11 个码位：乙 停 塌 泽 渡 滑 甲 禁 符 门 闸（甲乙渡符滑停等机制标注用）。
-- 结论：不用 addendum 覆盖仓库字体（否则丢这 11 个字），仓库 YiluSerif-Bold.otf 保持不变（sha256 不变），「负重」顶栏 chip 用 Serif Bold（`serifBoldFamily()`）直接渲染「负」。
-- 之后若设计再发 addendum：先用 fontTools 比对码位集合与逐字轮廓/advance，仅当 addendum 为仓库字体的超集时才替换；否则走 `fonts/yilu_serif_chars.txt` 追加字符后重跑 `subset_yilu_fonts.py build`。
