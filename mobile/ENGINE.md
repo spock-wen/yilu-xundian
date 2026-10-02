@@ -14,7 +14,7 @@
 | `mobile/shared/src/game/level.cj` | `entry/src/main/cangjie/game/level.cj` | `yilu_zip.game` |
 | `mobile/shared/src/game/patrol.cj` | `entry/src/main/cangjie/game/patrol.cj` | `yilu_zip.game` |
 
-这 7 个文件在鸿蒙侧没有 `import ohos` / `import kit.ArkUI`。规则仍是正交、不穿墙、不走重复格、驿站按号、最高号必须在填满时进入、拖回上一格撤销。`parityEdges` 的判断留在 `patrol.cj` 里；v1 的范阳盘是空列表。
+这 7 个文件在鸿蒙侧没有 `import ohos` / `import kit.ArkUI`。规则仍是正交、不穿墙、不走重复格、驿站按号、最高号必须在填满时进入、拖回上一格撤销。`parityEdges` 的判断留在 `patrol.cj` 里；加载器支持解析 `parityEdges`（v1 的范阳盘本身是空列表）。
 
 `stepLimit` 在 `LevelDef` 上。鸿蒙 `PatrolGame` 不读取它，这份也不读。
 
@@ -22,7 +22,7 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `mobile/shared/src/game/json_level.cj` | 读一盘 JSON，建成 `LevelDef`。不用 `stdx`。字节用 `String.get`（越界返回 `None`），不用会抛 `IndexOutOfBoundsException` 的 `[]`（[1.1.3 String](https://cj-docs.gitcode.com/zh/1.1.3/libs/std/core/core_package_api/core_package_structs.html)）。错误文案用手写十进制拼接，不走 `${整数}`。 |
+| `mobile/shared/src/game/json_level.cj` | 读单盘或全量关卡 JSON，建成 `LevelDef`（支持解析 `parityEdges`）。不用 `stdx`。字节用 `String.get`（越界返回 `None`），不用会抛 `IndexOutOfBoundsException` 的 `[]`（[1.1.3 String](https://cj-docs.gitcode.com/zh/1.1.3/libs/std/core/core_package_api/core_package_structs.html)）。错误文案用手写十进制拼接，不走 `${整数}`。 |
 | `mobile/shared/src/ffi.cj` | 顶层 `@C` 函数。命名避免 `CJ_` 前缀（[仓颉-C 互操作](https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/FFI/cangjie-c.html)）。`yilu_load_level_json` 不用 `CString.toString()`。加载成功时执行 `gGame = PatrolGame(level)`，不调用可能仍是空引用的 `gGame.reset`。 |
 | `mobile/include/yilu_zip.h` | 同一份 C 声明。iOS bridging header 引用它；Android `yilu_jni.c` 也引用它。 |
 
