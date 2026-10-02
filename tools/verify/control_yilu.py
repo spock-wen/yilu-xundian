@@ -109,7 +109,9 @@ def cmd_launch(_: argparse.Namespace) -> int:
     time.sleep(0.4)
     r = hdc_shell(f"aa start -a {ABILITY} -b {BUNDLE}", check=False)
     print(r.stdout or r.stderr)
-    time.sleep(1.2)
+    # Cold start on emulator often lands dumpLayout on the launcher icon grid
+    # if we probe too early (seen 2026-09-28: texts were demo labels + 驿路巡点 icon).
+    time.sleep(2.5)
     return 0 if r.returncode == 0 else r.returncode
 
 

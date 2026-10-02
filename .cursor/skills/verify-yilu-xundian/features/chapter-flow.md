@@ -1,6 +1,6 @@
 # Chapter flow
 
-Chapter list (v1.3) lets the player pick 涿郡 / 平原 when open, see locked later chapters (`未开`), and open fullscreen skin preview for chapters 05–10 (投袁…北伐) without inventing boards. 徐州 / 吕布 stay card-only (tap is a no-op).
+Chapter list (v1.3) lets the player enter any unlocked chapter’s 驿程 when `cleared >= levelStart` (all ten chapters ship `levelCount` 10 boards after ch1–10 inject). Locked cards show `未开`. Chapters 05–10 (投袁…北伐) open fullscreen skin preview while locked. 徐州 / 吕布 when locked have no skin preview — tap stays on the list (no-op) until unlock.
 
 ## Sub-features
 
@@ -26,6 +26,6 @@ Preconditions:
 
 ## Gotchas
 
-- 徐州 / 吕布 have `levelCount` 0 and no fullscreen skin preview (tap stays on the list). Chapters 05–10 show skin cards / preview only. Do not claim a playable board there.
+- All ten chapters have `levelCount` 10 boards in `LevelCatalog` (`chapter.cj`). Runtime unlock is `cleared >= levelStart` (涿郡 always; 平原 at 10; 徐州 20; 吕布 30; …). While locked: 徐州 / 吕布 tap is a no-op (no `hasSkinPreview`); chapters 05–10 open skin preview only — do not claim a playable board from a locked skin card.
 - 平原 may be `未开` until progress lock is satisfied. That is expected; see progress-lock.md.
 - Needle `可入` is not the badge. Subtitle `选章入驿 · 开章可入 · 灰章未启` matches first (proof: `chapter-list.layout.json` header, not `[1044,552][1212,650]`). Needle `驿程` matches footer `点开章入驿程` before any `·驿程` title. Enter 涿郡 with `涿郡`, then station `涿郡·涿`.
