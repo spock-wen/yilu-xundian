@@ -4,25 +4,26 @@ import std.collection.ArrayList
 
 /*
  * Parity reject overlay toast avoidance (designer final ruling).
- * Toast is 86 wide x 28 high vp, one line.
+ * Toast width is given by tw in toastPlaceW: 86 = 4 chars, 100 = 5 chars
+ * ("粮重不可进"); height fixed 28, one line. toastPlace keeps tw = 86.
  * All coordinates are tray coordinates in vp (u). E = rejected-edge midpoint (midX, midY).
  * Obstacles = ToastBox list from collectToastObstacles() (walls/route use clear 2.0).
  *
- * Validity of candidate rect (x, y, 86, 28):
- *   - horizontally inside tray with >= 16 from left/right edges: 16 <= x and x + 86 <= trayW - 16
+ * Validity of candidate rect (x, y, tw, 28):
+ *   - horizontally inside tray with >= 16 from left/right edges: 16 <= x and x + tw <= trayW - 16
  *   - vertically inside tray with >= 8 from top/bottom edges: 8 <= y and y + 28 <= trayH - 8
  *   - for every obstacle box b, clearance >= b.clear: box inflated by b.clear must not overlap rect (walls/route use clear 2.0)
  *
- * Candidate x set: {midX - 43, 16, trayW - 16 - 86} plus for each obstacle box b:
- *   b.x0 - b.clear - 86 and b.x1 + b.clear
+ * Candidate x set: {midX - tw/2, 16, trayW - 16 - tw} plus for each obstacle box b:
+ *   b.x0 - b.clear - tw and b.x1 + b.clear
  *
  * Placement order:
- *  (a) ABOVE: y = midY - 36 (bottom = midY - 8). Horizontal shift only, |dx| <= 96 where dx = (x + 43) - midX.
+ *  (a) ABOVE: y = midY - 36 (bottom = midY - 8). Horizontal shift only, |dx| <= 96 where dx = (x + tw/2) - midX.
  *      Choose valid x with smallest |dx|; on tie LEFT wins ("left first then right"). Centred (dx = 0) is smallest |dx|.
  *  (b) If (a) has no valid x: lift upward in 2u steps, lift = 2, 4, ..., 24 (y = midY - 36 - lift),
  *      same horizontal search (|dx| <= 96); take the SMALLEST lift that has a fit.
  *  (c) If (b) has none: BELOW, y = midY + 8 (top = midY + 8), same horizontal search, |dx| <= 96.
- *  (d) If nothing fits: do NOT place toast; return shown = false, step = 0, x = midX - 43, y = midY - 36, lift = 0.
+ *  (d) If nothing fits: do NOT place toast; return shown = false, step = 0, x = midX - tw/2, y = midY - 36, lift = 0.
  */
 
 public struct ToastBox {
@@ -84,8 +85,7 @@ public func isBlocking(box: ToastBox, x: Float64, tw: Float64, top: Float64, bot
     return true
 }
 
-func isValid(x: Float64, y: Float64, trayW: Float64, trayH: Float64, boxes: Array<ToastBox>): Bool {
-    let tw: Float64 = 86.0
+func isValid(x: Float64, y: Float64, trayW: Float64, trayH: Float64, tw: Float64, boxes: Array<ToastBox>): Bool {
     let th: Float64 = 28.0
     if (y < 8.0 - 1e-6 || y + th > trayH - 8.0 + 1e-6) {
         return false
@@ -108,15 +108,15 @@ func absVal(v: Float64): Float64 {
     return v
 }
 
-func searchAtY(y: Float64, midX: Float64, trayW: Float64, trayH: Float64, cands: ArrayList<Float64>, boxes: Array<ToastBox>): Option<Float64> {
+func searchAtY(y: Float64, midX: Float64, trayW: Float64, trayH: Float64, tw: Float64, cands: ArrayList<Float64>, boxes: Array<ToastBox>): Option<Float64> {
     var bestX = 0.0
     var bestAbsDx = 1e9
     var bestDx = 0.0
     var found = false
 
     for (candX in cands) {
-        if (isValid(candX, y, trayW, trayH, boxes)) {
-            let dx = (candX + 43.0) - midX
+        if (isValid(candX, y, trayW, trayH, tw, boxes)) {
+            let dx = (candX + tw / 2.0) - midX
             let adx = absVal(dx)
             if (adx <= 96.0 + 1e-6) {
                 if (!found) {
@@ -147,8 +147,11 @@ func searchAtY(y: Float64, midX: Float64, trayW: Float64, trayH: Float64, cands:
 }
 
 public func toastPlace(trayW: Float64, trayH: Float64, midX: Float64, midY: Float64, boxes: Array<ToastBox>): ToastPlacement {
-    let tw: Float64 = 86.0
-    let cX: Float64 = midX - 43.0
+    return toastPlaceW(trayW, trayH, midX, midY, boxes, 86.0)
+}
+
+public func toastPlaceW(trayW: Float64, trayH: Float64, midX: Float64, midY: Float64, boxes: Array<ToastBox>, tw: Float64): ToastPlacement {
+    let cX: Float64 = midX - tw / 2.0
     let minX: Float64 = 16.0
     let maxX: Float64 = trayW - 16.0 - tw
 
@@ -164,7 +167,7 @@ public func toastPlace(trayW: Float64, trayH: Float64, midX: Float64, midY: Floa
 
     // (a) ABOVE: y = midY - 36 (bottom = midY - 8)
     let yAbove: Float64 = midY - 36.0
-    match (searchAtY(yAbove, midX, trayW, trayH, cands, boxes)) {
+    match (searchAtY(yAbove, midX, trayW, trayH, tw, cands, boxes)) {
         case Some(x) => return ToastPlacement(x, yAbove, true, 1, 0.0)
         case None => ()
     }
@@ -173,7 +176,7 @@ public func toastPlace(trayW: Float64, trayH: Float64, midX: Float64, midY: Floa
     var lift: Float64 = 2.0
     while (lift <= 24.0 + 1e-6) {
         let yLift = yAbove - lift
-        match (searchAtY(yLift, midX, trayW, trayH, cands, boxes)) {
+        match (searchAtY(yLift, midX, trayW, trayH, tw, cands, boxes)) {
             case Some(x) => return ToastPlacement(x, yLift, true, 2, lift)
             case None => ()
         }
@@ -182,7 +185,7 @@ public func toastPlace(trayW: Float64, trayH: Float64, midX: Float64, midY: Floa
 
     // (c) BELOW: y = midY + 8 (top = midY + 8)
     let yBelow: Float64 = midY + 8.0
-    match (searchAtY(yBelow, midX, trayW, trayH, cands, boxes)) {
+    match (searchAtY(yBelow, midX, trayW, trayH, tw, cands, boxes)) {
         case Some(x) => return ToastPlacement(x, yBelow, true, 3, 0.0)
         case None => ()
     }

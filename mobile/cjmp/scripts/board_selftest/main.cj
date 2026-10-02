@@ -143,24 +143,48 @@ func checkAll(game: PatrolGame, geom: BoardGeom, lv: LevelDef, id: Int64, step: 
         wantHead = 1
     }
     ctx.ck(headDots.size == wantHead, "${tag} headDots=${headDots.size} want=${wantHead}")
-    /* 5. mech walls：闸(sealGates×1/2) + 塌桥断边 */
+    /* 5. mech walls：闸(sealGates×1/2)；P4 塌桥不再画墨墙(断桩/板条挪到 under 层) */
     var sealN: Int64 = 0
     if (game.hasToken) {
         sealN = lv.sealGates.size * 2
     } else {
         sealN = lv.sealGates.size
     }
-    var colN: Int64 = 0
+    let walls = buildBoardMechWalls(game, geom)
+    ctx.ck(walls.size == sealN, "${tag} walls=${walls.size} want=${sealN}")
+    /* 5b. P4 塌桥 under 层：缺角标(inkMuted fill)常驻 1 个；未断=板条+板缝各 1，
+       已断=恰好 2 断桩；非 collapse 关无板条/断桩/缺角。 */
+    let under = buildBoardMechUnder(game, geom, 3.0)
+    var plankN: Int64 = 0
+    var seamN: Int64 = 0
+    var mutedFillN: Int64 = 0
+    for (p in under) {
+        if (p.color == Theme.qing && p.fillOp == 1.0) {
+            plankN = plankN + 1
+        }
+        if (p.color == Theme.qingDeep && p.fillOp == 0.0) {
+            seamN = seamN + 1
+        }
+        if (p.color == Theme.inkMuted && p.strokeW == 0.0 && p.fillOp == 1.0) {
+            mutedFillN = mutedFillN + 1
+        }
+    }
+    var wantPlank: Int64 = 0
+    var wantStump: Int64 = 0
+    var wantMuted: Int64 = 0
     match (lv.collapse) {
         case Some(cd) =>
+            wantMuted = 1 /* 缺角标常驻 */
             if (game.isEdgeCollapsed(cd.x1, cd.y1, cd.x2, cd.y2)) {
-                colN = 1
+                wantStump = 2
+            } else {
+                wantPlank = 1
             }
         case None => ()
     }
-    let walls = buildBoardMechWalls(game, geom)
-    let wantWalls = sealN + colN
-    ctx.ck(walls.size == wantWalls, "${tag} walls=${walls.size} want=${wantWalls}")
+    ctx.ck(plankN == wantPlank, "${tag} plank=${plankN} want=${wantPlank}")
+    ctx.ck(seamN == wantPlank, "${tag} seam=${seamN} want=${wantPlank}")
+    ctx.ck(mutedFillN == wantMuted + wantStump, "${tag} mutedFill=${mutedFillN} want=${wantMuted + wantStump} (notch+stumps)")
     /* 6. labels = 渡3 + 开闸 + 符(J14:滑/停不再出 Text) */
     let labels = buildBoardMechLabels(game, geom)
     var base: Int64 = 0
@@ -305,7 +329,9 @@ func fuzz(game: PatrolGame, id: Int64, step: Int64, ctx: Ctx) {
                 ctx.rej[code] = ctx.rej[code] + 1
             }
             var expect = false
-            if (code == 1 || code == 2 || code == 3 || code == 4 || code == 9) {
+            /* P4:WALL 里塌桥断边(isCollapseReject)同样按 from/to 相邻判定期望闪 */
+            if (code == 1 || code == 2 || code == 3 || code == 4 || code == 9
+                || (code == 5 && isCollapseReject(game))) {
                 let ax = game.lastRejectFromX
                 let ay = game.lastRejectFromY
                 let bx = game.lastRejectToX
@@ -331,6 +357,13 @@ func fuzz(game: PatrolGame, id: Int64, step: Int64, ctx: Ctx) {
             }
             if (rejectShouldFlash(game) && code == 1) {
                 ctx.ck(parityToastText(game).size > 0, "${tag} parity toast empty")
+            }
+            /* P4 toast 文案:塌桥断边「此路不通」,负重禁区「粮重不可进」 */
+            if (rejectShouldFlash(game) && code == 5) {
+                ctx.ck(mechToastText(game) == "此路不通", "${tag} code=5 toast='${mechToastText(game)}' want=此路不通")
+            }
+            if (rejectShouldFlash(game) && code == 4) {
+                ctx.ck(mechToastText(game) == "粮重不可进", "${tag} code=4 toast='${mechToastText(game)}' want=粮重不可进")
             }
         }
         k = k + 1
@@ -483,6 +516,23 @@ func directedRejectTests(): String {
             fails.add("FAIL directed burden: not laden after load cell (0,0)")
         }
         dirExpect(fails, g3, "burden", Cell(1, 0), REJECT_BURDEN_FORBIDDEN, true, 0, 0, 1, 0, false)
+        /* P4:负重 toast 文案与宽度(4 字=86、5 字=100、空=86)。 */
+        dStat.checks = dStat.checks + 1
+        if (mechToastText(g3) != "粮重不可进") {
+            fails.add("FAIL directed burden: toast='${mechToastText(g3)}' want=粮重不可进")
+        }
+        dStat.checks = dStat.checks + 1
+        if (mechToastWidth("粮重不可进") != 100.0) {
+            fails.add("FAIL directed burden: w5=${mechToastWidth("粮重不可进")} want=100")
+        }
+        dStat.checks = dStat.checks + 1
+        if (mechToastWidth("此路不通") != 86.0) {
+            fails.add("FAIL directed burden: w4=${mechToastWidth("此路不通")} want=86")
+        }
+        dStat.checks = dStat.checks + 1
+        if (mechToastWidth("") != 86.0) {
+            fails.add("FAIL directed burden: w0=${mechToastWidth("")} want=86")
+        }
     }
     /* (4) 渡口:乙已访再进甲 → REJECT_FERRY,from=头(乙),to=甲,闪(抄 ferry_test b)。 */
     let l4 = mkTiny(3, 2, [(1, 0, 0)])
@@ -505,6 +555,30 @@ func directedRejectTests(): String {
     let g6 = PatrolGame(l6)
     if (dirSteps(fails, g6, "wall", [(0, 0)])) {
         dirExpect(fails, g6, "wall", Cell(1, 0), REJECT_WALL, false, 0, 0, 1, 0, false)
+        /* P4:普通墙不算塌桥断边,也无机制 toast。 */
+        dStat.checks = dStat.checks + 1
+        if (isCollapseReject(g6)) {
+            fails.add("FAIL directed wall: isCollapseReject true for plain wall")
+        }
+        dStat.checks = dStat.checks + 1
+        if (mechToastText(g6) != "") {
+            fails.add("FAIL directed wall: toast='${mechToastText(g6)}' want empty")
+        }
+    }
+    /* (6b) 塌桥:踏触发格 (0,0) 后断边 (1,0)-(2,0),(1,0)→(2,0) 拒 REJECT_WALL 且闪,toast=此路不通。 */
+    let lc = mkTiny(3, 1, [(1, 0, 0), (2, 2, 0)])
+    lc.collapse = Some(CollapseDef(0, 0, 1, 0, 2, 0))
+    let gc = PatrolGame(lc)
+    if (dirSteps(fails, gc, "collapse", [(0, 0), (1, 0)])) {
+        dirExpect(fails, gc, "collapse", Cell(2, 0), REJECT_WALL, true, 1, 0, 2, 0, false)
+        dStat.checks = dStat.checks + 1
+        if (!isCollapseReject(gc)) {
+            fails.add("FAIL directed collapse: isCollapseReject false after broken-edge reject")
+        }
+        dStat.checks = dStat.checks + 1
+        if (mechToastText(gc) != "此路不通") {
+            fails.add("FAIL directed collapse: toast='${mechToastText(gc)}' want=此路不通")
+        }
     }
     /* 不闪:回踏唯一头格 (path.size==1,起点即头) → VISITED。 */
     let g6b = PatrolGame(mkTiny(3, 1, [(1, 0, 0), (2, 2, 0)]))
@@ -835,6 +909,436 @@ func j14SlideGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     ctx.ck(found, "J14 no slide level in catalog")
 }
 
+/* J20:粮袋路径包围盒(袋口梯形 + 袋身椭圆 ±rx/±ry + 系口线)。 */
+func j20BagBox(cx: Float64, cy: Float64, k: Float64): (Float64, Float64, Float64, Float64) {
+    let nk = bagNeckPts(cx, cy, k)
+    let e = bagBodyEllipse(cx, cy, k)
+    let t = bagTiePts(cx, cy, k)
+    var mnx = nk[0]
+    var mxx = nk[0]
+    var mny = nk[1]
+    var mxy = nk[1]
+    var q: Int64 = 0
+    while (q < 8) {
+        if (nk[q] < mnx) {
+            mnx = nk[q]
+        }
+        if (nk[q] > mxx) {
+            mxx = nk[q]
+        }
+        if (nk[q + 1] < mny) {
+            mny = nk[q + 1]
+        }
+        if (nk[q + 1] > mxy) {
+            mxy = nk[q + 1]
+        }
+        q = q + 2
+    }
+    if (e[0] - e[2] < mnx) {
+        mnx = e[0] - e[2]
+    }
+    if (e[0] + e[2] > mxx) {
+        mxx = e[0] + e[2]
+    }
+    if (e[1] - e[3] < mny) {
+        mny = e[1] - e[3]
+    }
+    if (e[1] + e[3] > mxy) {
+        mxy = e[1] + e[3]
+    }
+    if (t[0] < mnx) {
+        mnx = t[0]
+    }
+    if (t[2] > mxx) {
+        mxx = t[2]
+    }
+    if (t[1] < mny) {
+        mny = t[1]
+    }
+    if (t[3] > mxy) {
+        mxy = t[3]
+    }
+    return (mnx, mny, mxx, mxy)
+}
+
+/* J20:断桩检查(bridgeStumpPolys):28 数、两截各 7 顶点、锯齿侧=下标 1..5、
+   边缘侧=下标 0/6、每截最窄宽 >=1.4、单截沿通行方向宽 (0,5)、两截之间有缺口。
+   返回实测最窄宽度。 */
+func j20StumpChecks(geom: BoardGeom, ax: Int64, ay: Int64, bx: Int64, by: Int64, ctx: Ctx): Float64 {
+    let horiz = (ay == by)
+    let sp = bridgeStumpPolys(geom, ax, ay, bx, by)
+    ctx.ck(sp.size == 28, "J20 stump size=${sp.size} want=28 c=${geom.c}")
+    var leftJagMax = 0.0
+    var rightJagMin = 0.0
+    var narrowest = 1e9
+    var side: Int64 = 0
+    while (side < 2) {
+        let cross = ArrayList<Float64>()
+        var j: Int64 = 0
+        while (j < 7) {
+            let px = sp[side * 14 + j * 2]
+            let py = sp[side * 14 + j * 2 + 1]
+            if (horiz) {
+                cross.add(px)
+            } else {
+                cross.add(py)
+            }
+            j = j + 1
+        }
+        let edgeA = cross.get(0).getOrThrow()
+        ctx.ck(absF(edgeA - cross.get(6).getOrThrow()) < 1e-6,
+            "J20 stump edge verts differ c=${geom.c} side=${side} ${edgeA} vs ${cross.get(6).getOrThrow()}")
+        var jagMin = cross.get(1).getOrThrow()
+        var jagMax = jagMin
+        var minW = absF(jagMin - edgeA)
+        var q: Int64 = 2
+        while (q <= 5) {
+            let v = cross.get(q).getOrThrow()
+            if (v < jagMin) {
+                jagMin = v
+            }
+            if (v > jagMax) {
+                jagMax = v
+            }
+            let d = absF(v - edgeA)
+            if (d < minW) {
+                minW = d
+            }
+            q = q + 1
+        }
+        ctx.ck(minW >= 1.4, "J20 stump narrowest=${minW} want>=1.4 c=${geom.c} side=${side}")
+        if (minW < narrowest) {
+            narrowest = minW
+        }
+        let w = if (side == 0) {
+            jagMax - edgeA
+        } else {
+            edgeA - jagMin
+        }
+        ctx.ck(w > 0.0 && w < 5.0, "J20 stump cut width=${w} want (0,5) c=${geom.c} side=${side}")
+        if (side == 0) {
+            leftJagMax = jagMax
+        } else {
+            rightJagMin = jagMin
+        }
+        side = side + 1
+    }
+    ctx.ck(leftJagMax < rightJagMin,
+        "J20 stump gap missing c=${geom.c} leftJagMax=${leftJagMax} rightJagMin=${rightJagMin}")
+    return narrowest
+}
+
+/* ===== J20 定向检查:塌桥/负重皮肤几何(BRIDGE_BURDEN_SKIN_20261003) ===== */
+func j20SkinGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
+    let cs = [32.0, 38.0, 41.0, 43.0]
+    /* (a) 断桩:两个方向 + 目录塌桥关(95/97/99)的边,实测最窄宽度全程 >=1.4。 */
+    var gMin = 1e9
+    var i: Int64 = 0
+    while (i < 4) {
+        let geom = BoardGeom(cs[i], 7, 7)
+        let m1 = j20StumpChecks(geom, 1, 1, 2, 1, ctx)
+        let m2 = j20StumpChecks(geom, 1, 1, 1, 2, ctx)
+        if (m1 < gMin) {
+            gMin = m1
+        }
+        if (m2 < gMin) {
+            gMin = m2
+        }
+        i = i + 1
+    }
+    var colN: Int64 = 0
+    var li: Int64 = 0
+    let g43 = BoardGeom(43.0, 7, 7)
+    while (li < levels.size) {
+        let lv = levels.get(li).getOrThrow()
+        match (lv.collapse) {
+            case Some(cd) =>
+                let m = j20StumpChecks(g43, cd.x1, cd.y1, cd.x2, cd.y2, ctx)
+                if (m < gMin) {
+                    gMin = m
+                }
+                if (lv.id == 95 || lv.id == 97 || lv.id == 99) {
+                    colN = colN + 1
+                }
+            case None => ()
+        }
+        li = li + 1
+    }
+    ctx.ck(colN == 3, "J20 collapse catalog levels=${colN} want=3 (95/97/99)")
+    println("J20 stump narrowest=${gMin}")
+    /* (b) 板条:长 = gap+4=10、横向宽 = 16k、中心 = seamMid;板缝 x±1.7、长 16k-2。 */
+    i = 0
+    while (i < 4) {
+        let c = cs[i]
+        let k = skinK(c)
+        let geom = BoardGeom(c, 7, 7)
+        let (mx, my) = geom.seamMid(1, 1, 2, 1)
+        let pr = bridgePlankRect(geom, 1, 1, 2, 1)
+        ctx.ck(absF((pr[2] - pr[0]) - (geom.gap + 4.0)) < 1e-6,
+            "J20 plank len=${pr[2] - pr[0]} want=${geom.gap + 4.0} c=${c}")
+        ctx.ck(absF((pr[3] - pr[1]) - 16.0 * k) < 1e-6, "J20 plank w=${pr[3] - pr[1]} want=${16.0 * k} c=${c}")
+        ctx.ck(absF((pr[0] + pr[2]) * 0.5 - mx) < 1e-6 && absF((pr[1] + pr[3]) * 0.5 - my) < 1e-6,
+            "J20 plank center=(${(pr[0] + pr[2]) * 0.5},${(pr[1] + pr[3]) * 0.5}) want=(${mx},${my}) c=${c}")
+        let ss = bridgeSeamSegs(geom, 1, 1, 2, 1)
+        ctx.ck(ss.size == 8, "J20 seam segs=${ss.size} want=8 c=${c}")
+        ctx.ck(absF(ss[0] - (mx - 1.7)) < 1e-6 && absF(ss[4] - (mx + 1.7)) < 1e-6,
+            "J20 seam x=${ss[0]},${ss[4]} want=${mx - 1.7},${mx + 1.7} c=${c}")
+        ctx.ck(absF((ss[3] - ss[1]) - (16.0 * k - 2.0)) < 1e-6,
+            "J20 seam len=${ss[3] - ss[1]} want=${16.0 * k - 2.0} c=${c}")
+        let (mx2, my2) = geom.seamMid(1, 1, 1, 2)
+        let pv = bridgePlankRect(geom, 1, 1, 1, 2)
+        ctx.ck(absF((pv[3] - pv[1]) - (geom.gap + 4.0)) < 1e-6 && absF((pv[2] - pv[0]) - 16.0 * k) < 1e-6,
+            "J20 plank vert len/w=(${pv[3] - pv[1]},${pv[2] - pv[0]}) want=(${geom.gap + 4.0},${16.0 * k}) c=${c}")
+        ctx.ck(absF((pv[0] + pv[2]) * 0.5 - mx2) < 1e-6 && absF((pv[1] + pv[3]) * 0.5 - my2) < 1e-6,
+            "J20 plank vert center mismatch c=${c}")
+        i = i + 1
+    }
+    ctx.ck(gMin >= 1.4, "J20 stump narrowest=${gMin} want>=1.4")
+    /* (c) 粮袋:宽 16k、高 19.5k(1e-9);加描边半宽 0.7k 后 17.4k×20.9k(0.01k)。
+       bagPaths 3 个,前两个 hollow=false→gold / hollow=true→whitePaper,描边 ink;
+       装卸点不落在带数字(waypoint)格,禁区不含装卸点。 */
+    let k41 = skinK(41.0)
+    let bks = [k41, 0.62, 0.5]
+    var bi: Int64 = 0
+    while (bi < 3) {
+        let bk = bks[bi]
+        let (mnx, mny, mxx, mxy) = j20BagBox(0.0, 0.0, bk)
+        ctx.ck(absF((mxx - mnx) - 16.0 * bk) < 1e-9, "J20 bag w=${mxx - mnx} want=${16.0 * bk} k=${bk}")
+        ctx.ck(absF((mxy - mny) - 19.5 * bk) < 1e-9, "J20 bag h=${mxy - mny} want=${19.5 * bk} k=${bk}")
+        ctx.ck(absF((mxx - mnx + 1.4 * bk) - 17.4 * bk) < 0.01 * bk,
+            "J20 bag ink w=${mxx - mnx + 1.4 * bk} want=${17.4 * bk} k=${bk}")
+        ctx.ck(absF((mxy - mny + 1.4 * bk) - 20.9 * bk) < 0.01 * bk,
+            "J20 bag ink h=${mxy - mny + 1.4 * bk} want=${20.9 * bk} k=${bk}")
+        if (bi == 0) {
+            println("J20 bag ink box=${17.4 * bk}x${20.9 * bk} k=${bk}")
+        }
+        bi = bi + 1
+    }
+    let solid = bagPaths(0.0, 0.0, k41, false, 3.0)
+    let hollow = bagPaths(0.0, 0.0, k41, true, 3.0)
+    ctx.ck(solid.size == 3 && hollow.size == 3, "J20 bagPaths n=${solid.size},${hollow.size} want=3,3")
+    ctx.ck(solid[0].color == Theme.gold && solid[1].color == Theme.gold, "J20 solid bag fill!=gold")
+    ctx.ck(hollow[0].color == Theme.whitePaper && hollow[1].color == Theme.whitePaper,
+        "J20 hollow bag fill!=whitePaper")
+    ctx.ck(solid[0].stroke == Theme.ink && solid[1].stroke == Theme.ink
+        && hollow[0].stroke == Theme.ink && hollow[1].stroke == Theme.ink, "J20 bag stroke!=ink")
+    var burdenN: Int64 = 0
+    li = 0
+    while (li < levels.size) {
+        let lv = levels.get(li).getOrThrow()
+        match (lv.burden) {
+            case Some(b) =>
+                burdenN = burdenN + 1
+                var onWp = false
+                for (wp in lv.waypoints) {
+                    if (wp.x == b.loadX && wp.y == b.loadY) {
+                        onWp = true
+                    }
+                    if (wp.x == b.unloadX && wp.y == b.unloadY) {
+                        onWp = true
+                    }
+                }
+                ctx.ck(!onWp, "J20 id=${lv.id} load/unload on waypoint cell")
+                var inForb = false
+                for (fc in b.forbidden) {
+                    if (fc.x == b.loadX && fc.y == b.loadY) {
+                        inForb = true
+                    }
+                    if (fc.x == b.unloadX && fc.y == b.unloadY) {
+                        inForb = true
+                    }
+                }
+                ctx.ck(!inForb, "J20 id=${lv.id} load/unload in forbidden")
+            case None => ()
+        }
+        li = li + 1
+    }
+    ctx.ck(burdenN >= 1, "J20 no burden level in catalog")
+    /* (d) 斜纹:段在格内(1e-9)、45°、a 左下;底部起完整相邻线 ax 差 ==pitch(1e-6)。 */
+    var lv90: Option<LevelDef> = None
+    var have90 = false
+    li = 0
+    while (li < levels.size) {
+        let lv = levels.get(li).getOrThrow()
+        if (lv.id == 90) {
+            lv90 = Some(lv)
+            have90 = true
+        }
+        li = li + 1
+    }
+    ctx.ck(have90, "J20 level 90 missing from catalog")
+    var hi: Int64 = 0
+    let pitches = [6.0, 5.0]
+    let insets = [0.5, 0.75]
+    while (hi < 2) {
+        let pitch = pitches[hi]
+        let inset = insets[hi]
+        var ci: Int64 = 0
+        while (ci < 4) {
+            let c = cs[ci]
+            let (x0, y0) = (8.0, 8.0)
+            let segs = hatchSegs(x0, y0, c, pitch, inset)
+            ctx.ck(segs.size > 0 && segs.size % 4 == 0,
+                "J20 hatch segs=${segs.size} c=${c} pitch=${pitch}")
+            var fullAx = ArrayList<Float64>()
+            var s: Int64 = 0
+            while (s + 3 < segs.size) {
+                let ax = segs[s]
+                let ay = segs[s + 1]
+                let bx = segs[s + 2]
+                let by = segs[s + 3]
+                ctx.ck(ax >= x0 + inset - 1e-9 && bx <= x0 + c - inset + 1e-9
+                    && ay >= y0 + inset - 1e-9 && ay <= y0 + c - inset + 1e-9
+                    && by >= y0 + inset - 1e-9 && by <= y0 + c - inset + 1e-9,
+                    "J20 hatch out of cell c=${c} seg=(${ax},${ay})-(${bx},${by})")
+                ctx.ck(absF(absF(bx - ax) - absF(by - ay)) < 1e-9,
+                    "J20 hatch not 45deg c=${c} dx=${bx - ax} dy=${by - ay}")
+                ctx.ck(ax < bx && ay > by, "J20 hatch a not lower-left c=${c} seg=(${ax},${ay})-(${bx},${by})")
+                if (absF(ay - (y0 + c - inset)) < 1e-9) {
+                    fullAx.add(ax)
+                }
+                s = s + 4
+            }
+            ctx.ck(fullAx.size >= 2, "J20 hatch full lines=${fullAx.size} want>=2 c=${c} pitch=${pitch}")
+            var f: Int64 = 1
+            while (f < fullAx.size) {
+                ctx.ck(absF(fullAx.get(f).getOrThrow() - fullAx.get(f - 1).getOrThrow() - pitch) < 1e-6,
+                    "J20 hatch pitch=${fullAx.get(f).getOrThrow() - fullAx.get(f - 1).getOrThrow()} want=${pitch} c=${c}")
+                f = f + 1
+            }
+            ci = ci + 1
+        }
+        hi = hi + 1
+    }
+    match (lv90) {
+        case Some(lv) =>
+            /* (d 续) level 90 空载/负重斜纹色与宽;under 层全部 M 开头;
+               禁区格填色/边随载态切换,非禁区格不变。 */
+            let g = PatrolGame(lv)
+            /* 禁区格取自 lv.burden.forbidden(JSON rc=[行,列] → Cell(x=列,y=行)) */
+            var fb0 = Cell(0, 0)
+            var fb1 = Cell(0, 0)
+            match (lv.burden) {
+                case Some(b) =>
+                    if (b.forbidden.size >= 1) {
+                        fb0 = b.forbidden.get(0).getOrThrow()
+                    }
+                    if (b.forbidden.size >= 2) {
+                        fb1 = b.forbidden.get(1).getOrThrow()
+                    }
+                case None => ()
+            }
+            let under0 = buildBoardMechUnder(g, g43, 3.0)
+            var hatch0 = false
+            for (p in under0) {
+                ctx.ck(startsWithM(p.commands), "J20 under cmds not M: '${p.commands}'")
+                if (p.color == Theme.paperLine && absF(p.strokeW - 1.0) < 1e-9) {
+                    hatch0 = true
+                }
+            }
+            ctx.ck(hatch0, "J20 unladen hatch(paperLine,1.0) missing")
+            ctx.ck(mechCellFill(g, fb0.x, fb0.y, Theme.whitePaper) == Theme.whitePaper
+                && mechCellFill(g, fb1.x, fb1.y, Theme.whitePaper) == Theme.whitePaper,
+                "J20 unladen forbidden fill!=base")
+            ctx.ck(mechCellStroke(g, fb0.x, fb0.y) == Theme.paperLine, "J20 unladen forbidden stroke!=paperLine")
+            ctx.ck(absF(mechCellStrokeW(g, fb0.x, fb0.y) - 1.0) < 1e-9, "J20 unladen forbidden strokeW!=1")
+            ctx.ck(mechCellFill(g, 0, 0, Theme.whitePaper) == Theme.whitePaper,
+                "J20 unladen normal fill changed")
+            g.laden = true
+            let under1 = buildBoardMechUnder(g, g43, 3.0)
+            var hatch1 = false
+            for (p in under1) {
+                ctx.ck(startsWithM(p.commands), "J20 laden under cmds not M")
+                if (p.color == Theme.inkMuted && absF(p.strokeW - 1.5) < 1e-9) {
+                    hatch1 = true
+                }
+            }
+            ctx.ck(hatch1, "J20 laden hatch(inkMuted,1.5) missing")
+            ctx.ck(mechCellFill(g, fb0.x, fb0.y, Theme.whitePaper) == Theme.paperShade
+                && mechCellFill(g, fb1.x, fb1.y, Theme.whitePaper) == Theme.paperShade,
+                "J20 laden forbidden fill!=paperShade")
+            ctx.ck(mechCellStroke(g, fb0.x, fb0.y) == Theme.inkMuted, "J20 laden forbidden stroke!=inkMuted")
+            ctx.ck(absF(mechCellStrokeW(g, fb0.x, fb0.y) - 1.0) < 1e-9, "J20 laden forbidden strokeW!=1")
+            ctx.ck(mechCellFill(g, 0, 0, Theme.whitePaper) == Theme.whitePaper,
+                "J20 laden normal fill changed")
+            /* (f) 徽章:负重态比空载多 4 个 path,末 4 个=[圆(whitePaper/ink/1.0),袋×3],
+               末个 strokeW==0.5*1.4;圆心=头格 (+10,-10)。 */
+            let gb = PatrolGame(lv)
+            ctx.ck(gb.tryStep(Cell(6, 6)), "J20 id=90 tryStep(6,6) start rejected")
+            let p0 = buildBoardMechPaths(gb, g43, 3.0)
+            gb.laden = true
+            let p1 = buildBoardMechPaths(gb, g43, 3.0)
+            ctx.ck(p1.size - p0.size == 4, "J20 badge delta=${p1.size - p0.size} want=4 (n0=${p0.size})")
+            if (p1.size >= 4) {
+                let circ = p1.get(p1.size - 4).getOrThrow()
+                ctx.ck(circ.color == Theme.whitePaper && circ.stroke == Theme.ink
+                    && absF(circ.strokeW - 1.0) < 1e-9,
+                    "J20 badge circle color/stroke/w=${circ.color}/${circ.stroke}/${circ.strokeW}")
+                ctx.ck(circ.commands == circlePathCmds(g43.centerX(6) + 10.0, g43.centerY(6) - 10.0, 7.5, 3.0),
+                    "J20 badge circle center cmds mismatch")
+                let last = p1.get(p1.size - 1).getOrThrow()
+                ctx.ck(last.stroke == Theme.ink && absF(last.strokeW - 0.5 * 1.4) < 1e-9,
+                    "J20 badge bag stroke/w=${last.stroke}/${last.strokeW} want ink/${0.5 * 1.4}")
+            }
+            /* (e) 触发格缺角:x/y 最大偏移 ==8k(1e-9),顶点在 [0,c] 内,斜边不共线。 */
+            var ei: Int64 = 0
+            while (ei < 4) {
+                let c = cs[ei]
+                let kk = skinK(c)
+                let np = collapseNotchPts(0.0, 0.0, c)
+                ctx.ck(np.size == 14, "J20 notch size=${np.size} want=14 (7 verts)")
+                var mAx = 0.0
+                var mAy = 0.0
+                var ok = true
+                var vi: Int64 = 0
+                while (vi < 7) {
+                    if (np[vi * 2] > mAx) {
+                        mAx = np[vi * 2]
+                    }
+                    if (np[vi * 2 + 1] > mAy) {
+                        mAy = np[vi * 2 + 1]
+                    }
+                    if (np[vi * 2] < 0.0 || np[vi * 2] > c || np[vi * 2 + 1] < 0.0 || np[vi * 2 + 1] > c) {
+                        ok = false
+                    }
+                    vi = vi + 1
+                }
+                ctx.ck(absF(mAx - 8.0 * kk) < 1e-9, "J20 notch maxX=${mAx} want=${8.0 * kk} c=${c}")
+                ctx.ck(absF(mAy - 8.0 * kk) < 1e-9, "J20 notch maxY=${mAy} want=${8.0 * kk} c=${c}")
+                ctx.ck(ok, "J20 notch verts out of [0,${c}] c=${c}")
+                /* 斜边第 2..6 点(p1,p2,p3)叉积 */
+                let v1x = np[2] - np[4]
+                let v1y = np[3] - np[5]
+                let v2x = np[6] - np[4]
+                let v2y = np[7] - np[5]
+                ctx.ck(absF(v1x * v2y - v1y * v2x) > 1e-6, "J20 notch hypotenuse collinear c=${c}")
+                ei = ei + 1
+            }
+        case None => ()
+    }
+    /* (g) 顶栏 chip 排居中:左右边距相等(1e-9)、相邻间距 ==8、加第三 chip 后左移
+       重新居中;「负重」chip 宽 = 32+15*2+12 == 74。 */
+    let w2 = [84.0, 90.0]
+    let o2 = chipRowOffsets(320.0, w2, 8.0)
+    ctx.ck(o2.size == 2, "J20 chips2 n=${o2.size} want=2")
+    let lm2 = o2.get(0).getOrThrow()
+    let rm2 = 320.0 - (o2.get(1).getOrThrow() + w2[1])
+    ctx.ck(absF(lm2 - rm2) < 1e-9, "J20 chips2 margins l=${lm2} r=${rm2}")
+    ctx.ck(absF((o2.get(1).getOrThrow() - o2.get(0).getOrThrow()) - (w2[0] + 8.0)) < 1e-9,
+        "J20 chips2 gap=${o2.get(1).getOrThrow() - o2.get(0).getOrThrow() - w2[0]} want=8")
+    let w3 = [84.0, 90.0, 74.0]
+    let o3 = chipRowOffsets(320.0, w3, 8.0)
+    ctx.ck(o3.size == 3, "J20 chips3 n=${o3.size} want=3")
+    let lm3 = o3.get(0).getOrThrow()
+    let rm3 = 320.0 - (o3.get(2).getOrThrow() + w3[2])
+    ctx.ck(absF(lm3 - rm3) < 1e-9, "J20 chips3 margins l=${lm3} r=${rm3}")
+    ctx.ck(lm3 < lm2, "J20 chips3 left margin ${lm3} not smaller than ${lm2}")
+    ctx.ck(absF((o3.get(1).getOrThrow() - o3.get(0).getOrThrow()) - (w3[0] + 8.0)) < 1e-9
+        && absF((o3.get(2).getOrThrow() - o3.get(1).getOrThrow()) - (w3[1] + 8.0)) < 1e-9,
+        "J20 chips3 gaps !=8")
+    ctx.ck(absF((32.0 + 15.0 * 2.0 + 12.0) - 74.0) < 1e-9, "J20 burden chip w=${32.0 + 15.0 * 2.0 + 12.0} want=74")
+}
+
 main(args: Array<String>): Int64 {
     if (args.size < 2) {
         println("usage: main <levels.json> <inputs.txt>")
@@ -879,6 +1383,8 @@ main(args: Array<String>): Int64 {
     j13RejectGateTests(levels, ctx)
     /* J14 定向几何/滑行检查。 */
     j14SlideGeomTests(levels, ctx)
+    /* J20 塌桥/负重皮肤几何检查。 */
+    j20SkinGeomTests(levels, ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("SELFTEST levels=${ctx.levels} steps=${ctx.steps} checks=${ctx.checks} rejects=[${sb.toString()}] failures=${ctx.failures.size}")
     println("DIRECTED flash=${dStat.flash} noflash=${dStat.noflash} failures=${dStat.fails}")

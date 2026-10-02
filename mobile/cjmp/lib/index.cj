@@ -49,6 +49,7 @@ class EntryView {
     @State var rejectToX: Int64 = 0
     @State var rejectToY: Int64 = 0
     var rejectPlace: ToastPlacement = ToastPlacement(0.0, 0.0, false, 0, 0.0)
+    var rejectToastW: Float64 = 86.0
     // J13: 本次拒绝是否为单向门拒绝(改画官方 reject PNG 而非朱红 Line)
     var rejectOneWay: Bool = false
     @State var winW: Float64 = 360.0
@@ -68,6 +69,7 @@ class EntryView {
     @State var boardNextLabels: Array<BoardLabel> = Array<BoardLabel>()
     @State var boardDigits: Array<BoardPath> = Array<BoardPath>()
     @State var boardGates: Array<BoardImg> = Array<BoardImg>()
+    @State var boardUnder: Array<BoardPath> = Array<BoardPath>()
     var obstacleNextCnt: Int64 = 0
 
     func homeMarkFontVp(): Float64 { return 12.0 / this.getPxFactor() }
@@ -201,7 +203,8 @@ class EntryView {
     }
 
     func showReject(): Unit {
-        let txt = parityToastText(this.game)
+        let txt = mechToastText(this.game)
+        this.rejectToastW = mechToastWidth(txt)
         this.parityRejectText = txt
         this.parityRejectFlash = true
         if (txt.size > 0) {
@@ -356,7 +359,7 @@ class EntryView {
 
     func rejectPlacement(): ToastPlacement {
         let (midX, midY) = this.rejectEdgeMid()
-        return toastPlace(Float64(this.boardW()), Float64(this.boardH()), midX, midY, this.collectToastObstacles())
+        return toastPlaceW(Float64(this.boardW()), Float64(this.boardH()), midX, midY, this.collectToastObstacles(), this.rejectToastW)
     }
 
     func rejectToastX(): Float64 {
@@ -377,6 +380,10 @@ class EntryView {
 
     func ladenNow(): Bool {
         return this.tick >= 0 && this.game.laden
+    }
+
+    func chipBagPaths(): Array<BoardPath> {
+        return bagPaths(16.0, 14.5, 0.62, false, this.getPxFactor())
     }
 
     func stepChipLabel(): String {
@@ -435,6 +442,7 @@ class EntryView {
         let tmpNextLabels = concatArr(nextOnly, buildBoardMechLabels(this.game, geom))
         let tmpDigits = concatArr(buildBoardDigits(this.game, geom, factor), buildBoardMechPaths(this.game, geom, factor))
         let tmpGates = buildBoardGates(this.game, geom)
+        let tmpUnder = buildBoardMechUnder(this.game, geom, factor)
         this.lastBuildUs = (MonoTime.now() - tBuild0).toMicroseconds()
 
         let tAssign0 = MonoTime.now()
@@ -447,6 +455,7 @@ class EntryView {
         this.boardNextLabels = tmpNextLabels
         this.boardDigits = tmpDigits
         this.boardGates = tmpGates
+        this.boardUnder = tmpUnder
         this.lastAssignUs = (MonoTime.now() - tAssign0).toMicroseconds()
     }
 
@@ -1548,17 +1557,6 @@ class EntryView {
                         // A2: 48vp hit area — in-page back: iOS edge swipe does not pop on Keels 0.2.2
                         this.backButton({ => this.leaveBoard() }, true)
                         Blank()
-                        Text("负重")
-                            .fontSize(12)
-                            .fontColor(if (this.ladenNow()) { Theme.whitePaper } else { Theme.ink })
-                            .fontFamily(this.sansFamily())
-                            .padding(left: 8, right: 8)
-                            .height(24)
-                            .borderRadius(4)
-                            .border(width: 1, color: Theme.qingDeep)
-                            .backgroundColor(if (this.ladenNow()) { Theme.qingDeep } else { Theme.whitePaper })
-                            .textAlign(TextAlign.Center)
-                            .visibility(if (this.hasBurden()) { Visibility.Visible } else { Visibility.None })
                     }
                     .width(100.percent)
                     .height(48)
@@ -1574,7 +1572,7 @@ class EntryView {
                     .backgroundColor(Theme.paperLine)
                     .margin(left: 20, right: 20)
 
-                if (this.hasParityBoard() || this.curLevel().stepLimit > 0) {
+                if (this.hasParityBoard() || this.curLevel().stepLimit > 0 || this.hasBurden()) {
                     Row(space: 8) {
                         if (this.hasParityBoard()) {
                             Text(this.stepChipLabel())
@@ -1599,6 +1597,38 @@ class EntryView {
                                 .borderRadius(4)
                                 .border(width: this.stepLeftBorderW(), color: this.stepLeftBorderColor())
                                 .backgroundColor(Theme.whitePaper)
+                        }
+                        if (this.hasBurden() && this.ladenNow()) {
+                            Row {
+                                Stack(alignContent: Alignment.TopStart) {
+                                    ForEach(
+                                        this.chipBagPaths(),
+                                        itemGenerator: { item: BoardPath, idx: Int64 =>
+                                            Path(width: 32.0, height: 28.0, commands: item.commands)
+                                                .fill(item.color)
+                                                .fillOpacity(item.fillOp)
+                                                .stroke(item.stroke)
+                                                .strokeWidth(item.strokeW)
+                                                .strokeLineCap(LineCapStyle.Round)
+                                                .strokeLineJoin(LineJoinStyle.Round)
+                                                .antiAlias(true)
+                                                .position(x: 0, y: 0)
+                                        },
+                                        keyGeneratorFunc: { item: BoardPath, idx: Int64 => "${idx}-${item.color}-${item.commands}" }
+                                    )
+                                }.width(32).height(28)
+                                Text("负重")
+                                    .fontSize(15)
+                                    .fontWeight(FontWeight.Bold)
+                                    .fontColor(Theme.ink)
+                                    .fontFamily(this.serifBoldFamily())
+                                    .padding(right: 12)
+                                    .height(28)
+                            }
+                            .height(28)
+                            .borderRadius(4)
+                            .border(width: 1, color: Theme.paperLine)
+                            .backgroundColor(Theme.whitePaper)
                         }
                     }
                     .justifyContent(FlexAlign.Center)
@@ -1654,7 +1684,7 @@ class EntryView {
                 }
                 .width(100.percent)
                 .height(Theme.bandH)
-                .margin(top: if (this.hasParityBoard() || this.curLevel().stepLimit > 0) { 0 } else { 4 }, bottom: Theme.bandClear)
+                .margin(top: if (this.hasParityBoard() || this.curLevel().stepLimit > 0 || this.hasBurden()) { 0 } else { 4 }, bottom: Theme.bandClear)
                 Scroll {
                     Column {
                         Stack(alignContent: Alignment.TopStart) {
@@ -1673,6 +1703,25 @@ class EntryView {
                                 // Keels 0.2.2: ForEach key label is keyGeneratorFunc (macro passes it to forEachUpdateFunction)
                                 keyGeneratorFunc: { item: BoardRect, idx: Int64 =>
                                     "${idx}-${item.x}-${item.y}-${item.color}-${item.stroke}"
+                                }
+                            )
+
+                            // Layer 2: P4 skin under-layer (hatch / bridge / notch / grain bags), Path only
+                            ForEach(
+                                this.boardUnder,
+                                itemGenerator: { item: BoardPath, idx: Int64 =>
+                                    Path(width: this.boardW(), height: this.boardH(), commands: item.commands)
+                                        .fill(item.color)
+                                        .fillOpacity(item.fillOp)
+                                        .stroke(item.stroke)
+                                        .strokeWidth(item.strokeW)
+                                        .strokeLineCap(LineCapStyle.Round)
+                                        .strokeLineJoin(LineJoinStyle.Round)
+                                        .antiAlias(true)
+                                        .position(x: 0, y: 0)
+                                },
+                                keyGeneratorFunc: { item: BoardPath, idx: Int64 =>
+                                    "${idx}-${item.color}-${item.commands}-${item.stroke}-${item.fillOp}"
                                 }
                             )
 
@@ -1840,7 +1889,7 @@ class EntryView {
                                         .fontFamily(this.serifBoldFamily())
                                         .fontColor(Theme.vermillion)
                                         .maxLines(1)
-                                        .width(86)
+                                        .width(this.rejectToastW)
                                         .height(28)
                                         .textAlign(TextAlign.Center)
                                         .padding(left: 14, right: 14)
