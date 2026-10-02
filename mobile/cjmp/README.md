@@ -79,6 +79,34 @@ SVG 图标（`icon-undo`、`icon-reset`）与字体的同步行为不变。
 
 ## 字体许可
 
-字体基于 Noto Serif SC 与 Noto Sans SC (variable, google/fonts ofl/notosanssc @ a85815a, instanced 400/500, subset 346 chars by design)，遵循 SIL Open Font License 1.1 开源协议。详情请参阅 `fonts/OFL.txt`。
-- **YiluSerif**: Noto Serif SC 子集。
-- **YiluSans**: Noto Sans SC 400/500 子集，由设计交付，sha256: 37976c86df12 (design check_glyphs.py, vendored unchanged)。
+字体基于 Noto Serif SC 与 Noto Sans SC，遵循 SIL Open Font License 1.1 开源协议。详情请参阅 `fonts/OFL.txt`。
+- **YiluSerif**（Regular / Bold，CFF OTF）：Noto Serif SC 子集。
+- **YiluSans**（Regular 400 / Medium 500，TrueType）：Noto Sans SC 可变字体实例化 400/500 后的子集，沿用设计交付的做法（`check_glyphs.py` 为设计交付件原样 vendored，sha256: 37976c86df12）。
+
+### 字体子集化（可复现）
+
+脚本：`scripts/subset_yilu_fonts.py`（仅依赖 Python 3 + fontTools，已用 fontTools 4.66 验证）。字表即事实来源：`fonts/yilu_serif_chars.txt`（369 字）与 `fonts/yilu_sans_chars.txt`（359 字）；`fonts/charset.txt` 与 serif 字表相同。`check_fonts.py` 另行生成 `charset_serif.txt` / `charset_sans.txt`（运行所需字符，仅供参考）。
+
+官方源文件（sha256 已在脚本中固定，下载后校验，不符即中止）：
+
+| 源 | URL | sha256 |
+|---|---|---|
+| NotoSansSC[wght].ttf（google/fonts `ofl/notosanssc` @ a85815a，v2.004-H2） | https://github.com/google/fonts/raw/a85815a42757630ce188fdad368c2dfc444d4773/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf | a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da |
+| Sans OFL.txt | https://raw.githubusercontent.com/google/fonts/a85815a42757630ce188fdad368c2dfc444d4773/ofl/notosanssc/OFL.txt | 1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9 |
+| NotoSerifSC-Regular.otf（notofonts/noto-cjk `Serif/SubsetOTF/SC` @ f8d1575，v2.003） | https://github.com/notofonts/noto-cjk/raw/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Serif/SubsetOTF/SC/NotoSerifSC-Regular.otf | e8f396decc1f0963a016a989c3d8852e863d1350996f573860a80767c83a1cd3 |
+| NotoSerifSC-Bold.otf（同上） | https://github.com/notofonts/noto-cjk/raw/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Serif/SubsetOTF/SC/NotoSerifSC-Bold.otf | 24693d48bdb9152f0a06b02af625638a1097abd6de4010ebba027f6e82710527 |
+| Serif LICENSE（SIL OFL 1.1） | https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Serif/LICENSE | 6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2 |
+
+命令（在仓库根目录）：
+
+```
+python3 mobile/cjmp/scripts/subset_yilu_fonts.py fetch  --src-dir /tmp/yilu-font-src
+python3 mobile/cjmp/scripts/subset_yilu_fonts.py build  --src-dir /tmp/yilu-font-src   # 实例化 + 子集化，改写 fonts/ 下四个字体与字表
+python3 mobile/cjmp/scripts/subset_yilu_fonts.py verify --old-dir <旧字体目录> [--json report.json]   # 逐字形对比旧/新子集
+```
+
+等价的 pyftsubset 参数——Sans（先用 `fontTools.varLib.instancer` 取 wght=400/500，得到的静态字体与设计交付时的中间件逐字节一致）：`--text-file=fonts/yilu_sans_chars.txt --no-hinting --desubroutinize --layout-features='*' --name-IDs='*' --notdef-outline --glyph-names=false`；Serif：`--text-file=fonts/yilu_serif_chars.txt --no-hinting --glyph-names=false`。
+
+字表在保留原有全部字符的基础上新增 13 个字：`甲乙符滑渡负塌泽停闸门禁此`（YiluSerif 与 YiluSans 均已收录；`此` 原本已在 YiluSerif 中，故 YiluSerif 实际新增 12 字、YiluSans 新增 13 字）。`verify` 结果：原有字符（serif 357、sans 346）的字形轮廓与横/纵向 advance 与旧子集逐字一致（0 差异），OpenType 特性标签不变。以后增字只需在字表文件中追加字符后重跑 `build`。
+
+字体大小（字节）：YiluSerif-Regular 89780→93508，YiluSerif-Bold 89336→93132，YiluSans-Regular 134796→138048，YiluSans-Medium 134732→137984。

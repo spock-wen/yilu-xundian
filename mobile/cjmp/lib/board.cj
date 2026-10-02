@@ -16,13 +16,17 @@ public struct BoardRect {
     public let w: Float64
     public let h: Float64
     public let color: Int64
+    public let stroke: Int64
+    public let strokeW: Float64
 
-    public init(x: Float64, y: Float64, w: Float64, h: Float64, color: Int64) {
+    public init(x: Float64, y: Float64, w: Float64, h: Float64, color: Int64, stroke!: Int64 = Theme.paperLine, strokeW!: Float64 = 1.0) {
         this.x = x
         this.y = y
         this.w = w
         this.h = h
         this.color = color
+        this.stroke = stroke
+        this.strokeW = strokeW
     }
 }
 
@@ -88,11 +92,31 @@ public struct BoardPath {
     public let commands: String
     public let color: Int64
     public let strokeW: Float64
+    public let stroke: Int64
+    public let fillOp: Float64
 
-    public init(commands: String, color: Int64, strokeW: Float64) {
+    public init(commands: String, color: Int64, strokeW: Float64, stroke!: Int64 = -1, fillOp!: Float64 = 1.0) {
         this.commands = commands
         this.color = color
         this.strokeW = strokeW
+        this.stroke = if (stroke < 0) { color } else { stroke }
+        this.fillOp = fillOp
+    }
+}
+
+public struct BoardImg {
+    public let x: Float64
+    public let y: Float64
+    public let w: Float64
+    public let h: Float64
+    public let vertical: Bool
+
+    public init(x: Float64, y: Float64, w: Float64, h: Float64, vertical: Bool) {
+        this.x = x
+        this.y = y
+        this.w = w
+        this.h = h
+        this.vertical = vertical
     }
 }
 
@@ -212,12 +236,11 @@ public func buildBoardCells(game: PatrolGame, geom: BoardGeom): Array<BoardRect>
         var x: Int64 = 0
         while (x < cols) {
             let cell = Cell(x, y)
-            let color = if (game.path.contains(cell)) {
-                Theme.paperShade
-            } else {
-                Theme.whitePaper
-            }
-            list.add(BoardRect(geom.cellX(x), geom.cellY(y), cs, cs, color))
+            let base = if (game.path.contains(cell)) { Theme.paperShade } else { Theme.whitePaper }
+            let color = mechCellFill(game, x, y, base)
+            let st = mechCellStroke(game, x, y)
+            let sw = mechCellStrokeW(game, x, y)
+            list.add(BoardRect(geom.cellX(x), geom.cellY(y), cs, cs, color, stroke: st, strokeW: sw))
             x = x + 1
         }
         y = y + 1
@@ -269,11 +292,17 @@ public func buildBoardRoute(game: PatrolGame, geom: BoardGeom): Array<BoardSeg> 
         while (i + 1 < sz) {
             let c1 = game.path.at(i)
             let c2 = game.path.at(i + 1)
-            let x1 = geom.centerX(c1.x)
-            let y1 = geom.centerY(c1.y)
-            let x2 = geom.centerX(c2.x)
-            let y2 = geom.centerY(c2.y)
-            list.add(BoardSeg(x1, y1, x2, y2, Theme.path, Theme.pathStroke))
+            let adx = c1.x - c2.x
+            let ady = c1.y - c2.y
+            let ax = if (adx < 0) { -adx } else { adx }
+            let ay = if (ady < 0) { -ady } else { ady }
+            if (ax + ay == 1) {
+                let x1 = geom.centerX(c1.x)
+                let y1 = geom.centerY(c1.y)
+                let x2 = geom.centerX(c2.x)
+                let y2 = geom.centerY(c2.y)
+                list.add(BoardSeg(x1, y1, x2, y2, Theme.path, Theme.pathStroke))
+            }
             i = i + 1
         }
     }
@@ -284,10 +313,14 @@ public func buildBoardHeadDot(game: PatrolGame, geom: BoardGeom): Array<BoardDot
     let list = ArrayList<BoardDot>()
     let sz = game.path.size()
     if (sz >= 1) {
-        let last = game.path.at(sz - 1)
-        let hx = geom.centerX(last.x)
-        let hy = geom.centerY(last.y)
-        list.add(BoardDot(hx, hy, 6.0, Theme.whitePaper, Theme.ink, Theme.hairline, true))
+        /* J14:头格是滑行「停」末格时不画自己的点,由 buildBoardMechPaths
+           的「停」环 fill-only 路径代替(环也是头点,ruling §4)。 */
+        if (!isSlideStopIndex(game, sz - 1)) {
+            let last = game.path.at(sz - 1)
+            let hx = geom.centerX(last.x)
+            let hy = geom.centerY(last.y)
+            list.add(BoardDot(hx, hy, 6.0, Theme.whitePaper, Theme.ink, Theme.hairline, true))
+        }
     }
     return list.toArray()
 }
@@ -397,4 +430,13 @@ public func buildBoardDigits(game: PatrolGame, geom: BoardGeom, pxPerVp: Float64
         }
     }
     return list.toArray()
+}
+
+public func concatArr<T>(a: Array<T>, b: Array<T>): Array<T> {
+    if (b.size == 0) { return a }
+    if (a.size == 0) { return b }
+    let l = ArrayList<T>()
+    for (x in a) { l.add(x) }
+    for (x in b) { l.add(x) }
+    return l.toArray()
 }

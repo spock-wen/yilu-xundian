@@ -1,9 +1,32 @@
 #!/usr/bin/env python3
-"""Lock the shared v1 board to levels.json id 1 and keep ohos imports out of mobile/shared."""
+"""Lock the shared v1 board to levels.json id 1 and keep ohos imports out of mobile/shared.
+
+Checks, in order:
+  1. mobile/shared/levels/levels.json is byte-identical to entry levels.json;
+  2. 100 levels with ids 0..99;
+  3. id 1 (涿郡·范阳) pure-Zip shape + copies (mobile/ios/android) match id 1;
+  4. no ohos/ArkUI imports under mobile/shared;
+  5. solver gate (default ON):
+       - `tools/solve_levels.py --limit 2 --timeout 60` (cwd=ROOT). Exit codes:
+         0 pass / 1 UNSOLVABLE (a level proven unsolvable -> fail) /
+         2 data error -> fail / 3 TIMEOUT, unverified -> NOT a pass -> fail.
+       - `tools/replay_locked_paths.py`; any non-zero exit -> fail.
+     Skip with `--skip-solve` argv flag or SKIP_SOLVE=1 env var (prints a
+     loud "SKIPPED solver gate" warning; skipping is for fast local runs only).
+"""
 
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
+
+# Meaning of tools/solve_levels.py strict-gate exit codes.
+SOLVE_EXIT_MEANING = {
+    1: "1 UNSOLVABLE (有不可解关)",
+    2: "2 数据错误 (data error)",
+    3: "3 TIMEOUT 未验证 (timeout, unverified — not a pass)",
+}
 
 ROOT = Path(__file__).resolve().parents[2]
 LEVELS = ROOT / "entry/src/main/resources/rawfile/levels.json"
@@ -16,7 +39,34 @@ SHARED_LEVELS = ROOT / "mobile/shared/levels/levels.json"
 SHARED = ROOT / "mobile/shared"
 
 
+def solver_gate() -> int:
+    """Run solve_levels.py then replay_locked_paths.py. 0 = pass."""
+    print("gate: tools/solve_levels.py --limit 2 --timeout 60")
+    proc = subprocess.run(
+        [sys.executable, "tools/solve_levels.py", "--limit", "2", "--timeout", "60"],
+        cwd=ROOT,
+    )
+    if proc.returncode != 0:
+        meaning = SOLVE_EXIT_MEANING.get(proc.returncode, "unknown exit code")
+        print(
+            f"FAIL: solver gate exit {meaning} — TIMEOUT 未验证不算通过, "
+            f"UNSOLVABLE/数据错误不许发布",
+            file=sys.stderr,
+        )
+        return 1
+    print("ok solve_levels.py (all 100 levels solved within timeout)")
+
+    print("gate: tools/replay_locked_paths.py")
+    proc = subprocess.run([sys.executable, "tools/replay_locked_paths.py"], cwd=ROOT)
+    if proc.returncode != 0:
+        print(f"FAIL: replay_locked_paths.py exit {proc.returncode}", file=sys.stderr)
+        return 1
+    print("ok replay_locked_paths.py")
+    return 0
+
+
 def main() -> int:
+    skip_solve = "--skip-solve" in sys.argv[1:] or os.environ.get("SKIP_SOLVE", "") not in ("", "0")
     if not SHARED_LEVELS.exists():
         print(f"FAIL: {SHARED_LEVELS.relative_to(ROOT)} does not exist", file=sys.stderr)
         return 1
@@ -58,6 +108,15 @@ def main() -> int:
                 print(f"FAIL: {path.relative_to(ROOT)} contains {token}", file=sys.stderr)
                 return 1
     print("ok mobile/shared has no ohos/ArkUI imports")
+
+    if skip_solve:
+        print("=" * 64)
+        print("!! WARNING: SKIPPED solver gate (--skip-solve / SKIP_SOLVE set)")
+        print("!! WARNING: SKIPPED solver gate — run it before shipping!")
+        print("=" * 64)
+    elif solver_gate() != 0:
+        print("FAIL: solver gate", file=sys.stderr)
+        return 1
     print("PASS: check_level")
     return 0
 

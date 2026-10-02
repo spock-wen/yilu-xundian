@@ -45,3 +45,118 @@ iOS 用已提交的 `cjpm.toml`（`output-type = "static"`）。Android 脚本�
 ## 为什么是拷贝而不是和 `entry/` 共用文件
 
 鸿蒙包名绑在 DevEco 模块上。这份必须能用 iOS SDK / Android SDK 的 `cjpm` 编，不能带 ohos target。
+
+## 机制扩展 API（给 CJMP UI 用，Phase 2a–2c）
+
+### 与上文的差异
+
+- 上文各表是抽取时的快照，只描述基础 Zip 规则；机制扩展直接写进 `level.cj` / `patrol.cj` 内部，不新增共用源文件行，上文「共用 7 个文件」清单仍为真。
+- 上文「拖回上一格撤销」在机制关扩展为「拖回整个输入单元」（见 §4）；鸿蒙 `entry/` 拷贝没有这些机制代码。
+- 新增独立测试模块 `mobile/shared-test`，不在上文任何表格里。
+
+### 1. 范围与不变量
+
+| 项 | 说明 |
+| --- | --- |
+| 无机制关逐位一致 | `levels.json` 共 100 关，其中 67 关无机制键，行为与旧版逐位一致（回放测试覆盖） |
+| JSON 形状 | 机制键 snake_case：`ferry` / `one_ways` / `slide_cells` / `seal_gates` / `token_cells` / `collapse` / `burden`；坐标 `[r,c]`，解析器 `readRcPair` 转为 `x=c, y=r` |
+| 缺省 | 键缺失或 `null` = 无机制，`LevelDef` 字段默认值即空列表 / `None` |
+| 不在范围 | 鸿蒙 `entry/`、iOS / Android 壳文件不改 |
+| 测试 | 独立模块 `mobile/shared-test`（`cd mobile/shared-test && cjpm test`）；不在 `mobile/shared/src` 下，故不被 `sync_to_keels.sh` 复制，也不进 iOS / Android 构建 |
+
+### 2. `LevelDef` 新增
+
+机制成员（`init` 签名不变，加载后按成员赋值）：
+
+| 成员 | 类型 | 字段 |
+| --- | --- | --- |
+| `ferry` | `Option<FerryDef>` | `jiaX, jiaY, yiX, yiY`（甲 / 乙，引擎坐标） |
+| `oneWays` | `ArrayList<OneWay>` | `fromX, fromY, toX, toY`（只放行 from → to） |
+| `slideCells` | `ArrayList<Cell>` | 泽地格集合 |
+| `sealGates` | `ArrayList<SealGate>` | `x1, y1, x2, y2`（无向；`locked_until_token` 恒真，故不存该字段） |
+| `tokenCells` | `ArrayList<Cell>` | 符节格集合 |
+| `collapse` | `Option<CollapseDef>` | `triggerX, triggerY, x1, y1, x2, y2`（触发格 + 塌边） |
+| `burden` | `Option<BurdenDef>` | `forbidden: ArrayList<Cell>`、`loadX, loadY, unloadX, unloadY`、`startLaden: Bool` |
+
+便捷方法：
+
+| 签名 | 语义 |
+| --- | --- |
+| `hasMechanics(): Bool` | 任一机制键存在 |
+| `isTokenCell(x: Int64, y: Int64): Bool` | 是否符节格 |
+| `isForbiddenCell(x: Int64, y: Int64): Bool` | burden 禁区格（无 burden 恒假） |
+| `oneWayConstrains(a: Cell, b: Cell): Bool` | 该邻边受某条单向约束（无向匹配） |
+| `oneWayAllows(from: Cell, to: Cell): Bool` | 正向 from → to 放行 |
+| `gateAt(a: Cell, b: Cell): Bool` | 该邻边为符节闸（无向匹配） |
+
+### 3. `PatrolGame` 新增公共成员
+
+运行状态（每次成功 `tryStep` 前快照进 `UnitSnap`，undo 时恢复）：
+
+| 成员 | 类型 | 含义 |
+| --- | --- | --- |
+| `hasToken` | `Bool` | 已得符；整段落完才置真，同段内过闸仍用入口值 |
+| `laden` | `Bool` | 负重载态；初始 = `burden.start_laden`（无 burden 为 false） |
+| `collapseDown` | `Bool` | 踏触发格后置真，只置真不回退，由 undo 快照 / clear / reset 复位 |
+| `lastReject` | `Int64` | 最近一次拒绝码（0 = 无） |
+| `lastRejectFromX` / `FromY` / `ToX` / `ToY` | `Int64` | 拒绝边两端格坐标，未知为 -1 |
+
+拒绝码常量表（`patrol.cj` 顶层 `REJECT_*`）：
+
+| 值 | 常量 | 含义 |
+| --- | --- | --- |
+| 0 | `REJECT_NONE` | 无拒绝 |
+| 1 | `REJECT_PARITY` | 奇偶边不符（配合 `lastRejectParity`：1 = 需奇步、2 = 需偶步） |
+| 2 | `REJECT_ONE_WAY` | 单向边逆向通过 |
+| 3 | `REJECT_SEALED_GATE` | 无符过闸 |
+| 4 | `REJECT_BURDEN_FORBIDDEN` | 载态进禁区（含渡口乙在禁区） |
+| 5 | `REJECT_WALL` | 墙 / 非邻；**同时用于塌桥封边的占位**（无独立塌桥码） |
+| 6 | `REJECT_VISITED` | 目标格已铺 |
+| 7 | `REJECT_WAYPOINT` | 段内路标次序不符，或最大号不在整盘最后一格 |
+| 8 | `REJECT_BOUNDS` | 越界 |
+| 9 | `REJECT_FERRY` | 进甲被拒：乙已在 path 里（或乙 == 甲） |
+| 10 | `REJECT_START` | 首格必须是 1 号 |
+
+其他公共成员：
+
+| 成员 | 说明 |
+| --- | --- |
+| `isEdgeCollapsed(x1, y1, x2, y2): Bool` | 无向查询塌边当前是否已断；UI 可据此画断边（占位用墙样式） |
+| `class UnitSnap` | 字段 `startLen: Int64`、`hasToken: Bool`、`laden: Bool`、`down: Bool`，一次输入前的快照 |
+| `tryStep(cell: Cell): Bool` / `undo(): Bool` / `clear(): Unit` / `reset(level: LevelDef): Unit` | 签名保持不变 |
+
+### 4. 一次输入 = 一个撤销单元
+
+| 项 | 规则 |
+| --- | --- |
+| 单元大小 | 普通格 +1；渡口一次 +2（甲、乙同单元）；滑行一次 +N（整段同单元） |
+| 拖回撤销 | 落在该单元入口前的头格（输入前的头），或落在单元内非头格 → 撤销整个单元 |
+| 落头格 | 落在单元头（末格）不撤销，走 `REJECT_VISITED` 拒绝 |
+| `undo()` | 纯回退，不受单向 / 闸门等通行约束 |
+| `clear()` / `reset()` | 路径与单元清空，`hasToken=false`、`collapseDown=false`、`laden=start_laden` |
+
+给 UI 的提示：
+
+- `path.size()` 一次 `tryStep` 可能增加多格（渡口 +2、滑行 +N）。UI 应在每次 `tryStep` 后用 `game.path` 整体重绘，不要自己按 +1 推算。
+- 滑行落地后，连续 Move 手势里越过滑行末格的下一格是正常新输入，直接再调 `tryStep` 即可。
+
+### 5. 各机制一句话规则
+
+| 机制 | 规则 |
+| --- | --- |
+| 渡口 | 踏甲的那一次输入强制同时铺 `[甲, 乙]`、落点为乙（跳接豁免墙 / 闸 / 奇偶 / 单向 / 塌桥）；乙已在 path（或乙 == 甲）→ `REJECT_FERRY` |
+| 单向门 | 只放行 `from → to`，逆向 → `REJECT_ONE_WAY` |
+| 滑行 | 目标 ∈ `slideCells` 则沿该方向滑到底；越界 / 墙 / 闸 / 奇偶 / 单向 / 禁区 / 已访 / 已入段 / 数字格 / 渡口甲乙 / 非泽地 → 停在前一格（不整段拒绝） |
+| 符节闸 | 无符不过闸；符节在整段落完后才记入 `hasToken`，同段先过闸后得符不算数 |
+| 塌桥 | 踏 `trigger` 触发格后置 `collapseDown`，从下一格起塌边断开 |
+| 负重 | `laden` 时不可进 `forbidden` 禁区格；落 `load` 装粮、落 `unload` 卸粮（同格时后写的卸生效） |
+
+参考实现：`tools/solve_levels.py` 的 `Rules` 类（引擎注释均标了对应行号）。权威来源是设计码 `zip_*.py`，仅作核对参考。
+
+### 6. 已知限制
+
+| 项 | 说明 |
+| --- | --- |
+| `JsonParser` 不解析小数 | `parseNumber` 遇 `.` / `e` / `E` 报 `only integers are accepted`；`levels.json` 全整数，无影响 |
+| `stepLimit` | 存在 `LevelDef` 上，引擎不读、不强制（同上文鸿蒙侧行为） |
+| `isWin` | 不检查「必须用过渡口」——那是设计解的有效性条件；满盘铺满即隐含已用渡口 |

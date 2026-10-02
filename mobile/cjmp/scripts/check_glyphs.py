@@ -20,6 +20,7 @@ DIGITS = "0123456789"
 
 STR_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
 NODE_CALL = re.compile(r"\b(Text|Button)\(")
+LABEL_CALL_RE = re.compile(r"\b(?:BoardLabel|centerLabel)\s*\(")
 MODIFIER = re.compile(r"\.\s*([A-Za-z_]\w*)\s*\(")
 THEME_CONST = re.compile(
     r'(?:static\s+)?(?:const|let)\s+([A-Za-z_]\w*)\s*:\s*String\s*=\s*"([^"]*)"')
@@ -84,6 +85,7 @@ class Corpus:
     def __init__(self, src_root):
         self.root = os.path.abspath(src_root)
         self.cj_files = []
+        self._board_labels = None
         for dirpath, _dirs, files in os.walk(self.root):
             for fn in sorted(files):
                 if fn.endswith(".cj"):
@@ -119,6 +121,26 @@ class Corpus:
                     continue
                 out.update(STR_RE.findall(body))
         return sorted(out)
+
+    def board_label_strings(self):
+        """Plain string literals inside BoardLabel(...)/centerLabel(...) calls —
+        what a ForEach over Array<BoardLabel> renders via Text(item.text) with
+        a sans family (same extraction as check_board_labels.py, which lints
+        these literals separately)."""
+        if self._board_labels is None:
+            out = set()
+            for p in self.cj_files:
+                with open(p, encoding="utf-8") as f:
+                    src = f.read()
+                for m in LABEL_CALL_RE.finditer(src):
+                    try:
+                        body, _ = balanced(src, m.end() - 1, "(", ")")
+                    except Unresolvable:
+                        continue
+                    out.update(lit for lit in STR_RE.findall(body)
+                               if "${" not in lit)
+            self._board_labels = sorted(out)
+        return self._board_labels
 
     def json_level_literals(self):
         out = []
@@ -241,6 +263,14 @@ class Resolver:
         if leaf in ("label", "title", "subtitle", "listSubtitle", "boardSubtitle",
                     "friendLine", "tensionLine", "cityLine"):
             return set(self.c.chapter_strings())
+        if leaf == "text":
+            # ForEach itemGenerator { item: BoardLabel, ... Text(item.text) }:
+            # the strings are the BoardLabel/centerLabel literals in the corpus
+            # (see check_board_labels.py). Empty -> fall through to the usual
+            # func lookup, which keeps the old unresolved-expression failure.
+            labels = self.c.board_label_strings()
+            if labels:
+                return set(labels)
         if leaf == "loadError":
             s = set(self.c.json_level_literals())
             try:
@@ -657,6 +687,39 @@ def self_test():
            "    )\n"
            "}\n")
 
+    # c10: BoardLabel literal with a covered glyph rendered via ForEach
+    # Text(item.text) -> 0
+    sd, cf = _mk_fixture(tmp, "c10_ok")
+    _write(sd, "page.cj",
+           "ForEach(\n"
+           "    this.boardNextLabels,\n"
+           "    itemGenerator: { item: BoardLabel, idx: Int64 =>\n"
+           "        Text(item.text)\n"
+           "            .fontSize(item.size)\n"
+           "            .fontFamily(Theme.sans)\n"
+           "    }\n"
+           ")\n")
+    _write(sd, "board.cj",
+           "func buildBoardNextLabels(): Unit {\n"
+           f"    list.add(BoardLabel(1.0, 2.0, 60.0, 12.0, \"驿{COVERED}\", 1, 12.0))\n"
+           "}\n")
+
+    # c11: BoardLabel literal carries a missing glyph -> 1
+    sd, cf = _mk_fixture(tmp, "c11_missing")
+    _write(sd, "page.cj",
+           "ForEach(\n"
+           "    this.boardNextLabels,\n"
+           "    itemGenerator: { item: BoardLabel, idx: Int64 =>\n"
+           "        Text(item.text)\n"
+           "            .fontSize(item.size)\n"
+           "            .fontFamily(Theme.sans)\n"
+           "    }\n"
+           ")\n")
+    _write(sd, "board.cj",
+           "func buildBoardNextLabels(): Unit {\n"
+           f"    list.add(BoardLabel(1.0, 2.0, 60.0, 12.0, \"驿{MISSING_GLYPH}\", 1, 12.0))\n"
+           "}\n")
+
     # extra: helper returning Theme.serif -> serif node, glyphs not checked -> 0
     sd, cf = _mk_fixture(tmp, "t8_serif")
     _write(sd, "page.cj",
@@ -679,6 +742,8 @@ def self_test():
         ("c5", 1, "literal generic family", False),
         ("c6", 1, "missing", False),
         ("c7", 1, "missing", False),
+        ("c10_ok", 0, "family-wiring", False),
+        ("c11_missing", 1, "missing", False),
         ("t8_serif", 0, None, False),
         ("t9_strict", 2, "family-wiring", True),
     ]
@@ -704,7 +769,7 @@ def self_test():
                 if "no fontFamily -> system font fallback" not in out:
                     good = False
                     detail = " (D2 message absent)"
-            if case_name in ("c1", "c6", "c7"):
+            if case_name in ("c1", "c6", "c7", "c11_missing"):
                 if MISSING_GLYPH not in out:
                     good = False
                     detail = " (missing glyph not reported)"

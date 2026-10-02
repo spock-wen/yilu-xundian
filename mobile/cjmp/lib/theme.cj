@@ -16,6 +16,8 @@ public class Theme {
     public static const locked: Int64 = 0xFFC9BBA6
     public static const success: Int64 = 0xFF5E7A6A
     public static const whitePaper: Int64 = 0xFFFBF6EC
+    /* 泽地(滑行)填色, hard-fx-skin.md ze */
+    public static const ze: Int64 = 0xFFC4D2D6
     /* Parity step limit warning threshold (mock warn state is N=3; applies to 3,2,1,0). */
     public static const stepWarnAt: Int64 = 3
     /* Locked chapter paper tokens (chapters 0..9). */

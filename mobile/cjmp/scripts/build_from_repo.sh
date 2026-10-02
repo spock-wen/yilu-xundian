@@ -176,6 +176,74 @@ fi
 echo "  Patch verified."
 
 # ---------------------------------------------------------------------------
+# STEP C2: Patch EntryEntryAbilityActivity — Android system back must not exit
+#
+# Keels 0.2.2 on Android never routes the system back to the Cangjie page
+# (log: ProcessBackPressed -> AceContainerSG::OnBackPressed returns false), so
+# StageActivity falls through to Activity.onBackPressed() and the app finishes
+# on the FIRST back press from any screen. The page-level onBackPress in
+# mobile/cjmp/lib/index.cj is therefore dead code on Android.
+#
+# Fix: override onBackPressed to first forward to the runtime (windowView.
+# backPressed via reflection; if a future runtime routes it to the page the
+# Cangjie handler comes alive by itself), and when unconsumed move the task to
+# the background instead of finishing (acceptance: pressing back N times must
+# not exit the app; game process and board state survive).
+# ---------------------------------------------------------------------------
+echo "STEP C2: Patching EntryEntryAbilityActivity (Android system back guard)"
+
+ACT="$PROJ/android/app/src/main/java/com/yilu/xundian/EntryEntryAbilityActivity.java"
+if [ ! -f "$ACT" ]; then
+  echo "ERROR: $ACT not found — unexpected project layout" >&2
+  exit 1
+fi
+
+if grep -q "backPressed forward failed" "$ACT"; then
+  echo "  WARNING: back guard already present — skipping"
+else
+  if ! "$PY" - "$ACT" <<'PYEOF'
+import sys
+
+path = sys.argv[1]
+src = open(path, encoding="utf-8").read()
+method = '''
+    @Override
+    public void onBackPressed() {
+        // Keels 0.2.2: ACE never routes page onBackPress on Android; default
+        // super() finishes the app on the first back press. Forward to the
+        // runtime first; if unconsumed, keep the app alive in background.
+        try {
+            java.lang.reflect.Field f =
+                ohos.stage.ability.adapter.StageActivity.class.getDeclaredField("windowView");
+            f.setAccessible(true);
+            Object wv = f.get(this);
+            if (wv != null && (Boolean) wv.getClass().getMethod("backPressed").invoke(wv)) {
+                return;
+            }
+        } catch (Throwable t) {
+            android.util.Log.e("xundian", "backPressed forward failed", t);
+        }
+        moveTaskToBack(true);
+    }
+'''
+needle = "        setInstanceName(\"com.yilu.xundian:entry:EntryAbility:\");\n        super.onCreate(savedInstanceState);\n    }\n"
+if src.count(needle) != 1:
+    sys.exit(1)
+src = src.replace(needle, needle + method, 1)
+open(path, "w", encoding="utf-8").write(src)
+PYEOF
+then
+  echo "ERROR: back guard patch anchor not found in $ACT" >&2
+  exit 1
+fi
+if ! grep -q "backPressed forward failed" "$ACT"; then
+  echo "ERROR: back guard not present after patch" >&2
+  exit 1
+fi
+echo "  Patched: onBackPressed guard -> forward-or-background."
+fi
+
+# ---------------------------------------------------------------------------
 # STEP D: Patch project.pbxproj — set IPHONEOS_DEPLOYMENT_TARGET = 15.0
 # ---------------------------------------------------------------------------
 echo "STEP D: Patching IPHONEOS_DEPLOYMENT_TARGET in project.pbxproj"
