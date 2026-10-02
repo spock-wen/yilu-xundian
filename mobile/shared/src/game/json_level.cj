@@ -1,7 +1,7 @@
 package yilu_zip.game
 
 import std.collection.ArrayList
-import yilu_zip.engine.Wall
+import yilu_zip.engine.{Cell, Wall}
 
 /* Minimal JSON reader for levels.json objects.
    String bytes are read with String.get, which returns None past the end
@@ -487,6 +487,76 @@ func readBoolField(obj: JsonVal, key: String, err: LevelLoad): Bool {
     }
 }
 
+/* Schema [r,c] → engine Cell(x = c col, y = r row). None if not a 2-int array. */
+func readRcPair(v: JsonVal): Option<Cell> {
+    if (v.kind != 4 || v.arr.size != 2) {
+        return None
+    }
+    let rv = match (v.arr.get(0)) {
+        case None => return None
+        case Some(got) => got
+    }
+    let cv = match (v.arr.get(1)) {
+        case None => return None
+        case Some(got) => got
+    }
+    if (rv.kind != 2 || cv.kind != 2) {
+        return None
+    }
+    return Some(Cell(cv.intVal, rv.intVal))
+}
+
+/* Required [r,c] field; null treated as missing. Sets err.error on bad shape. */
+func readRcField(obj: JsonVal, label: String, err: LevelLoad): Cell {
+    var res = Cell(0, 0)
+    match (jsonField(obj, label)) {
+        case None => err.error = "missing " + label
+        case Some(v) =>
+            if (v.kind == 0) {
+                err.error = "missing " + label
+            } else {
+                match (readRcPair(v)) {
+                    case None => err.error = label + " must be [r,c]"
+                    case Some(cell) => res = cell
+                }
+            }
+    }
+    return res
+}
+
+/* "between": [[r,c],[r,c]] edge endpoints in engine coords. Sets err.error on bad shape. */
+func readBetweenField(obj: JsonVal, label: String, err: LevelLoad): (Cell, Cell) {
+    var a = Cell(0, 0)
+    var b = Cell(0, 0)
+    match (jsonField(obj, "between")) {
+        case None => err.error = "missing " + label + " between"
+        case Some(v) =>
+            if (v.kind != 4 || v.arr.size != 2) {
+                err.error = label + " between must be [[r,c],[r,c]]"
+            } else {
+                match (v.arr.get(0)) {
+                    case None => err.error = label + " between must be [[r,c],[r,c]]"
+                    case Some(p0) =>
+                        match (readRcPair(p0)) {
+                            case None => err.error = label + " between must be [[r,c],[r,c]]"
+                            case Some(cell) => a = cell
+                        }
+                }
+                if (err.error == "") {
+                    match (v.arr.get(1)) {
+                        case None => err.error = label + " between must be [[r,c],[r,c]]"
+                        case Some(p1) =>
+                            match (readRcPair(p1)) {
+                                case None => err.error = label + " between must be [[r,c],[r,c]]"
+                                case Some(cell) => b = cell
+                            }
+                    }
+                }
+            }
+    }
+    return (a, b)
+}
+
 public func blankLevel(): LevelDef {
     return LevelDef(
         0,
@@ -650,7 +720,257 @@ func levelFromJsonObject(root: JsonVal): LevelLoad {
             }
             stepLimit = v.intVal
     }
+    /* Optional mechanic keys below: absent or null = no mechanic (behavior unchanged). */
+    let merr = LevelLoad(None, "")
+    var ferryDef: Option<FerryDef> = None
+    match (jsonField(root, "ferry")) {
+        case None => ()
+        case Some(v) =>
+            if (v.kind == 0) {
+                ()
+            } else if (v.kind != 5) {
+                return LevelLoad(None, "ferry must be an object")
+            } else {
+                let jia = readRcField(v, "jia", merr)
+                if (merr.error != "") {
+                    return LevelLoad(None, "ferry " + merr.error)
+                }
+                let yi = readRcField(v, "yi", merr)
+                if (merr.error != "") {
+                    return LevelLoad(None, "ferry " + merr.error)
+                }
+                ferryDef = Some(FerryDef(jia.x, jia.y, yi.x, yi.y))
+            }
+    }
+    let oneWayList = ArrayList<OneWay>()
+    match (jsonField(root, "one_ways")) {
+        case None => ()
+        case Some(v) =>
+            if (v.kind == 0) {
+                ()
+            } else if (v.kind != 4) {
+                return LevelLoad(None, "one_ways must be an array")
+            } else {
+                var i: Int64 = 0
+                while (i < v.arr.size) {
+                    let item = match (v.arr.get(i)) {
+                        case None => return LevelLoad(None, "one_way index")
+                        case Some(got) => got
+                    }
+                    if (item.kind != 5) {
+                        return LevelLoad(None, "one_way must be an object")
+                    }
+                    let from = readRcField(item, "from", merr)
+                    if (merr.error != "") {
+                        return LevelLoad(None, "one_way " + merr.error)
+                    }
+                    let to = readRcField(item, "to", merr)
+                    if (merr.error != "") {
+                        return LevelLoad(None, "one_way " + merr.error)
+                    }
+                    oneWayList.add(OneWay(from.x, from.y, to.x, to.y))
+                    i = i + 1
+                }
+            }
+    }
+    let slideList = ArrayList<Cell>()
+    match (jsonField(root, "slide_cells")) {
+        case None => ()
+        case Some(v) =>
+            if (v.kind == 0) {
+                ()
+            } else if (v.kind != 4) {
+                return LevelLoad(None, "slide_cells must be an array")
+            } else {
+                var i: Int64 = 0
+                while (i < v.arr.size) {
+                    let item = match (v.arr.get(i)) {
+                        case None => return LevelLoad(None, "slide_cell index")
+                        case Some(got) => got
+                    }
+                    match (readRcPair(item)) {
+                        case None => return LevelLoad(None, "slide_cell must be [r,c]")
+                        case Some(cell) => slideList.add(cell)
+                    }
+                    i = i + 1
+                }
+            }
+    }
+    let sealList = ArrayList<SealGate>()
+    match (jsonField(root, "seal_gates")) {
+        case None => ()
+        case Some(v) =>
+            if (v.kind == 0) {
+                ()
+            } else if (v.kind != 4) {
+                return LevelLoad(None, "seal_gates must be an array")
+            } else {
+                var i: Int64 = 0
+                while (i < v.arr.size) {
+                    let item = match (v.arr.get(i)) {
+                        case None => return LevelLoad(None, "seal_gate index")
+                        case Some(got) => got
+                    }
+                    if (item.kind != 5) {
+                        return LevelLoad(None, "seal_gate must be an object")
+                    }
+                    let (ga, gb) = readBetweenField(item, "seal gate", merr)
+                    if (merr.error != "") {
+                        return LevelLoad(None, merr.error)
+                    }
+                    /* locked_until_token is always true in the rule; value is validated only. */
+                    match (jsonField(item, "locked_until_token")) {
+                        case None => ()
+                        case Some(lv) =>
+                            if (lv.kind != 0 && lv.kind != 1) {
+                                return LevelLoad(None, "locked_until_token must be a bool")
+                            }
+                    }
+                    sealList.add(SealGate(ga.x, ga.y, gb.x, gb.y))
+                    i = i + 1
+                }
+            }
+    }
+    let tokenList = ArrayList<Cell>()
+    match (jsonField(root, "token_cells")) {
+        case None => ()
+        case Some(v) =>
+            if (v.kind == 0) {
+                ()
+            } else if (v.kind != 4) {
+                return LevelLoad(None, "token_cells must be an array")
+            } else {
+                var i: Int64 = 0
+                while (i < v.arr.size) {
+                    let item = match (v.arr.get(i)) {
+                        case None => return LevelLoad(None, "token_cell index")
+                        case Some(got) => got
+                    }
+                    match (readRcPair(item)) {
+                        case None => return LevelLoad(None, "token_cell must be [r,c]")
+                        case Some(cell) => tokenList.add(cell)
+                    }
+                    i = i + 1
+                }
+            }
+    }
+    var collapseDef: Option<CollapseDef> = None
+    match (jsonField(root, "collapse")) {
+        case None => ()
+        case Some(v) =>
+            if (v.kind == 0) {
+                ()
+            } else if (v.kind != 5) {
+                return LevelLoad(None, "collapse must be an object")
+            } else {
+                match (jsonField(v, "schema")) {
+                    case None => ()
+                    case Some(sv) =>
+                        if (sv.kind != 0 && sv.kind != 3) {
+                            return LevelLoad(None, "collapse schema must be a string")
+                        }
+                }
+                let trig = readRcField(v, "trigger_rc", merr)
+                if (merr.error != "") {
+                    return LevelLoad(None, "collapse " + merr.error)
+                }
+                var edgeObj: Option<JsonVal> = None
+                match (jsonField(v, "collapse_edge")) {
+                    case None => merr.error = "missing collapse_edge"
+                    case Some(ev) =>
+                        if (ev.kind == 0) {
+                            merr.error = "missing collapse_edge"
+                        } else if (ev.kind != 5) {
+                            merr.error = "collapse_edge must be an object"
+                        } else {
+                            edgeObj = Some(ev)
+                        }
+                }
+                if (merr.error != "") {
+                    return LevelLoad(None, merr.error)
+                }
+                var ex1: Int64 = 0
+                var ey1: Int64 = 0
+                var ex2: Int64 = 0
+                var ey2: Int64 = 0
+                match (edgeObj) {
+                    case None => ()
+                    case Some(eo) =>
+                        let (ea, eb) = readBetweenField(eo, "collapse edge", merr)
+                        if (merr.error != "") {
+                            return LevelLoad(None, merr.error)
+                        }
+                        ex1 = ea.x
+                        ey1 = ea.y
+                        ex2 = eb.x
+                        ey2 = eb.y
+                }
+                collapseDef = Some(CollapseDef(trig.x, trig.y, ex1, ey1, ex2, ey2))
+            }
+    }
+    var burdenDef: Option<BurdenDef> = None
+    match (jsonField(root, "burden")) {
+        case None => ()
+        case Some(v) =>
+            if (v.kind == 0) {
+                ()
+            } else if (v.kind != 5) {
+                return LevelLoad(None, "burden must be an object")
+            } else {
+                let forbiddenList = ArrayList<Cell>()
+                match (jsonField(v, "forbidden_cells")) {
+                    case None => ()
+                    case Some(fv) =>
+                        if (fv.kind == 0) {
+                            ()
+                        } else if (fv.kind != 4) {
+                            return LevelLoad(None, "forbidden_cells must be an array")
+                        } else {
+                            var j: Int64 = 0
+                            while (j < fv.arr.size) {
+                                let item = match (fv.arr.get(j)) {
+                                    case None => return LevelLoad(None, "forbidden cell index")
+                                    case Some(got) => got
+                                }
+                                match (readRcPair(item)) {
+                                    case None => return LevelLoad(None, "forbidden cell must be [r,c]")
+                                    case Some(cell) => forbiddenList.add(cell)
+                                }
+                                j = j + 1
+                            }
+                        }
+                }
+                let loadCell = readRcField(v, "load_cell", merr)
+                if (merr.error != "") {
+                    return LevelLoad(None, "burden " + merr.error)
+                }
+                let unloadCell = readRcField(v, "unload_cell", merr)
+                if (merr.error != "") {
+                    return LevelLoad(None, "burden " + merr.error)
+                }
+                var startLaden = false
+                match (jsonField(v, "start_laden")) {
+                    case None => ()
+                    case Some(sv) =>
+                        if (sv.kind == 0) {
+                            ()
+                        } else if (sv.kind != 1) {
+                            return LevelLoad(None, "start_laden must be a bool")
+                        } else {
+                            startLaden = sv.boolVal
+                        }
+                }
+                burdenDef = Some(BurdenDef(forbiddenList, loadCell.x, loadCell.y, unloadCell.x, unloadCell.y, startLaden))
+            }
+    }
     let level = LevelDef(id, name, cols, rows, waypoints, walls, parityEdges, stepLimit)
+    level.ferry = ferryDef
+    level.oneWays = oneWayList
+    level.slideCells = slideList
+    level.sealGates = sealList
+    level.tokenCells = tokenList
+    level.collapse = collapseDef
+    level.burden = burdenDef
     return LevelLoad(Some(level), "")
 }
 

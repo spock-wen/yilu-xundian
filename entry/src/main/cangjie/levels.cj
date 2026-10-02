@@ -1700,7 +1700,7 @@ public class LevelCatalog {
         let parityEdges80 = ArrayList<ParityEdge>()
         parityEdges80.add(ParityEdge(2, 5, 2, 6, true, false))
         parityEdges80.add(ParityEdge(2, 6, 3, 6, false, true))
-        let stepLimit80 = 12
+        let stepLimit80 = 49
         levels.add(LevelDef(80, "汉中·阳平关", 7, 7, wps80, walls80, parityEdges80, stepLimit80))
 
         let wps81 = ArrayList<Waypoint>()

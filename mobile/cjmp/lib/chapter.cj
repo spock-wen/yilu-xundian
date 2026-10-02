@@ -8,7 +8,9 @@ package ohos_app_cangjie_entry
    Official media: bust_p01..p10 + bust_s01, flag_p01..p10 + flag_gate_pattern,
    skin_01/02 + skin_05..10, card_05..10. Gate flag is pattern-only (no 关).
    Board landscape bands (assets/chapter-bands-v91): band_zhuojun_v91 /
-   band_pingyuan_v91, 1080×300 composite (bust+flag+terrain). */
+   band_pingyuan_v91 / band_xuzhou_v91 / band_lvbu_v91 / band_touyuan_v91 /
+   band_jingzhou_v91 / band_chibi_v91 / band_rushu_v91 / band_hanzhong_v91 /
+   band_beifa_v91, 1080×300 composite (bust+flag+terrain). */
 import std.collection.ArrayList
 import ohos_app_cangjie_entry.game.LevelDef
 
@@ -57,8 +59,16 @@ public class ChapterDef {
         this.open = open
     }
 
+    // chapter 8 caption copy: city shown without the 城： label, PM decision 2026-10-01
+    public func cityPrefix(): String {
+        if (this.id == 7) {
+            return ""
+        }
+        return "城："
+    }
+
     public func chromeLine(): String {
-        return "友：${this.friendLine} · 张力：${this.tensionLine} · 城：${this.cityLine}"
+        return "友：${this.friendLine} · 张力：${this.tensionLine} · ${this.cityPrefix()}${this.cityLine}"
     }
 }
 
@@ -179,8 +189,8 @@ public class ChapterCatalog {
             "刘备×关隘影 · 刘×纹样 · 白水关",
             "刘备×关隘影 · 刘×纹样 · 白水关",
             "蜀",
-            "峡江入川关隘递进；非曹粮道，勿挂曹脸",
-            "白水关（辅成都）",
+            "峡江入川关隘递进；非曹粮道勿挂曹脸",
+            "白水关辅成都",
             70,
             10,
             true

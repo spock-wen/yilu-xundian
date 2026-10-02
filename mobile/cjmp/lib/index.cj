@@ -25,6 +25,7 @@ import ohos.arkui.component.scroll.*
 import std.collection.ArrayList
 import ohos_app_cangjie_entry.engine.*
 import ohos_app_cangjie_entry.game.*
+import std.time.MonoTime
 
 @Entry
 @Component
@@ -43,8 +44,34 @@ class EntryView {
     @State var parityRejectText: String = ""
     @State var parityRejectFlash: Bool = false
     @State var parityRejectGen: Int64 = 0
+    @State var rejectFromX: Int64 = 0
+    @State var rejectFromY: Int64 = 0
+    @State var rejectToX: Int64 = 0
+    @State var rejectToY: Int64 = 0
+    var rejectPlace: ToastPlacement = ToastPlacement(0.0, 0.0, false, 0, 0.0)
+    // J13: 本次拒绝是否为单向门拒绝(改画官方 reject PNG 而非朱红 Line)
+    var rejectOneWay: Bool = false
+    @State var winW: Float64 = 360.0
     // A2: back button pressed ripple opacity
     @State var backPressedOpacity: Float64 = 0.0
+
+    // Board shape renderer state (Keels 0.2.2)
+    @State var boardGen: Int64 = 0
+    var lastBuildUs: Int64 = 0
+    var lastAssignUs: Int64 = 0
+    @State var boardCells: Array<BoardRect> = Array<BoardRect>()
+    @State var boardWalls: Array<BoardSeg> = Array<BoardSeg>()
+    @State var boardParityLabels: Array<BoardLabel> = Array<BoardLabel>()
+    @State var boardRoute: Array<BoardSeg> = Array<BoardSeg>()
+    @State var boardDots: Array<BoardDot> = Array<BoardDot>()
+    @State var boardStationCircles: Array<BoardDot> = Array<BoardDot>()
+    @State var boardNextLabels: Array<BoardLabel> = Array<BoardLabel>()
+    @State var boardDigits: Array<BoardPath> = Array<BoardPath>()
+    @State var boardGates: Array<BoardImg> = Array<BoardImg>()
+    var obstacleNextCnt: Int64 = 0
+
+    func homeMarkFontVp(): Float64 { return 12.0 / this.getPxFactor() }
+    func homeMarkTop(baseline: Float64): Float64 { return baseline - 0.88 * this.homeMarkFontVp() }
 
     var fontsDone: Bool = false
     var fontHandle: Int64 = 0
@@ -169,68 +196,215 @@ class EntryView {
         this.parityRejectGen = this.parityRejectGen + 1
         this.parityRejectText = ""
         this.parityRejectFlash = false
+        this.rejectPlace = ToastPlacement(0.0, 0.0, false, 0, 0.0)
+        if (PERF_LOG) { perfLog("toast clear gen=${this.parityRejectGen}") }
     }
 
-    func showParityReject(): Unit {
-        let r = this.game.lastRejectParity
-        if (r == 1) {
-            this.parityRejectText = "此步须奇"
-        } else if (r == 2) {
-            this.parityRejectText = "此步须偶"
-        } else {
-            return
-        }
+    func showReject(): Unit {
+        let txt = parityToastText(this.game)
+        this.parityRejectText = txt
         this.parityRejectFlash = true
+        if (txt.size > 0) {
+            this.rejectPlace = this.rejectPlacement()
+            if (!this.rejectPlace.shown) {
+                println("TOAST_NOT_PLACED level=${this.curLevel().id} edge=(${this.rejectFromX},${this.rejectFromY})-(${this.rejectToX},${this.rejectToY})")
+            }
+            if (PERF_LOG) {
+                perfLog("toast place step=${this.rejectPlace.step} lift=${this.rejectPlace.lift} x=${this.rejectPlace.x} y=${this.rejectPlace.y}")
+            }
+        }
         this.parityRejectGen = this.parityRejectGen + 1
-        // M2: parity toast (animateTo removed)
+        let gen = this.parityRejectGen
+        if (PERF_LOG) { perfLog("toast show text=${this.parityRejectText} gen=${this.parityRejectGen}") }
+        /* UI-thread delayed clear: animateTo's onFinish runs on the
+           UI thread, so @State writes repaint immediately.  The 180ms
+           duration drives a no-op animation; onFinish clears the toast. */
+        this.getUIContext().animateTo(
+            AnimateParam(duration: 180, onFinish: Some({ =>
+                if (PERF_LOG) { perfLog("toast onFinish gen=${gen}") }
+                if (gen == this.parityRejectGen) {
+                    this.clearParityReject()
+                }
+            })),
+            { => }
+        )
+    }
+
+    func curLevel(): LevelDef {
+        if (this.levelIndex >= 0 && this.levelIndex < this.levels.size) {
+            return this.levels[this.levelIndex]
+        }
+        return blankLevel()
     }
 
     func remainingSteps(): Int64 {
-        let lim = this.game.level.stepLimit
+        let lim = this.curLevel().stepLimit
         if (lim <= 0) { return 0 }
-        var taken = this.stepFilled - 1
-        if (taken < 0) { taken = 0 }
-        let left = lim - taken
+        let left = lim - this.stepFilled
         if (left < 0) { return 0 }
         return left
     }
 
     func stepChipBorder(): Int64 {
-        if (this.parityRejectFlash) { return Theme.vermillion }
         return Theme.paperLine
     }
 
+    func stepLeftBorderColor(): Int64 {
+        if (this.remainingSteps() <= Theme.stepWarnAt) {
+            return Theme.gold
+        }
+        return Theme.paperLine
+    }
+
+    func stepLeftBorderW(): Int64 {
+        if (this.remainingSteps() <= Theme.stepWarnAt) {
+            return 2
+        }
+        return 1
+    }
+
+    func rejectEdgeMid(): (Float64, Float64) {
+        return this.boardGeom().seamMid(this.rejectFromX, this.rejectFromY, this.rejectToX, this.rejectToY)
+    }
+
+    // J13: 单向门 reject PNG 的几何(与 idle 门切片同几何)
+    func rejectGateImgNow(): BoardImg {
+        return rejectGateImg(this.boardGeom(), this.rejectFromX, this.rejectFromY, this.rejectToX, this.rejectToY)
+    }
+
+    func rejectEdgeStartPoint(): (Float64, Float64) {
+        let (midX, midY) = this.rejectEdgeMid()
+        if (this.rejectFromX != this.rejectToX) {
+            return (midX, midY - 12.0)
+        }
+        return (midX - 12.0, midY)
+    }
+
+    func rejectEdgeEndPoint(): (Float64, Float64) {
+        let (midX, midY) = this.rejectEdgeMid()
+        if (this.rejectFromX != this.rejectToX) {
+            return (midX, midY + 12.0)
+        }
+        return (midX + 12.0, midY)
+    }
+
+    // U3: Collect board obstacles for toast avoidance (designer ruling)
+    func collectToastObstacles(): Array<ToastBox> {
+        let list = ArrayList<ToastBox>()
+
+        // 1. Flash line: bounding box of start/end points inflated by 1.5 (3 vp stroke, round cap)
+        let (sx, sy) = this.rejectEdgeStartPoint()
+        let (ex, ey) = this.rejectEdgeEndPoint()
+        let minX = if (sx <= ex) { sx } else { ex }
+        let maxX = if (sx >= ex) { sx } else { ex }
+        let minY = if (sy <= ey) { sy } else { ey }
+        let maxY = if (sy >= ey) { sy } else { ey }
+        list.add(ToastBox(minX - 1.5, minY - 1.5, maxX + 1.5, maxY + 1.5))
+
+        // 2. Head dot: cx±(r+0.5), cy±(r+0.5)
+        for (dot in this.boardDots) {
+            let rEff = dot.r + 0.5
+            list.add(ToastBox(dot.cx - rEff, dot.cy - rEff, dot.cx + rEff, dot.cy + rEff))
+        }
+
+        // 3. Station circles: cx±(r+strokeW/2) (gold ring already has a bigger r entry)
+        for (circle in this.boardStationCircles) {
+            let extra = if (circle.hasStroke) { circle.strokeW * 0.5 } else { 0.0 }
+            let rEff = circle.r + extra
+            list.add(ToastBox(circle.cx - rEff, circle.cy - rEff, circle.cx + rEff, circle.cy + rEff))
+        }
+
+        // 4. 下一驿 labels: anchored at left edge and baseline (cy+r+12)
+        var ni: Int64 = 0
+        while (ni < this.obstacleNextCnt && ni < this.boardNextLabels.size) {
+            let lbl = this.boardNextLabels[ni]
+            let baseline = lbl.y + 0.88 * lbl.size
+            list.add(ToastBox(lbl.x - 0.5, baseline - 10.0, lbl.x + 35.0, baseline + 3.5))
+            ni = ni + 1
+        }
+
+        // 5. Parity labels: glyph centred on seam midpoint (mx, my)
+        for (lbl in this.boardParityLabels) {
+            let mx = lbl.x + 5.5
+            let my = lbl.y - 4.0 + 0.88 * lbl.size
+            list.add(ToastBox(mx - 6.5, my - 8.5, mx + 6.5, my + 5.0))
+        }
+
+
+        // 6. Walls: width/2 padding, clear = 2.0
+        for (wall in this.boardWalls) {
+            let hw = wall.width * 0.5
+            let minX = (if (wall.x1 <= wall.x2) { wall.x1 } else { wall.x2 }) - hw
+            let maxX = (if (wall.x1 >= wall.x2) { wall.x1 } else { wall.x2 }) + hw
+            let minY = (if (wall.y1 <= wall.y2) { wall.y1 } else { wall.y2 }) - hw
+            let maxY = (if (wall.y1 >= wall.y2) { wall.y1 } else { wall.y2 }) + hw
+            list.add(ToastBox(minX, minY, maxX, maxY, 2.0))
+        }
+
+        // 7. Route: width/2 padding, clear = 2.0
+        for (route in this.boardRoute) {
+            let hw = route.width * 0.5
+            let minX = (if (route.x1 <= route.x2) { route.x1 } else { route.x2 }) - hw
+            let maxX = (if (route.x1 >= route.x2) { route.x1 } else { route.x2 }) + hw
+            let minY = (if (route.y1 <= route.y2) { route.y1 } else { route.y2 }) - hw
+            let maxY = (if (route.y1 >= route.y2) { route.y1 } else { route.y2 }) + hw
+            list.add(ToastBox(minX, minY, maxX, maxY, 2.0))
+        }
+
+        return list.toArray()
+    }
+
+    func rejectPlacement(): ToastPlacement {
+        let (midX, midY) = this.rejectEdgeMid()
+        return toastPlace(Float64(this.boardW()), Float64(this.boardH()), midX, midY, this.collectToastObstacles())
+    }
+
+    func rejectToastX(): Float64 {
+        return this.rejectPlace.x
+    }
+
+    func rejectToastY(): Float64 {
+        return this.rejectPlace.y
+    }
+
     func hasParityBoard(): Bool {
-        return this.game.level.parityEdges.size > 0
+        return this.curLevel().parityEdges.size > 0
+    }
+
+    func hasBurden(): Bool {
+        return this.curLevel().burden.isSome()
+    }
+
+    func ladenNow(): Bool {
+        return this.tick >= 0 && this.game.laden
     }
 
     func stepChipLabel(): String {
         return "第 ${this.stepFilled} 步"
     }
 
+    func boardGeom(): BoardGeom {
+        return boardGeomFor(this.curLevel().cols, this.curLevel().rows, this.winW)
+    }
+
     func cellVp(): Int64 {
-        let cols = this.game.level.cols
-        let rows = this.game.level.rows
-        if (cols == 6 && rows == 8) {
-            return Theme.tutorialCell
-        }
-        return Theme.boardInner / cols
+        return Int64(this.boardGeom().c)
     }
 
     func boardW(): Int64 {
-        return this.game.level.cols * this.cellVp()
+        return Int64(this.boardGeom().trayW())
     }
 
     func boardH(): Int64 {
-        return this.game.level.rows * this.cellVp()
+        return Int64(this.boardGeom().trayH())
     }
 
     func currentLayout(): GridLayout {
-        return GridLayout(0.0, 0.0, Float64(this.cellVp()), this.game.level.cols, this.game.level.rows)
+        return GridLayout(0.0, 0.0, this.boardGeom().c, this.curLevel().cols, this.curLevel().rows)
     }
 
     func roadTitle(): String {
-        return this.game.level.name
+        return this.curLevel().name
     }
 
     func currentName(): String {
@@ -240,10 +414,52 @@ class EntryView {
         return this.levels[this.cleared].name
     }
 
+    func stationState(n: Int64): Int64 {
+        return stationStateOf(this.game, n)
+    }
+
+    func rebuildBoard(): Unit {
+        this.boardGen = this.boardGen + 1
+        let geom = this.boardGeom()
+        let factor = this.getPxFactor()
+
+        let tBuild0 = MonoTime.now()
+        let tmpCells = buildBoardCells(this.game, geom)
+        let tmpWalls = concatArr(buildBoardWalls(this.game, geom), buildBoardMechWalls(this.game, geom))
+        let tmpParityLabels = buildBoardParityLabels(this.game, geom, factor)
+        let tmpRoute = buildBoardRoute(this.game, geom)
+        let tmpDots = buildBoardHeadDot(this.game, geom)
+        let tmpStationCircles = concatArr(buildBoardStationCircles(this.game, geom), buildBoardMechDots(this.game, geom))
+        let nextOnly = buildBoardNextLabels(this.game, geom, factor)
+        this.obstacleNextCnt = nextOnly.size
+        let tmpNextLabels = concatArr(nextOnly, buildBoardMechLabels(this.game, geom))
+        let tmpDigits = concatArr(buildBoardDigits(this.game, geom, factor), buildBoardMechPaths(this.game, geom, factor))
+        let tmpGates = buildBoardGates(this.game, geom)
+        this.lastBuildUs = (MonoTime.now() - tBuild0).toMicroseconds()
+
+        let tAssign0 = MonoTime.now()
+        this.boardCells = tmpCells
+        this.boardWalls = tmpWalls
+        this.boardParityLabels = tmpParityLabels
+        this.boardRoute = tmpRoute
+        this.boardDots = tmpDots
+        this.boardStationCircles = tmpStationCircles
+        this.boardNextLabels = tmpNextLabels
+        this.boardDigits = tmpDigits
+        this.boardGates = tmpGates
+        this.lastAssignUs = (MonoTime.now() - tAssign0).toMicroseconds()
+    }
+
     func refresh(): Unit {
         this.tick = this.tick + 1
         this.stepFilled = this.game.filled()
+        this.rebuildBoard()
     }
+
+    protected override func aboutToAppear(): Unit {
+        this.rebuildBoard()
+    }
+
 
     func openLevel(index: Int64): Unit {
         this.levelIndex = index
@@ -253,6 +469,9 @@ class EntryView {
         }
         this.screen = 1
         this.refresh()
+        if (PERF_LOG) {
+            perfLog("open lvl=${index} build_us=${this.lastBuildUs} assign_us=${this.lastAssignUs}")
+        }
     }
 
     func startPlay(): Unit {
@@ -305,10 +524,8 @@ class EntryView {
         if (this.screen == 6) {
             return Theme.paperOf(this.chapterIndex)
         }
-        /* 平原 board + 通关 share sage paper. screen==2 used to fall
-           through to 涿郡 Theme.paper and flash the win sheet. */
-        if ((this.screen == 1 || this.screen == 2) && this.levelIndex >= 10) {
-            return Theme.pingyuanPaper
+        if (this.screen == 1 || this.screen == 2) {
+            return Theme.paperOf(this.chapterIndex)
         }
         return Theme.paper
     }
@@ -323,8 +540,11 @@ class EntryView {
     }
 
     func chromeLine(): String {
-        let ch = this.currentChapter()
-        return "友：${ch.friendLine} · 张力：${ch.tensionLine} · 城：${ch.cityLine}"
+        return this.currentChapter().chromeLine()
+    }
+
+    func chromeCaption(): String {
+        return captionWrap(this.chromeLine(), this.winW - 32.0)
     }
 
     func boardSubtitle(): String {
@@ -434,6 +654,55 @@ class EntryView {
         this.refresh()
     }
 
+    func handleDrag(event: TouchEvent, isDown: Bool): Unit {
+        /* Win sets screen=2 then refresh(); a trailing Move can still
+           hit the Canvas and drag-back-undo the last cell. */
+        if (this.screen != 1) {
+            return
+        }
+        if (event.touches.size == 0) {
+            return
+        }
+        let px = event.touches[0].x
+        let py = event.touches[0].y
+        let hit = this.boardGeom().hitTest(px, py)
+        match (hit) {
+            case None => ()
+            case Some(cell) =>
+                let t0 = MonoTime.now()
+                var ok = 0
+                if (this.game.tryStep(cell)) {
+                    ok = 1
+                    this.clearParityReject()
+                    if (this.game.isWin()) {
+                        if (this.levelIndex + 1 > this.cleared) {
+                            this.cleared = this.levelIndex + 1
+                        }
+                        this.screen = 2
+                        if (PERF_LOG) {
+                            perfLog("win lvl=${this.levelIndex}")
+                        }
+                    }
+                    this.refresh()
+                } else {
+                    if (rejectShouldFlash(this.game)) {
+                        this.rejectFromX = this.game.lastRejectFromX
+                        this.rejectFromY = this.game.lastRejectFromY
+                        this.rejectToX = this.game.lastRejectToX
+                        this.rejectToY = this.game.lastRejectToY
+                        this.rejectOneWay = (this.game.lastReject == REJECT_ONE_WAY)
+                        this.showReject()
+                        this.refresh()
+                    }
+                }
+                if (PERF_LOG) {
+                    let evStr = if (isDown) { "down" } else { "move" }
+                    let us = (MonoTime.now() - t0).toMicroseconds()
+                    perfLog("touch ev=${evStr} lvl=${this.levelIndex} ok=${ok} filled=${this.game.filled()} handler_us=${us} cells=${this.boardCells.size} grid=0 route=${this.boardRoute.size} digits=${this.boardDigits.size} gen=${this.boardGen} rebuild_us=${this.lastBuildUs + this.lastAssignUs} build_us=${this.lastBuildUs} assign_us=${this.lastAssignUs} tick=${this.tick}")
+                }
+        }
+    }
+
     func rowBorder(index: Int64): Int64 {
         if (index == this.cleared) {
             return Theme.ink
@@ -499,10 +768,47 @@ class EntryView {
                         .fontColor(Theme.vermillion)
                         .fontFamily(this.sansFamily())
                 }
-                // PLACEHOLDER(M2): home mark route (was Canvas drawHomeMark)
-                Column {}
-                    .width(100.percent)
-                    .height(140)
+                Stack(alignContent: Alignment.TopStart) {
+                    Line(width: 360, height: 140)
+                        .startPoint((40.0, 24.0))
+                        .endPoint((130.0, 56.0))
+                        .stroke(Theme.paperLine)
+                        .strokeWidth(Theme.hairline)
+                    Line(width: 360, height: 140)
+                        .startPoint((130.0, 56.0))
+                        .endPoint((78.0, 96.0))
+                        .stroke(Theme.paperLine)
+                        .strokeWidth(Theme.hairline)
+                    Line(width: 360, height: 140)
+                        .startPoint((78.0, 96.0))
+                        .endPoint((200.0, 118.0))
+                        .stroke(Theme.paperLine)
+                        .strokeWidth(Theme.hairline)
+                    /* HarmonyOS parity: Canvas font 12px = 12 device px; top = baseline - 0.88*fontVp */
+                    Text("涿郡")
+                        .fontSize(this.homeMarkFontVp())
+                        .fontColor(Theme.inkMuted)
+                        .fontFamily(Theme.sans)
+                        .position(x: 28.0, y: this.homeMarkTop(20.0))
+                    Text("平原")
+                        .fontSize(this.homeMarkFontVp())
+                        .fontColor(Theme.inkMuted)
+                        .fontFamily(Theme.sans)
+                        .position(x: 126.0, y: this.homeMarkTop(52.0))
+                    Text("安喜")
+                        .fontSize(this.homeMarkFontVp())
+                        .fontColor(Theme.inkMuted)
+                        .fontFamily(Theme.sans)
+                        .position(x: 64.0, y: this.homeMarkTop(108.0))
+                    Text("郡治")
+                        .fontSize(this.homeMarkFontVp())
+                        .fontColor(Theme.inkMuted)
+                        .fontFamily(Theme.sans)
+                        .position(x: 190.0, y: this.homeMarkTop(124.0))
+                }
+                .width(100.percent)
+                .height(140)
+                .opacity(0.18)
                 Blank()
                 Button("开始传书")
                     .width(100.percent)
@@ -918,11 +1224,17 @@ class EntryView {
                 }
                 .width(100.percent)
                 .height(Theme.topBar)
+                // FIX(M1-polish): On Android Keels, Text without an explicit height measures taller due to default font metrics,
+                // and Column inside a layoutWeight(1) Scroll can vertically center when total item height (632vp) is shorter than
+                // the Android viewport (~738vp), introducing an extra ~20-25vp gap above row 1.
+                // Specifying explicit height(16) and margin(bottom: 6) on listSubtitle, and justifyContent(FlexAlign.Start)
+                // on the Column aligns the list to hairline + 22vp, exactly matching HarmonyOS and iOS design baselines.
                 Text(this.currentChapter().listSubtitle)
                     .fontSize(12)
+                    .height(16)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.sansFamily())
-                    .margin(bottom: 8)
+                    .margin(bottom: 6)
                     .width(100.percent)
                 Scroll {
                     Column(space: 8) {
@@ -1063,6 +1375,7 @@ class EntryView {
                         )
                     }
                     .width(100.percent)
+                    .justifyContent(FlexAlign.Start)
                 }
                 .width(100.percent)
                 .layoutWeight(1)
@@ -1204,32 +1517,64 @@ class EntryView {
                 .backgroundColor(Theme.whitePaper)
                 .borderRadius(12)
                 Blank()
-            } else if (this.screen == 1) {
+            }
+            // Keels 0.2.2 leaks @State subscriptions of destroyed subtrees; keep board mounted
+            Column {
                 Stack {
-                    Row {
-                        // A2: 48vp hit area — in-page back: iOS edge swipe does not pop on Keels 0.2.2
-                        this.backButton({ => this.leaveBoard() }, true)
-                        Blank()
-                    }
-                    .width(100.percent)
-                    .height(48)
                     Text(this.roadTitle())
                         .fontSize(18)
                         .fontColor(Theme.ink)
                         .fontFamily(this.serifBoldFamily())
                         .fontWeight(FontWeight.Bold)
+                        .width(100.percent)
+                        .height(48)
+                        .textAlign(TextAlign.Center)
+                        .padding(left: 64, right: 64)
+                        .position(x: 0, y: 0)
+
+                    Text(this.boardSubtitle())
+                        .fontSize(12)
+                        .fontColor(Theme.inkMuted)
+                        .fontFamily(this.sansFamily())
+                        .maxLines(1)
+                        .textOverflow(TextOverflow.Ellipsis)
+                        .textAlign(TextAlign.Center)
+                        .width(100.percent)
+                        .height(16)
+                        .padding(left: 64, right: 64)
+                        .position(x: 0, y: 37)
+
+                    Row {
+                        // A2: 48vp hit area — in-page back: iOS edge swipe does not pop on Keels 0.2.2
+                        this.backButton({ => this.leaveBoard() }, true)
+                        Blank()
+                        Text("负重")
+                            .fontSize(12)
+                            .fontColor(if (this.ladenNow()) { Theme.whitePaper } else { Theme.ink })
+                            .fontFamily(this.sansFamily())
+                            .padding(left: 8, right: 8)
+                            .height(24)
+                            .borderRadius(4)
+                            .border(width: 1, color: Theme.qingDeep)
+                            .backgroundColor(if (this.ladenNow()) { Theme.qingDeep } else { Theme.whitePaper })
+                            .textAlign(TextAlign.Center)
+                            .visibility(if (this.hasBurden()) { Visibility.Visible } else { Visibility.None })
+                    }
+                    .width(100.percent)
+                    .height(48)
+                    .padding(left: Theme.inset, right: Theme.inset)
+                    .position(x: 0, y: 0)
                 }
                 .width(100.percent)
-                .height(48)
-                .padding(left: Theme.inset, right: Theme.inset)
-                Text(this.boardSubtitle())
-                    .fontSize(12)
-                    .fontColor(Theme.inkMuted)
-                    .fontFamily(this.sansFamily())
-                    .padding(left: Theme.inset, right: Theme.inset)
-                    .margin(bottom: 4)
+                .height(56)
+
+                Column() {}
                     .width(100.percent)
-                if (this.hasParityBoard() || this.game.level.stepLimit > 0) {
+                    .height(1)
+                    .backgroundColor(Theme.paperLine)
+                    .margin(left: 20, right: 20)
+
+                if (this.hasParityBoard() || this.curLevel().stepLimit > 0) {
                     Row(space: 8) {
                         if (this.hasParityBoard()) {
                             Text(this.stepChipLabel())
@@ -1243,7 +1588,7 @@ class EntryView {
                                 .border(width: 1, color: this.stepChipBorder())
                                 .backgroundColor(Theme.whitePaper)
                         }
-                        if (this.game.level.stepLimit > 0) {
+                        if (this.curLevel().stepLimit > 0) {
                             Text("余步 · ${this.remainingSteps()}")
                                 .fontSize(15)
                                 .fontWeight(FontWeight.Bold)
@@ -1252,76 +1597,289 @@ class EntryView {
                                 .padding(left: 12, right: 12)
                                 .height(28)
                                 .borderRadius(4)
-                                .border(width: 1, color: Theme.paperLine)
+                                .border(width: this.stepLeftBorderW(), color: this.stepLeftBorderColor())
                                 .backgroundColor(Theme.whitePaper)
                         }
                     }
                     .justifyContent(FlexAlign.Center)
                     .width(100.percent)
-                    .margin(bottom: 4)
+                    .height(28)
+                    .margin(top: 8, bottom: 8)
                 }
-                if (this.parityRejectText.size > 0) {
-                    Row {
-                        Text(this.parityRejectText)
-                            .fontSize(14)
-                            .fontFamily(this.serifFamily())
-                            .fontColor(Theme.vermillion)
-                            .padding(left: 14, right: 14)
-                            .height(28)
-                            .borderRadius(4)
-                            .border(width: 1, color: Theme.vermillion)
-                            .backgroundColor(Theme.whitePaper)
-                    }
-                    .justifyContent(FlexAlign.Center)
-                    .width(100.percent)
-                    .margin(bottom: 4)
-                }
-                /* BANDS.md composite: 涿郡 0–9 / 平原 10–19.
+                /* BANDS.md composite: chapters 0..9.
                    Full-width 360×100 vp; Theme.bandClear keeps bust/flags
                    out of the Canvas grid (band.bottom ≤ board.top − 30px). */
                 Column {
-                    if (this.levelIndex < 10) {
+                    if (this.chapterIndex == 0) {
                         Image(rawImg("band_zhuojun_v91"))
                             .width(100.percent)
                             .height(Theme.bandH)
-                    } else {
+                    } else if (this.chapterIndex == 1) {
                         Image(rawImg("band_pingyuan_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else if (this.chapterIndex == 2) {
+                        Image(rawImg("band_xuzhou_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else if (this.chapterIndex == 3) {
+                        Image(rawImg("band_lvbu_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else if (this.chapterIndex == 4) {
+                        Image(rawImg("band_touyuan_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else if (this.chapterIndex == 5) {
+                        Image(rawImg("band_jingzhou_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else if (this.chapterIndex == 6) {
+                        Image(rawImg("band_chibi_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else if (this.chapterIndex == 7) {
+                        Image(rawImg("band_rushu_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else if (this.chapterIndex == 8) {
+                        Image(rawImg("band_hanzhong_v91"))
+                            .width(100.percent)
+                            .height(Theme.bandH)
+                    } else {
+                        Image(rawImg("band_beifa_v91"))
                             .width(100.percent)
                             .height(Theme.bandH)
                     }
                 }
                 .width(100.percent)
                 .height(Theme.bandH)
-                .margin(bottom: Theme.bandClear)
+                .margin(top: if (this.hasParityBoard() || this.curLevel().stepLimit > 0) { 0 } else { 4 }, bottom: Theme.bandClear)
                 Scroll {
                     Column {
-                        // PLACEHOLDER(M2): board renderer (was Canvas drawBoard + onTouch)
-                        Column {
-                            Text("棋盘 · M2")
-                                .fontSize(14)
-                                .fontColor(Theme.inkMuted)
-                                .fontFamily(this.sansFamily())
+                        Stack(alignContent: Alignment.TopStart) {
+                            // Keys omit boardGen so unchanged shapes are reused between moves (perf); content fields keep keys unique.
+                            // Layer 1: Cells (fill whitePaper/paperShade per cell with radius 2 and 1vp paperLine outline)
+                            ForEach(
+                                this.boardCells,
+                                itemGenerator: { item: BoardRect, idx: Int64 =>
+                                    Rect(width: item.w, height: item.h)
+                                        .radius(2)
+                                        .fill(item.color)
+                                        .stroke(item.stroke)
+                                        .strokeWidth(item.strokeW)
+                                        .position(x: item.x, y: item.y)
+                                },
+                                // Keels 0.2.2: ForEach key label is keyGeneratorFunc (macro passes it to forEachUpdateFunction)
+                                keyGeneratorFunc: { item: BoardRect, idx: Int64 =>
+                                    "${idx}-${item.x}-${item.y}-${item.color}-${item.stroke}"
+                                }
+                            )
+
+                            // Layer 3: Walls (4x24 ink round-cap bars centred exactly on the seam midpoint)
+                            ForEach(
+                                this.boardWalls,
+                                itemGenerator: { item: BoardSeg, idx: Int64 =>
+                                    Line(width: this.boardW(), height: this.boardH())
+                                        .startPoint((item.x1, item.y1))
+                                        .endPoint((item.x2, item.y2))
+                                        .stroke(item.color)
+                                        .strokeWidth(item.width)
+                                        .strokeLineCap(LineCapStyle.Round)
+                                        .antiAlias(true)
+                                        .position(x: 0, y: 0)
+                                },
+                                keyGeneratorFunc: { item: BoardSeg, idx: Int64 =>
+                                    "${idx}-${item.x1}-${item.y1}-${item.x2}-${item.y2}-${item.color}"
+                                }
+                            )
+
+                            // Layer 3b: One-way gates (PNG per gate, device px)
+                            ForEach(
+                                this.boardGates,
+                                itemGenerator: { item: BoardImg, idx: Int64 =>
+                                    Image(gateImgSrc(item.vertical))
+                                        .width(item.w)
+                                        .height(item.h)
+                                        .objectFit(ImageFit.Fill)
+                                        .position(x: item.x, y: item.y)
+                                },
+                                keyGeneratorFunc: { item: BoardImg, idx: Int64 =>
+                                    "${idx}-${item.x}-${item.y}-${item.vertical}"
+                                }
+                            )
+
+                            // Layer 4: Parity labels (HarmonyOS: 11 device px serif inkMuted, textAlign start, baseline at my+4.0)
+                            // HarmonyOS parity: 11 device px (Canvas px); readability noted in M2 report
+                            ForEach(
+                                this.boardParityLabels,
+                                itemGenerator: { item: BoardLabel, idx: Int64 =>
+                                    Text(if (item.text == "奇") { "奇" } else { "偶" })
+                                        .fontSize(item.size)
+                                        .fontColor(item.color)
+                                        .fontFamily(this.serifFamily())
+                                        .width(item.w)
+                                        .textAlign(TextAlign.Start)
+                                        .position(x: item.x, y: item.y)
+                                },
+                                keyGeneratorFunc: { item: BoardLabel, idx: Int64 =>
+                                    "${idx}-${item.x}-${item.y}-${item.text}-${item.color}-${item.size}"
+                                }
+                            )
+
+                            // Layer 5: Route polyline
+                            // Route: one Line per consecutive pair with strokeLineCap Round.
+                            // Round caps on every segment give round joins at corners in native vp coordinates without device px scaling artifacts.
+                            ForEach(
+                                this.boardRoute,
+                                itemGenerator: { item: BoardSeg, idx: Int64 =>
+                                    Line(width: this.boardW(), height: this.boardH())
+                                        .startPoint((item.x1, item.y1))
+                                        .endPoint((item.x2, item.y2))
+                                        .stroke(item.color)
+                                        .strokeWidth(item.width)
+                                        .strokeLineCap(LineCapStyle.Round)
+                                        .antiAlias(true)
+                                        .position(x: 0, y: 0)
+                                },
+                                keyGeneratorFunc: { item: BoardSeg, idx: Int64 =>
+                                    "${idx}-${item.x1}-${item.y1}-${item.x2}-${item.y2}"
+                                }
+                            )
+
+                            // Layer 6: Head dot (r=6 whitePaper fill + ink hairline)
+                            ForEach(
+                                this.boardDots,
+                                itemGenerator: { item: BoardDot, idx: Int64 =>
+                                    Circle(width: item.r * 2.0, height: item.r * 2.0)
+                                        .fill(item.fill)
+                                        .stroke(item.stroke)
+                                        .strokeWidth(item.strokeW)
+                                        .position(x: item.cx - item.r, y: item.cy - item.r)
+                                },
+                                keyGeneratorFunc: { item: BoardDot, idx: Int64 =>
+                                    "${idx}-${item.cx}-${item.cy}-${item.r}-${item.fill}"
+                                }
+                            )
+
+                            // Layer 7: Station circles (+ next ring)
+                            ForEach(
+                                this.boardStationCircles,
+                                itemGenerator: { item: BoardDot, idx: Int64 =>
+                                    Circle(width: item.r * 2.0, height: item.r * 2.0)
+                                        .fill(item.fill)
+                                        .fillOpacity(if (item.fill <= 0x01000000) { 0.0 } else { 1.0 })
+                                        .stroke(item.stroke)
+                                        .strokeWidth(if (item.hasStroke) { item.strokeW } else { 0.0 })
+                                        .position(x: item.cx - item.r, y: item.cy - item.r)
+                                },
+                                keyGeneratorFunc: { item: BoardDot, idx: Int64 =>
+                                    "${idx}-${item.cx}-${item.cy}-${item.r}-${item.fill}-${item.stroke}-${item.hasStroke}"
+                                }
+                            )
+
+                            // Layer 8: Next station label ("下一驿" 11 device px sans gold, textAlign start, baseline at cy+r+12.0)
+                            // HarmonyOS parity: 11 device px (Canvas px); readability noted in M2 report
+                            ForEach(
+                                this.boardNextLabels,
+                                itemGenerator: { item: BoardLabel, idx: Int64 =>
+                                    Text(item.text)
+                                        .fontSize(item.size)
+                                        .fontColor(item.color)
+                                        .fontFamily(this.sansFamily())
+                                        .width(item.w)
+                                        .textAlign(TextAlign.Start)
+                                        .position(x: item.x, y: item.y)
+                                },
+                                keyGeneratorFunc: { item: BoardLabel, idx: Int64 =>
+                                    "${idx}-${item.x}-${item.y}-${item.text}-${item.size}"
+                                }
+                            )
+
+                            // Layer 9: Digits (Path with filled outlines, nonzero fill)
+                            ForEach(
+                                this.boardDigits,
+                                itemGenerator: { item: BoardPath, idx: Int64 =>
+                                    Path(width: this.boardW(), height: this.boardH(), commands: item.commands)
+                                        .fill(item.color)
+                                        .fillOpacity(item.fillOp)
+                                        .stroke(item.stroke)
+                                        .strokeWidth(item.strokeW)
+                                        .strokeLineCap(LineCapStyle.Round)
+                                        .strokeLineJoin(LineJoinStyle.Round)
+                                        .antiAlias(true)
+                                        .position(x: 0, y: 0)
+                                },
+                                keyGeneratorFunc: { item: BoardPath, idx: Int64 =>
+                                    "${idx}-${item.color}-${item.commands}-${item.stroke}-${item.fillOp}"
+                                }
+                            )
+
+                            // Parity reject overlay: flashing edge line + toast
+                            // J13: 单向门拒绝改画官方 oneway-B-reject PNG(几何与 idle 门一致)
+                            if (this.parityRejectFlash) {
+                                if (this.rejectOneWay) {
+                                    Image(gateRejectImgSrc(this.rejectGateImgNow().vertical))
+                                        .width(this.rejectGateImgNow().w)
+                                        .height(this.rejectGateImgNow().h)
+                                        .objectFit(ImageFit.Fill)
+                                        .position(x: this.rejectGateImgNow().x, y: this.rejectGateImgNow().y)
+                                } else {
+                                    Line(width: this.boardW(), height: this.boardH())
+                                        .startPoint(this.rejectEdgeStartPoint())
+                                        .endPoint(this.rejectEdgeEndPoint())
+                                        .stroke(Theme.vermillion)
+                                        .strokeWidth(3)
+                                        .strokeLineCap(LineCapStyle.Round)
+                                        .antiAlias(true)
+                                        .position(x: 0, y: 0)
+                                }
+                                if (this.parityRejectText.size > 0) {
+                                    Text(this.parityRejectText)
+                                        .fontSize(14)
+                                        .fontFamily(this.serifBoldFamily())
+                                        .fontColor(Theme.vermillion)
+                                        .maxLines(1)
+                                        .width(86)
+                                        .height(28)
+                                        .textAlign(TextAlign.Center)
+                                        .padding(left: 14, right: 14)
+                                        .borderRadius(4)
+                                        .border(width: 1, color: Theme.vermillion)
+                                        .backgroundColor(Theme.whitePaper)
+                                        .position(x: this.rejectToastX(), y: this.rejectToastY())
+                                        .visibility(if (this.rejectPlace.shown) { Visibility.Visible } else { Visibility.None })
+                                }
+                            }
                         }
                         .width(this.boardW())
                         .height(this.boardH())
-                        .backgroundColor(Theme.whitePaper)
+                        .backgroundColor(Theme.paperShade)
                         .border(width: 1, color: Theme.paperLine)
-                        .justifyContent(FlexAlign.Center)
-                        .alignItems(HorizontalAlign.Center)
+                        .borderRadius(8)
+                        .onTouch({ evt =>
+                            match (evt.eventType) {
+                                case TouchType.Down => this.handleDrag(evt, true)
+                                case TouchType.Move => this.handleDrag(evt, false)
+                                case _ => ()
+                            }
+                        })
                     }
                     .width(100.percent)
                     .alignItems(HorizontalAlign.Center)
                 }
                 .width(100.percent)
-                .layoutWeight(1)
-                Text(this.chromeLine())
-                    .fontSize(11)
-                    .lineHeight(15)
+                .height(this.boardH() + 2)
+                Text(this.chromeCaption())
+                    .fontSize(12)
+                    .lineHeight(16)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.sansFamily())
-                    .padding(left: Theme.inset, right: Theme.inset)
-                    .margin(top: 4, bottom: 4)
+                    .padding(left: 16, right: 16)
+                    .margin(top: 14, bottom: 4)
                     .width(100.percent)
+                    .textAlign(TextAlign.Center)
+                Column() {}.width(100.percent).layoutWeight(1)
                 // Divider not in OpenSDK 0.2.2: 1vp hairline Column, same color/width as HarmonyOS
                 Column() {}.width(100.percent).height(1).backgroundColor(Theme.paperLine)
                 Row(space: 12) {
@@ -1364,12 +1922,23 @@ class EntryView {
                 .height(Theme.bottomBar)
                 .alignItems(VerticalAlign.Center)
                 .padding(left: Theme.inset, right: Theme.inset)
-            }
+                        }
+            .visibility(if (this.screen == 1) { Visibility.Visible } else { Visibility.None })
+            .width(100.percent)
+            .layoutWeight(1)
         }
         .width(100.percent)
         .height(100.percent)
         .padding(left: this.playInset(), right: this.playInset())
         .backgroundColor(this.playPaper())
         .alignItems(HorizontalAlign.Center)
+        .onAreaChange({ old, new =>
+            let w = new.width.value
+            let targetW = if (w > 0.0) { w } else { 360.0 }
+            if (targetW - this.winW > 0.5 || this.winW - targetW > 0.5) {
+                this.winW = targetW
+                this.rebuildBoard()
+            }
+        })
     }
 }

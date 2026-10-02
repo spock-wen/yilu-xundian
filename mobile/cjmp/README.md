@@ -19,7 +19,7 @@
 构建前需：
 
 1. **CJMP OpenSDK 0.2.2 环境脚本**：使 `keels` CLI 进入 PATH 并设置 `CJMP_SDK_HOME`。该脚本路径因机器而异（勿在脚本中硬编码），例如 `source ~/orca/cjmp/env.sh`（示例路径，以本机实际为准）。
-2. `python3` 在 PATH 上；字形检查依赖 `fontTools`（`python3 -m pip install fonttools`）。
+2. `python3` 在 PATH 上；字形检查依赖 `fontTools`（`python3 -m pip install fonttools`，或使用 `--auto-venv` 标志让脚本自动在 `mobile/cjmp/.venv` 创建并安装，也可以通过设置 `YILU_PY` 环境变量指定含有该依赖的 Python 解释器路径）。
 3. **Xcode**（iOS 构建，需 iOS 15.0 部署目标）。
 4. **Android SDK + NDK 26.3.11579264**（Android 构建）。
 
@@ -28,7 +28,7 @@
 在任意工作目录运行：
 
 ```bash
-mobile/cjmp/scripts/build_from_repo.sh [--out DIR] [--android] [--ios] 
+mobile/cjmp/scripts/build_from_repo.sh [--out DIR] [--android] [--ios] [--auto-venv]
 ```
 
 - 默认同时构建双平台；`--android` / `--ios` 只构建对应平台。
@@ -48,7 +48,7 @@ Android namespace / applicationId 与 iOS bundle identifier 均为 `com.yilu.xun
 
 ## 资源同步策略（仅拷贝被代码引用的 PNG）
 
-`sync_to_keels.sh` 以正则 `rawImg("([A-Za-z0-9_]+)")` 扫描 `mobile/cjmp/lib/*.cj` 收集引用名；任一被引用 PNG 缺失即失败退出。media 目录中存在但未被引用的 PNG 会从 rawfile 目录中清除（仅清理这些文件）。当前 41 张 PNG 中有 36 张被引用，排除的 5 张及原因：
+`sync_to_keels.sh` 以正则 `rawImg("([A-Za-z0-9_]+)")` 扫描 `mobile/cjmp/lib/*.cj` 收集引用名；任一被引用 PNG 缺失即失败退出。media 目录中存在但未被引用的 PNG 会从 rawfile 目录中清除（仅清理这些文件）。当前 49 张 PNG 中有 44 张被引用，排除的 5 张及原因：
 
 | PNG | 排除原因 |
 |-----|----------|
@@ -73,11 +73,40 @@ SVG 图标（`icon-undo`、`icon-reset`）与字体的同步行为不变。
 - **字体注册**：由于公共字体注册 API 限制，字体通过引擎底层私有 FFI 符号 `FfiFontManagerRegisterFont` 配合 `dlsym` 进行动态注册（属内部私有符号，后续 SDK 版本可能调整）。
 - **页面返回（方案 A2，页内返回按钮）**：iOS 系统的侧滑返回手势在当前容器下不可用，Android 的系统返回键在此桥接容器内不会天然触发页面回退，因此所有子页面均内置页面内返回按钮 `〈`（方案 A2）；Android 系统返回键被映射为触发同一页内返回按钮的处理逻辑，保证双端返回行为一致。
 - **安全区与状态栏**：安全区及状态栏间距当前为占位实现（PLACEHOLDER），等待产品经理（PM）的设计决策最终确定。
-- **棋盘实现**：当前棋盘为占位展示，完整巡点交互逻辑将在 M2 里程碑接入。
+- **棋盘实现**：M2 起棋盘由 shape 组件（Rect/Line/Circle/Path 等，非 Canvas）绘制，托盘与格宽基于 BoardGeom 几何计算（间隙 6vp，见 lib/board.cj）。
+- 仓颉编译器（CJMP OpenSDK 0.2.2 cjc）偶发随机崩溃/失败，重跑即可；且构建产物不可逐字节复现，因此脚本打印的 APK / iOS 二进制 SHA-256 仅供参考（用于核对同一次构建的传递），不作为版本一致性依据。
 - **特殊机制与修缮关卡**：6 种核心特殊机制及修缮关卡暂未实现，计划在 M3 里程碑实现。
 
 ## 字体许可
 
-字体基于 Noto Serif SC 与 Noto Sans SC (variable, google/fonts ofl/notosanssc @ a85815a, instanced 400/500, subset 346 chars by design)，遵循 SIL Open Font License 1.1 开源协议。详情请参阅 `fonts/OFL.txt`。
-- **YiluSerif**: Noto Serif SC 子集。
-- **YiluSans**: Noto Sans SC 400/500 子集，由设计交付，sha256: 37976c86df12 (design check_glyphs.py, vendored unchanged)。
+字体基于 Noto Serif SC 与 Noto Sans SC，遵循 SIL Open Font License 1.1 开源协议。详情请参阅 `fonts/OFL.txt`。
+- **YiluSerif**（Regular / Bold，CFF OTF）：Noto Serif SC 子集。
+- **YiluSans**（Regular 400 / Medium 500，TrueType）：Noto Sans SC 可变字体实例化 400/500 后的子集，沿用设计交付的做法（`check_glyphs.py` 为设计交付件原样 vendored，sha256: 37976c86df12）。
+
+### 字体子集化（可复现）
+
+脚本：`scripts/subset_yilu_fonts.py`（仅依赖 Python 3 + fontTools，已用 fontTools 4.66 验证）。字表即事实来源：`fonts/yilu_serif_chars.txt`（369 字）与 `fonts/yilu_sans_chars.txt`（359 字）；`fonts/charset.txt` 与 serif 字表相同。`check_fonts.py` 另行生成 `charset_serif.txt` / `charset_sans.txt`（运行所需字符，仅供参考）。
+
+官方源文件（sha256 已在脚本中固定，下载后校验，不符即中止）：
+
+| 源 | URL | sha256 |
+|---|---|---|
+| NotoSansSC[wght].ttf（google/fonts `ofl/notosanssc` @ a85815a，v2.004-H2） | https://github.com/google/fonts/raw/a85815a42757630ce188fdad368c2dfc444d4773/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf | a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da |
+| Sans OFL.txt | https://raw.githubusercontent.com/google/fonts/a85815a42757630ce188fdad368c2dfc444d4773/ofl/notosanssc/OFL.txt | 1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9 |
+| NotoSerifSC-Regular.otf（notofonts/noto-cjk `Serif/SubsetOTF/SC` @ f8d1575，v2.003） | https://github.com/notofonts/noto-cjk/raw/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Serif/SubsetOTF/SC/NotoSerifSC-Regular.otf | e8f396decc1f0963a016a989c3d8852e863d1350996f573860a80767c83a1cd3 |
+| NotoSerifSC-Bold.otf（同上） | https://github.com/notofonts/noto-cjk/raw/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Serif/SubsetOTF/SC/NotoSerifSC-Bold.otf | 24693d48bdb9152f0a06b02af625638a1097abd6de4010ebba027f6e82710527 |
+| Serif LICENSE（SIL OFL 1.1） | https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Serif/LICENSE | 6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2 |
+
+命令（在仓库根目录）：
+
+```
+python3 mobile/cjmp/scripts/subset_yilu_fonts.py fetch  --src-dir /tmp/yilu-font-src
+python3 mobile/cjmp/scripts/subset_yilu_fonts.py build  --src-dir /tmp/yilu-font-src   # 实例化 + 子集化，改写 fonts/ 下四个字体与字表
+python3 mobile/cjmp/scripts/subset_yilu_fonts.py verify --old-dir <旧字体目录> [--json report.json]   # 逐字形对比旧/新子集
+```
+
+等价的 pyftsubset 参数——Sans（先用 `fontTools.varLib.instancer` 取 wght=400/500，得到的静态字体与设计交付时的中间件逐字节一致）：`--text-file=fonts/yilu_sans_chars.txt --no-hinting --desubroutinize --layout-features='*' --name-IDs='*' --notdef-outline --glyph-names=false`；Serif：`--text-file=fonts/yilu_serif_chars.txt --no-hinting --glyph-names=false`。
+
+字表在保留原有全部字符的基础上新增 13 个字：`甲乙符滑渡负塌泽停闸门禁此`（YiluSerif 与 YiluSans 均已收录；`此` 原本已在 YiluSerif 中，故 YiluSerif 实际新增 12 字、YiluSans 新增 13 字）。`verify` 结果：原有字符（serif 357、sans 346）的字形轮廓与横/纵向 advance 与旧子集逐字一致（0 差异），OpenType 特性标签不变。以后增字只需在字表文件中追加字符后重跑 `build`。
+
+字体大小（字节）：YiluSerif-Regular 89780→93508，YiluSerif-Bold 89336→93132，YiluSans-Regular 134796→138048，YiluSans-Medium 134732→137984。

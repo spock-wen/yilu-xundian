@@ -2,7 +2,46 @@
    Behavior copy of entry/src/main/cangjie/game/patrol.cj. See ios/ENGINE.md. */
 package yilu_zip.game
 
+import std.collection.ArrayList
 import yilu_zip.engine.{Cell, GridMap, GridPath}
+
+/* Reason of the last rejected input (0 = none); UI may toast/flash on it. */
+public let REJECT_NONE: Int64 = 0
+public let REJECT_PARITY: Int64 = 1
+public let REJECT_ONE_WAY: Int64 = 2
+public let REJECT_SEALED_GATE: Int64 = 3
+public let REJECT_BURDEN_FORBIDDEN: Int64 = 4
+public let REJECT_WALL: Int64 = 5
+public let REJECT_VISITED: Int64 = 6
+public let REJECT_WAYPOINT: Int64 = 7
+public let REJECT_BOUNDS: Int64 = 8
+public let REJECT_FERRY: Int64 = 9 /* 进甲被拒：乙已在 path 里（或 乙==甲）. */
+public let REJECT_START: Int64 = 10 /* 首格必须是 1 号. */
+
+/* Snapshot taken right before one input is applied; one input = one undo unit. */
+public class UnitSnap {
+    public var startLen: Int64
+    public var hasToken: Bool
+    public var laden: Bool
+    public var down: Bool
+
+    public init(startLen: Int64, hasToken: Bool, laden: Bool, down: Bool) {
+        this.startLen = startLen
+        this.hasToken = hasToken
+        this.laden = laden
+        this.down = down
+    }
+}
+
+/* burden 起始载态：start_laden，无 burden 为 false (tools/solve_levels.py:497). */
+func initialLadenOf(level: LevelDef): Bool {
+    var l = false
+    match (level.burden) {
+        case Some(b) => l = b.startLaden
+        case None => ()
+    }
+    return l
+}
 
 /* Thin Zip / 「驿路巡点」 rules on top of the reusable grid engine. */
 public class PatrolGame {
@@ -11,17 +50,34 @@ public class PatrolGame {
     public var path: GridPath = GridPath()
     /* 0 = none, 1 = needs odd step, 2 = needs even step; set on parity reject so UI can toast. */
     public var lastRejectParity: Int64 = 0
+    /* Reject reason + rejected edge ends (cell coords; -1 = unknown/start). */
+    public var lastReject: Int64 = 0
+    public var lastRejectFromX: Int64 = -1
+    public var lastRejectFromY: Int64 = -1
+    public var lastRejectToX: Int64 = -1
+    public var lastRejectToY: Int64 = -1
+    /* Mechanic run-state; each UnitSnap restores these on undo. */
+    public var hasToken: Bool = false
+    public var laden: Bool = false
+    public var collapseDown: Bool = false /* 踏触发格后置真，本输入起之后的输入生效. */
+    /* Undo units: one successful tryStep = one entry. */
+    var units: ArrayList<UnitSnap> = ArrayList<UnitSnap>()
 
     public init(level: LevelDef) {
         this.level = level
         this.grid = GridMap(level.cols, level.rows, level.walls)
+        this.laden = initialLadenOf(level) /* solve_levels.py:497 */
     }
 
     public func reset(level: LevelDef): Unit {
         this.level = level
         this.grid = GridMap(level.cols, level.rows, level.walls)
         this.path.clear()
-        this.lastRejectParity = 0
+        this.clearUnits()
+        this.clearReject()
+        this.hasToken = false
+        this.laden = initialLadenOf(this.level) /* solve_levels.py:497 initial_state */
+        this.collapseDown = false
     }
 
     /* 已铺格数（含当前站立格），即顶栏「第 N 步」的 N。 */
@@ -65,70 +121,440 @@ public class PatrolGame {
         return true
     }
 
-    func canEnter(cell: Cell): Bool {
-        this.lastRejectParity = 0
-        if (!this.grid.inBounds(cell)) {
-            return false
+    /* 纯函数版奇偶：显式 filled（不读 this.filled()、不写 lastRejectParity），
+       逻辑同 checkParity / solve_levels.py:380-387 (_parity_ok). */
+    func parityOkAt(a: Cell, b: Cell, filled: Int64): Bool {
+        for (pe in this.level.parityEdges) {
+            if (pe.matches(a, b)) {
+                if (pe.requireOdd && filled % 2 == 0) {
+                    return false
+                }
+                if (pe.requireEven && filled % 2 == 1) {
+                    return false
+                }
+            }
         }
-        if (this.path.contains(cell)) {
-            return false
-        }
-        let lastOpt = this.path.last()
-        match (lastOpt) {
-            case None =>
-                return this.level.numberAt(cell.x, cell.y) == 1
-            case Some(last) =>
-                if (this.grid.blocked(last, cell)) {
-                    return false
-                }
-                if (!this.checkParity(last, cell)) {
-                    return false
-                }
-                let num = this.level.numberAt(cell.x, cell.y)
-                let nxt = this.nextRequired()
-                if (num != 0 && num != nxt) {
-                    return false
-                }
-                if (num == this.level.maxNumber() && this.path.size() + 1 != this.grid.cellCount()) {
-                    return false
-                }
-                return true
-        }
+        return true
     }
 
-    /* Drag onto the previous cell undoes the last step (Zip-style). */
-    public func tryStep(cell: Cell): Bool {
+    /* Clear reject bookkeeping; called at the head of every public entry point. */
+    func clearReject(): Unit {
+        this.lastReject = REJECT_NONE
         this.lastRejectParity = 0
-        let prevOpt = this.path.prev()
-        match (prevOpt) {
-            case Some(prev) =>
-                if (cell.equals(prev)) {
-                    this.path.undo()
-                    return true
+        this.lastRejectFromX = -1
+        this.lastRejectFromY = -1
+        this.lastRejectToX = -1
+        this.lastRejectToY = -1
+    }
+
+    /* Record `cell` as the rejected edge head (from = current head, -1 at start) and fail. */
+    func rejectEdge(code: Int64, cell: Cell): Option<ArrayList<Cell>> {
+        this.lastReject = code
+        let lastOpt = this.path.last()
+        match (lastOpt) {
+            case Some(last) =>
+                this.lastRejectFromX = last.x
+                this.lastRejectFromY = last.y
+            case None => ()
+        }
+        this.lastRejectToX = cell.x
+        this.lastRejectToY = cell.y
+        return None
+    }
+
+    /* 塌桥边（无向）：down 真且 (a,b) 与 level.collapse 塌边相等才封。
+       纯函数、显式传 down（solve_levels.py:416-419 用 down 状态查边），
+       供 expandInput 与之后滑行逐格复用. */
+    func edgeCollapsed(a: Cell, b: Cell, down: Bool): Bool {
+        if (!down) {
+            return false
+        }
+        var hit = false
+        match (this.level.collapse) {
+            case Some(c) =>
+                let fwd = a.x == c.x1 && a.y == c.y1 && b.x == c.x2 && b.y == c.y2
+                let rev = a.x == c.x2 && a.y == c.y2 && b.x == c.x1 && b.y == c.y1
+                hit = fwd || rev
+            case None => ()
+        }
+        return hit
+    }
+
+    /* Public query: edge (x1,y1)-(x2,y2) is collapsed right now (undirected). */
+    public func isEdgeCollapsed(x1: Int64, y1: Int64, x2: Int64, y2: Int64): Bool {
+        return this.edgeCollapsed(Cell(x1, y1), Cell(x2, y2), this.collapseDown)
+    }
+
+    /* 负重禁入：burden 存在且当前 laden 且 cell 在禁区
+       (solve_levels.py:426-427 邻格 / :501-502 首格). */
+    func burdenForbids(cell: Cell): Bool {
+        var bad = false
+        match (this.level.burden) {
+            case Some(_) =>
+                if (this.laden && this.level.isForbiddenCell(cell.x, cell.y)) {
+                    bad = true
                 }
             case None => ()
         }
-        if (this.canEnter(cell)) {
-            this.path.push(cell)
-            return true
+        return bad
+    }
+
+    /* 显式传参的邻格开放性检查，顺序严格同 _nbr_open (solve_levels.py:401-429)：
+       墙/非邻 → 塌桥封边 → 闸门 → 奇偶 → 单向 → 负重禁区。
+       返回 0=开放，否则 REJECT_* 码。越界由调用方先查 inBounds；不写任何
+       lastReject* 字段（纯查询，拒绝登记仍由 rejectEdge 做）。 */
+    func nbrBlockedCode(cur: Cell, nxt: Cell, hasTok: Bool, filled: Int64, ladenS: Bool, downS: Bool): Int64 {
+        if (this.grid.blocked(cur, nxt)) {
+            return REJECT_WALL /* :414-415 墙（含非邻）. */
+        }
+        if (this.edgeCollapsed(cur, nxt, downS)) {
+            return REJECT_WALL /* :416-417 塌桥封边. */
+        }
+        if (this.level.gateAt(cur, nxt) && !hasTok) {
+            return REJECT_SEALED_GATE /* :418-419 闸门. */
+        }
+        if (!this.parityOkAt(cur, nxt, filled)) {
+            return REJECT_PARITY /* :420-421 奇偶，filled 用显式传入值. */
+        }
+        if (this.level.oneWayConstrains(cur, nxt) && !this.level.oneWayAllows(cur, nxt)) {
+            return REJECT_ONE_WAY /* :422-423 单向. */
+        }
+        var bad = false
+        match (this.level.burden) {
+            case Some(_) =>
+                if (ladenS && this.level.isForbiddenCell(nxt.x, nxt.y)) {
+                    bad = true /* :424-425 载态禁区. */
+                }
+            case None => ()
+        }
+        if (bad) {
+            return REJECT_BURDEN_FORBIDDEN
+        }
+        return 0
+    }
+
+    /* 对段的数字约束，一次输入产生的整段一起查：
+       ① 段内路标必须按序消耗 (_seg_clue_ok, solve_levels.py:472-484，不符→false→
+         REJECT_WAYPOINT)；② 最大号只能是整盘最后一格 (:577-578)，且按 Python 只查
+         nxt（=seg[0]，渡口段即甲），不推广到段内其他格。
+       need 取 nextRequired()（跨边前、未 push 的路径），单格段与旧实现逐位一致。 */
+    func segClueOk(seg: ArrayList<Cell>): Bool {
+        var n = this.nextRequired()
+        var i: Int64 = 0
+        while (i < seg.size) {
+            let cv = this.level.numberAt(seg[i].x, seg[i].y)
+            if (cv != 0 && cv != n) {
+                return false
+            }
+            if (cv == n) {
+                n = n + 1
+            }
+            i = i + 1
+        }
+        let head = seg[0]
+        let headNum = this.level.numberAt(head.x, head.y)
+        if (headNum == this.level.maxNumber() && this.filled() + seg.size != this.grid.cellCount()) {
+            return false
+        }
+        return true
+    }
+
+    /* cell 是否泽地格（level.slideCells）. */
+    func inSlideCells(cell: Cell): Bool {
+        for (c in this.level.slideCells) {
+            if (c.equals(cell)) {
+                return true
+            }
         }
         return false
     }
 
-    public func undo(): Bool {
-        this.lastRejectParity = 0
-        let removed = this.path.undo()
-        match (removed) {
-            case Some(cell) => return cell.equals(cell)
+    /* 泽地强制滑行段，1:1 对照 _slide_segment (solve_levels.py:431-470)：
+       dx,dy = nxt-cur（调用方已保证邻格，非邻已被墙检查拒掉）；
+       hasToken 取入口值（展开期间 this.hasToken 不变，冻结等价）；
+       filled/laden/down 逐落格更新。停止顺序：越界 → 墙/闸/奇偶/单向/禁区
+       (nbrBlockedCode) → 已访 → 已入段 → 数字格 → 渡口甲/乙 → 非泽地，
+       均 break 停在前一格（无符遇闸停闸前，不整段拒绝）。 */
+    func slideSegment(cur: Cell, nxt: Cell): ArrayList<Cell> {
+        let dx = nxt.x - cur.x
+        let dy = nxt.y - cur.y
+        let seg = ArrayList<Cell>()
+        seg.add(nxt)
+        let hasTok = this.hasToken /* 入口值冻结 (rushu_ch8/zip_seal.py:115-120). */
+        var pos = nxt
+        var fcur = this.filled() + 1 /* :449 跨入 nxt 后的已铺数. */
+        var (ladenS, downS) = this.cellEffectsAt(nxt, this.laden, this.collapseDown) /* :450 */
+        while (true) {
+            let npos = Cell(pos.x + dx, pos.y + dy)
+            if (!this.grid.inBounds(npos)) {
+                break /* :453-454 越界. */
+            }
+            if (this.nbrBlockedCode(pos, npos, hasTok, fcur, ladenS, downS) != 0) {
+                break /* :456-457 墙/闸/奇偶/单向/禁区. */
+            }
+            if (this.path.contains(npos)) {
+                break /* :459 已访. */
+            }
+            var inSeg = false
+            for (s in seg) {
+                if (s.equals(npos)) {
+                    inSeg = true
+                }
+            }
+            if (inSeg) {
+                break /* :460 已入本段. */
+            }
+            if (this.level.numberAt(npos.x, npos.y) != 0) {
+                break /* :462 数字格. */
+            }
+            var isFerry = false
+            match (this.level.ferry) {
+                case Some(f) =>
+                    if ((npos.x == f.jiaX && npos.y == f.jiaY) || (npos.x == f.yiX && npos.y == f.yiY)) {
+                        isFerry = true /* :464-465 渡口甲/乙. */
+                    }
+                case None => ()
+            }
+            if (isFerry) {
+                break
+            }
+            if (!this.inSlideCells(npos)) {
+                break /* :467 非泽地. */
+            }
+            seg.add(npos)
+            let (l2, d2) = this.cellEffectsAt(npos, ladenS, downS) /* :468-469 逐落格更新. */
+            ladenS = l2
+            downS = d2
+            pos = npos
+            fcur = fcur + 1
+        }
+        return seg
+    }
+
+    /* Cells visited by one input `cell`, or None when illegal (sets lastReject*).
+       Mirrors Rules.expand in tools/solve_levels.py, keeping the legacy canEnter
+       check order (已访 before 奇偶 so lastRejectParity behaves as before). */
+    func expandInput(cell: Cell): Option<ArrayList<Cell>> {
+        this.clearReject()
+        if (!this.grid.inBounds(cell)) {
+            return this.rejectEdge(REJECT_BOUNDS, cell)
+        }
+        if (this.path.contains(cell)) {
+            return this.rejectEdge(REJECT_VISITED, cell)
+        }
+        let lastOpt = this.path.last()
+        match (lastOpt) {
+            case None =>
+                if (this.level.numberAt(cell.x, cell.y) == 1) {
+                    // start_laden 时首格不可在禁区 (solve_levels.py:501-502, 在起点效果 :503 之前).
+                    if (this.burdenForbids(cell)) {
+                        return this.rejectEdge(REJECT_BURDEN_FORBIDDEN, cell)
+                    }
+                    let seg0 = ArrayList<Cell>()
+                    seg0.add(cell)
+                    return Some(seg0)
+                }
+                return this.rejectEdge(REJECT_START, cell)
+            case Some(last) =>
+                if (this.grid.blocked(last, cell)) {
+                    return this.rejectEdge(REJECT_WALL, cell)
+                }
+                // 塌桥：已 down 则塌边封，占位为墙样式 (solve_levels.py:418-419,
+                // 墙 → 塌桥 → 闸门顺序)。进甲后的跳接豁免，不查 甲→乙 边。
+                if (this.edgeCollapsed(last, cell, this.collapseDown)) {
+                    return this.rejectEdge(REJECT_WALL, cell)
+                }
+                // 闸门：无符不过 (solve_levels.py:420-421)；hasToken 取本次输入入口值.
+                if (this.level.gateAt(last, cell) && !this.hasToken) {
+                    return this.rejectEdge(REJECT_SEALED_GATE, cell)
+                }
+                if (!this.checkParity(last, cell)) { /* solve_levels.py:422-423 */
+                    return this.rejectEdge(REJECT_PARITY, cell)
+                }
+                // 单向：边受约束且非 from→to 即拒 (solve_levels.py:424-425).
+                if (this.level.oneWayConstrains(last, cell) && !this.level.oneWayAllows(last, cell)) {
+                    return this.rejectEdge(REJECT_ONE_WAY, cell)
+                }
+                // 负重：laden 时不可进禁区格 (solve_levels.py:426-427).
+                if (this.burdenForbids(cell)) {
+                    return this.rejectEdge(REJECT_BURDEN_FORBIDDEN, cell)
+                }
+                // 渡口步骤 4（进甲，solve_levels.py:552-560）：墙/闸/奇偶/单向/负重
+                // 禁区均是针对「当前头→甲」这条边（filled 取跨边前），已访查在函数头。
+                let seg = ArrayList<Cell>()
+                match (this.level.ferry) {
+                    case Some(f) =>
+                        if (cell.x == f.jiaX && cell.y == f.jiaY) {
+                            let yi = Cell(f.yiX, f.yiY)
+                            // 乙已在 path 里（或 乙==甲）→ 拒绝，端点 to=甲.
+                            if (this.path.contains(yi) || (f.yiX == f.jiaX && f.yiY == f.jiaY)) {
+                                return this.rejectEdge(REJECT_FERRY, cell)
+                            }
+                            // burden 存在且 laden 且 乙 在禁区 → 拒绝，端点 to=甲.
+                            if (this.burdenForbids(yi)) {
+                                return this.rejectEdge(REJECT_BURDEN_FORBIDDEN, cell)
+                            }
+                            // 跳接甲→乙豁免墙/单向/闸/奇偶/塌桥；一次输入推两格.
+                            seg.add(cell)
+                            seg.add(yi)
+                        }
+                    case None => ()
+                }
+                if (seg.size == 0) {
+                    // 泽地强制滑行（_expand step 6, solve_levels.py:563-568）：
+                    // 目标 ∈ slideCells → 从 last 沿 last→cell 方向滑到底；
+                    // 否则普通单格。起点分支在上面已早退，首格不滑。
+                    if (this.inSlideCells(cell)) {
+                        let slid = this.slideSegment(last, cell)
+                        var k: Int64 = 0
+                        while (k < slid.size) {
+                            seg.add(slid[k])
+                            k = k + 1
+                        }
+                    } else {
+                        seg.add(cell)
+                    }
+                }
+                if (!this.segClueOk(seg)) {
+                    return this.rejectEdge(REJECT_WAYPOINT, cell)
+                }
+                return Some(seg)
+        }
+    }
+
+    /* Thin wrapper over expandInput: a plain-cell input exists iff it yields Some. */
+    func canEnter(cell: Cell): Bool {
+        match (this.expandInput(cell)) {
+            case Some(_) => return true
             case None => return false
+        }
+    }
+
+    /* One input = one undo unit. Drag onto the cell the latest unit started
+       from (pre-input head), or onto any non-head cell of that unit, rewinds
+       the whole unit; other drags fall through to expandInput as before. */
+    public func tryStep(cell: Cell): Bool {
+        this.clearReject()
+        if (this.units.size > 0) {
+            let unit = this.units[this.units.size - 1]
+            if (unit.startLen > 0 && cell.equals(this.path.at(unit.startLen - 1))) {
+                this.undoUnit()
+                return true
+            }
+            // 本单元除头（末格）以外的格（1 格单元该范围为空）→ 撤销整个单元：
+            // 2 格渡口单元 [甲,乙] 只查甲（乙是头，落头不撤销，走已访拒绝）.
+            var u: Int64 = unit.startLen
+            while (u <= this.path.size() - 2) {
+                if (cell.equals(this.path.at(u))) {
+                    this.undoUnit()
+                    return true
+                }
+                u = u + 1
+            }
+        }
+        match (this.expandInput(cell)) {
+            case None => return false
+            case Some(seg) =>
+                this.units.add(UnitSnap(this.path.size(), this.hasToken, this.laden, this.collapseDown))
+                var i: Int64 = 0
+                while (i < seg.size) {
+                    this.path.push(seg[i])
+                    i = i + 1
+                }
+                this.applyEntryEffects(seg)
+                return true
+        }
+    }
+
+    public func undo(): Bool {
+        this.clearReject()
+        return this.undoUnit()
+    }
+
+    /* Rewind the latest unit: pop the path back to its startLen and restore the
+       snapshot (token/laden/down). Undo is pure rewind — never hits one-way gates. */
+    func undoUnit(): Bool {
+        if (this.units.size == 0) {
+            return false
+        }
+        let unit = this.units[this.units.size - 1]
+        while (this.path.size() > unit.startLen) {
+            this.path.undo()
+        }
+        this.hasToken = unit.hasToken
+        this.laden = unit.laden
+        this.collapseDown = unit.down
+        this.units.remove(at: this.units.size - 1)
+        return true
+    }
+
+    func clearUnits(): Unit {
+        while (this.units.size > 0) {
+            this.units.remove(at: this.units.size - 1)
         }
     }
 
     public func clear(): Unit {
         this.path.clear()
-        this.lastRejectParity = 0
+        this.clearUnits()
+        this.clearReject()
+        this.hasToken = false
+        this.laden = initialLadenOf(this.level) /* same as reset(): solve_levels.py:497 */
+        this.collapseDown = false
     }
 
+    /* 逐格 装→laden=true、卸→laden=false、塌桥触发格→down=true（只置真不回退），
+       纯函数 1:1 对照 _cell_effects (solve_levels.py:390-399)；装/卸同格时后写的
+       卸生效（与 Python 顺序一致），塌桥在 burden 之后判定。 */
+    func cellEffectsAt(c: Cell, laden: Bool, down: Bool): (Bool, Bool) {
+        var l = laden
+        var d = down
+        match (this.level.burden) {
+            case Some(b) =>
+                if (c.x == b.loadX && c.y == b.loadY) {
+                    l = true
+                }
+                if (c.x == b.unloadX && c.y == b.unloadY) {
+                    l = false
+                }
+            case None => ()
+        }
+        match (this.level.collapse) {
+            case Some(co) =>
+                if (c.x == co.triggerX && c.y == co.triggerY) {
+                    d = true
+                }
+            case None => ()
+        }
+        return (l, d)
+    }
+
+    /* State changes caused by landing a whole input: per-cell 装/卸/塌桥经
+       cellEffectsAt 逐格推进 (solve_levels.py:390-399 _cell_effects, applied
+       cell by cell in apply() :594-598)，then the token pickup only after the
+       whole segment (:610) — a gate crossed in the same input still sees the
+       entry hasToken. 塌桥一旦为真不回退，只由 undo 快照/clear/reset 复位. */
+    func applyEntryEffects(seg: ArrayList<Cell>): Unit {
+        var i: Int64 = 0
+        while (i < seg.size) {
+            let (l, d) = this.cellEffectsAt(seg[i], this.laden, this.collapseDown)
+            this.laden = l
+            this.collapseDown = d
+            i = i + 1
+        }
+        var tok = this.hasToken
+        var j: Int64 = 0
+        while (j < seg.size) {
+            if (this.level.isTokenCell(seg[j].x, seg[j].y)) {
+                tok = true
+            }
+            j = j + 1
+        }
+        this.hasToken = tok
+    }
+
+    /* 渡口关「必须走甲→乙 才算赢」保持为设计解的有效性条件，不在引擎 isWin 里查：
+       甲只能经跳接触发进入，满盘铺满即隐含已用渡口 (对照 solve_levels.py:625-626). */
     public func isWin(): Bool {
         let lastOpt = this.path.last()
         match (lastOpt) {
