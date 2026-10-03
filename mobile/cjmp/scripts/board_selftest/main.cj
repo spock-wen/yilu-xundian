@@ -2205,6 +2205,212 @@ func j23ProgressTests(ctx: Ctx): Unit {
     println("J23 progress done checks=${ctx.checks - c0}")
 }
 
+/* ===== J24 progress file backend（真实 std.fs 落盘，box-only，根目录 /tmp） ===== */
+
+/* Option<String> 用 match 逐分支比较（不用 ==）。 */
+func j24OptEq(got: ?String, want: ?String): Bool {
+    match (got) {
+        case Some(g) =>
+            match (want) {
+                case Some(w) => return g == w
+                case None => return false
+            }
+        case None =>
+            match (want) {
+                case Some(_) => return false
+                case None => return true
+            }
+    }
+}
+
+func j24OptText(v: ?String): String {
+    match (v) {
+        case Some(s) => return "Some(" + s + ")"
+        case None => return "None"
+    }
+}
+
+func j24CkPick(ctx: Ctx, y: ?String, h: ?String, want: ?String, tag: String): Unit {
+    let got = progressPickDir(y, h)
+    ctx.ck(j24OptEq(got, want), "${tag} got=${j24OptText(got)}")
+}
+
+/* 递归删除（不存在视为成功）；任何异常返回 false，不抛。 */
+func j24RmDir(path: String): Bool {
+    try {
+        if (exists(path)) {
+            remove(path, recursive: true)
+        }
+        return true
+    } catch (e: Exception) {
+        return false
+    }
+}
+
+func j24WriteFile(path: String, text: String): Bool {
+    try {
+        File.writeTo(path, text.toArray())
+        return true
+    } catch (e: Exception) {
+        return false
+    }
+}
+
+func j24ReadFile(path: String): ?String {
+    try {
+        return Some(unsafe { String.fromUtf8Unchecked(File.readFrom(path)) })
+    } catch (e: Exception) {
+        return None
+    }
+}
+
+/* 写原始字节（用于构造非法 UTF-8 存档）；任何异常返回 false，不抛。 */
+func j24WriteBytes(path: String, bytes: Array<UInt8>): Bool {
+    try {
+        File.writeTo(path, bytes)
+        return true
+    } catch (e: Exception) {
+        return false
+    }
+}
+
+func j24ProgressFileTests(ctx: Ctx): Unit {
+    let c0 = ctx.checks
+    let root = "/tmp/yilu_progress_test_j24"
+    /* (0) 开头清理测试根目录（若上次残留）。 */
+    ctx.ck(j24RmDir(root), "J24 setup rm root")
+    ctx.ck(!exists(root), "J24 setup root gone")
+    /* (1) progressPickDir 全分支 + 路径拼接纯函数。 */
+    j24CkPick(ctx, Some("/data/f"), Some("/home/h"), Some("/data/f"), "J24 pick both")
+    j24CkPick(ctx, Some("/data/f"), None, Some("/data/f"), "J24 pick yilu only")
+    j24CkPick(ctx, None, Some("/var/c"), Some("/var/c/Documents"), "J24 pick home")
+    j24CkPick(ctx, None, Some("/var/c/"), Some("/var/c/Documents"), "J24 pick home slash")
+    j24CkPick(ctx, Some(""), Some("/var/c"), Some("/var/c/Documents"), "J24 pick yilu empty")
+    j24CkPick(ctx, Some("/"), Some("/var/c"), Some("/var/c/Documents"), "J24 pick yilu root")
+    j24CkPick(ctx, None, Some(""), None, "J24 pick home empty")
+    j24CkPick(ctx, None, Some("/"), None, "J24 pick home root")
+    j24CkPick(ctx, None, None, None, "J24 pick both none")
+    j24CkPick(ctx, Some(""), None, None, "J24 pick yilu empty home none")
+    j24CkPick(ctx, Some("/"), Some("/"), None, "J24 pick both invalid")
+    ctx.ck(progressJoin("/a", "b") == "/a/b", "J24 join no slash")
+    ctx.ck(progressJoin("/a/", "b") == "/a/b", "J24 join slash")
+    ctx.ck(progressFilePath("/a") == "/a/progress.json", "J24 file path")
+    ctx.ck(progressTmpPath("/a") == "/a/progress.json.tmp", "J24 tmp path")
+    /* (2) 往返：目录不预建，验证 write 自动创建；tmp 不残留。 */
+    let rtDir = root + "/rt"
+    ctx.ck(!exists(rtDir), "J24 rt dir absent")
+    let brt = FileProgressBackend(rtDir)
+    ctx.ck(j24OptEq(brt.read(), None), "J24 rt initial read none")
+    for (n in [0, 1, 57, 100]) {
+        ctx.ck(ProgressStore.save(brt, n), "J24 rt save n=${n}")
+        ctx.ck(ProgressStore.load(brt, 100) == n,
+            "J24 rt load n=${n} got=${ProgressStore.load(brt, 100)}")
+        ctx.ck(j24OptEq(brt.read(), Some(progressEncode(n))),
+            "J24 rt read n=${n} got=${j24OptText(brt.read())}")
+        ctx.ck(!exists(progressTmpPath(rtDir)), "J24 rt no tmp n=${n}")
+    }
+    ctx.ck(j24OptEq(j24ReadFile(progressFilePath(rtDir)), Some(progressEncode(100))),
+        "J24 rt final file text=${j24OptText(j24ReadFile(progressFilePath(rtDir)))}")
+    /* (3) 覆盖写：后端纯覆盖，不做单调。 */
+    let owDir = root + "/ow"
+    let bow = FileProgressBackend(owDir)
+    ctx.ck(ProgressStore.save(bow, 57), "J24 ow save 57")
+    ctx.ck(ProgressStore.load(bow, 100) == 57, "J24 ow load 57 got=${ProgressStore.load(bow, 100)}")
+    ctx.ck(ProgressStore.save(bow, 3), "J24 ow save 3")
+    ctx.ck(ProgressStore.load(bow, 100) == 3, "J24 ow load 3 got=${ProgressStore.load(bow, 100)}")
+    /* (4) 文件被写坏：load 归零、read 原样、再 save 正常覆盖。 */
+    let badDir = root + "/bad"
+    let bb = FileProgressBackend(badDir)
+    ctx.ck(ProgressStore.save(bb, 9), "J24 bad setup save")
+    ctx.ck(j24WriteFile(progressFilePath(badDir), "garbage"), "J24 bad write garbage")
+    ctx.ck(ProgressStore.load(bb, 100) == 0, "J24 bad load got=${ProgressStore.load(bb, 100)}")
+    ctx.ck(j24OptEq(bb.read(), Some("garbage")), "J24 bad read got=${j24OptText(bb.read())}")
+    ctx.ck(ProgressStore.save(bb, 5), "J24 bad resave")
+    ctx.ck(ProgressStore.load(bb, 100) == 5, "J24 bad reload got=${ProgressStore.load(bb, 100)}")
+    /* (4b) 非法 UTF-8 字节存档：read None（不抛）、load 0、再 save 覆盖恢复。 */
+    let buDir = root + "/badutf"
+    let bbu = FileProgressBackend(buDir)
+    ctx.ck(ProgressStore.save(bbu, 9), "J24 badutf setup save")
+    var buThrew = false
+    try {
+        ctx.ck(j24WriteBytes(progressFilePath(buDir), [0xFFu8, 0xFEu8, 0x80u8, 0x7Bu8]),
+            "J24 badutf write bytes")
+    } catch (e: Exception) {
+        buThrew = true
+    }
+    ctx.ck(!buThrew, "J24 badutf no throw on write")
+    ctx.ck(j24OptEq(bbu.read(), None), "J24 badutf read none got=${j24OptText(bbu.read())}")
+    ctx.ck(ProgressStore.load(bbu, 100) == 0, "J24 badutf load got=${ProgressStore.load(bbu, 100)}")
+    ctx.ck(ProgressStore.save(bbu, 6), "J24 badutf resave")
+    ctx.ck(ProgressStore.load(bbu, 100) == 6, "J24 badutf reload got=${ProgressStore.load(bbu, 100)}")
+    /* (5) 不存在的深目录：read None、load 0。 */
+    let bnd = FileProgressBackend(root + "/nonexistent/deeper")
+    ctx.ck(j24OptEq(bnd.read(), None), "J24 nonexistent read none")
+    ctx.ck(ProgressStore.load(bnd, 100) == 0, "J24 nonexistent load got=${ProgressStore.load(bnd, 100)}")
+    /* (6) 目录不可写 / 路径其实是普通文件：write false 且不抛。 */
+    let bpr = FileProgressBackend("/proc/yilu_nope")
+    var prThrew = false
+    var prOk = true
+    try {
+        prOk = bpr.write("x")
+    } catch (e: Exception) {
+        prThrew = true
+    }
+    ctx.ck(!prThrew, "J24 proc no throw")
+    ctx.ck(!prOk, "J24 proc write false")
+    ctx.ck(!ProgressStore.save(bpr, 4), "J24 proc save false")
+    ctx.ck(ProgressStore.load(bpr, 100) == 0, "J24 proc load got=${ProgressStore.load(bpr, 100)}")
+    let afPath = root + "/afile"
+    ctx.ck(j24WriteFile(afPath, "x"), "J24 afile create")
+    let baf = FileProgressBackend(afPath)
+    var afThrew = false
+    var afOk = true
+    try {
+        afOk = baf.write("x")
+    } catch (e: Exception) {
+        afThrew = true
+    }
+    ctx.ck(!afThrew, "J24 afile no throw")
+    ctx.ck(!afOk, "J24 afile write false")
+    /* (7) 真实后端全流程：通关序列逐级存档。 */
+    let flDir = root + "/flow"
+    let bfl = FileProgressBackend(flDir)
+    var c = 0
+    for (li in 0..100) {
+        let prev = c
+        c = progressAfterWin(c, li, 100)
+        if (c > prev) {
+            ctx.ck(ProgressStore.save(bfl, c), "J24 flow save li=${li}")
+        }
+    }
+    ctx.ck(c == 100, "J24 flow final c=${c}")
+    ctx.ck(ProgressStore.load(bfl, 100) == 100, "J24 flow load got=${ProgressStore.load(bfl, 100)}")
+    ctx.ck(exists(progressFilePath(flDir)), "J24 flow file exists")
+    /* (8) 工厂：不依赖环境变量取值，只断言不抛、read 不抛。 */
+    var facThrew = false
+    var facBackend: ProgressBackend = NullProgressBackend()
+    try {
+        facBackend = makeProgressBackend()
+    } catch (e: Exception) {
+        facThrew = true
+    }
+    ctx.ck(!facThrew, "J24 factory no throw")
+    var facReadOk = false
+    try {
+        match (facBackend.read()) {
+            case Some(_) => facReadOk = true
+            case None => facReadOk = true
+        }
+    } catch (e: Exception) {
+        facReadOk = false
+    }
+    ctx.ck(facReadOk, "J24 factory read no throw")
+    /* (9) 结尾清理测试根目录。 */
+    ctx.ck(j24RmDir(root), "J24 teardown rm root")
+    ctx.ck(!exists(root), "J24 teardown root gone")
+    println("J24 progress file done checks=${ctx.checks - c0}")
+}
+
 /* ===== P4 DUMP:按场景文件渲染 app 各板层 JSON(与设计稿 PNG 对拍,box-only) ===== */
 
 func dumpBool(v: Bool): String {
@@ -2636,6 +2842,8 @@ main(args: Array<String>): Int64 {
     j22HeaderChipTests(levels, ctx)
     /* J23 progress save/load checks。 */
     j23ProgressTests(ctx)
+    /* J24 progress file backend checks (real std.fs under /tmp)。 */
+    j24ProgressFileTests(ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit}")
     ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")
