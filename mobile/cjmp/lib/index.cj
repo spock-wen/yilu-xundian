@@ -918,7 +918,7 @@ class EntryView {
                             .fontFamily(this.sansFamily())
                         Column() {}
                             .width(32)
-                            .height(1)
+                            .height(1.2)
                             .backgroundColor(Theme.qingDeep)
                             .margin(top: 2)
                     }
