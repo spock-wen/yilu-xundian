@@ -49,6 +49,7 @@ class EntryView {
     @State var rejectToX: Int64 = 0
     @State var rejectToY: Int64 = 0
     var rejectPlace: ToastPlacement = ToastPlacement(0.0, 0.0, false, 0, 0.0)
+    var rejectToastW: Float64 = 86.0
     // J13: 本次拒绝是否为单向门拒绝(改画官方 reject PNG 而非朱红 Line)
     var rejectOneWay: Bool = false
     @State var winW: Float64 = 360.0
@@ -68,6 +69,7 @@ class EntryView {
     @State var boardNextLabels: Array<BoardLabel> = Array<BoardLabel>()
     @State var boardDigits: Array<BoardPath> = Array<BoardPath>()
     @State var boardGates: Array<BoardImg> = Array<BoardImg>()
+    @State var boardUnder: Array<BoardPath> = Array<BoardPath>()
     var obstacleNextCnt: Int64 = 0
 
     func homeMarkFontVp(): Float64 { return 12.0 / this.getPxFactor() }
@@ -201,7 +203,8 @@ class EntryView {
     }
 
     func showReject(): Unit {
-        let txt = parityToastText(this.game)
+        let txt = mechToastText(this.game)
+        this.rejectToastW = mechToastWidth(txt)
         this.parityRejectText = txt
         this.parityRejectFlash = true
         if (txt.size > 0) {
@@ -288,75 +291,14 @@ class EntryView {
         return (midX + 12.0, midY)
     }
 
-    // U3: Collect board obstacles for toast avoidance (designer ruling)
+    // U3 plan A: route boxes soft (toast pass 2); logic lives in board_mech.cj buildToastObstacles
     func collectToastObstacles(): Array<ToastBox> {
-        let list = ArrayList<ToastBox>()
-
-        // 1. Flash line: bounding box of start/end points inflated by 1.5 (3 vp stroke, round cap)
-        let (sx, sy) = this.rejectEdgeStartPoint()
-        let (ex, ey) = this.rejectEdgeEndPoint()
-        let minX = if (sx <= ex) { sx } else { ex }
-        let maxX = if (sx >= ex) { sx } else { ex }
-        let minY = if (sy <= ey) { sy } else { ey }
-        let maxY = if (sy >= ey) { sy } else { ey }
-        list.add(ToastBox(minX - 1.5, minY - 1.5, maxX + 1.5, maxY + 1.5))
-
-        // 2. Head dot: cx±(r+0.5), cy±(r+0.5)
-        for (dot in this.boardDots) {
-            let rEff = dot.r + 0.5
-            list.add(ToastBox(dot.cx - rEff, dot.cy - rEff, dot.cx + rEff, dot.cy + rEff))
-        }
-
-        // 3. Station circles: cx±(r+strokeW/2) (gold ring already has a bigger r entry)
-        for (circle in this.boardStationCircles) {
-            let extra = if (circle.hasStroke) { circle.strokeW * 0.5 } else { 0.0 }
-            let rEff = circle.r + extra
-            list.add(ToastBox(circle.cx - rEff, circle.cy - rEff, circle.cx + rEff, circle.cy + rEff))
-        }
-
-        // 4. 下一驿 labels: anchored at left edge and baseline (cy+r+12)
-        var ni: Int64 = 0
-        while (ni < this.obstacleNextCnt && ni < this.boardNextLabels.size) {
-            let lbl = this.boardNextLabels[ni]
-            let baseline = lbl.y + 0.88 * lbl.size
-            list.add(ToastBox(lbl.x - 0.5, baseline - 10.0, lbl.x + 35.0, baseline + 3.5))
-            ni = ni + 1
-        }
-
-        // 5. Parity labels: glyph centred on seam midpoint (mx, my)
-        for (lbl in this.boardParityLabels) {
-            let mx = lbl.x + 5.5
-            let my = lbl.y - 4.0 + 0.88 * lbl.size
-            list.add(ToastBox(mx - 6.5, my - 8.5, mx + 6.5, my + 5.0))
-        }
-
-
-        // 6. Walls: width/2 padding, clear = 2.0
-        for (wall in this.boardWalls) {
-            let hw = wall.width * 0.5
-            let minX = (if (wall.x1 <= wall.x2) { wall.x1 } else { wall.x2 }) - hw
-            let maxX = (if (wall.x1 >= wall.x2) { wall.x1 } else { wall.x2 }) + hw
-            let minY = (if (wall.y1 <= wall.y2) { wall.y1 } else { wall.y2 }) - hw
-            let maxY = (if (wall.y1 >= wall.y2) { wall.y1 } else { wall.y2 }) + hw
-            list.add(ToastBox(minX, minY, maxX, maxY, 2.0))
-        }
-
-        // 7. Route: width/2 padding, clear = 2.0
-        for (route in this.boardRoute) {
-            let hw = route.width * 0.5
-            let minX = (if (route.x1 <= route.x2) { route.x1 } else { route.x2 }) - hw
-            let maxX = (if (route.x1 >= route.x2) { route.x1 } else { route.x2 }) + hw
-            let minY = (if (route.y1 <= route.y2) { route.y1 } else { route.y2 }) - hw
-            let maxY = (if (route.y1 >= route.y2) { route.y1 } else { route.y2 }) + hw
-            list.add(ToastBox(minX, minY, maxX, maxY, 2.0))
-        }
-
-        return list.toArray()
+        return buildToastObstacles(this.boardGeom(), this.rejectFromX, this.rejectFromY, this.rejectToX, this.rejectToY, this.boardDots, this.boardStationCircles, this.boardNextLabels, this.obstacleNextCnt, this.boardParityLabels, this.boardWalls, this.boardRoute)
     }
 
     func rejectPlacement(): ToastPlacement {
         let (midX, midY) = this.rejectEdgeMid()
-        return toastPlace(Float64(this.boardW()), Float64(this.boardH()), midX, midY, this.collectToastObstacles())
+        return toastPlaceW(Float64(this.boardW()), Float64(this.boardH()), midX, midY, this.collectToastObstacles(), this.rejectToastW)
     }
 
     func rejectToastX(): Float64 {
@@ -377,6 +319,10 @@ class EntryView {
 
     func ladenNow(): Bool {
         return this.tick >= 0 && this.game.laden
+    }
+
+    func chipBagPaths(): Array<BoardPath> {
+        return bagPaths(16.0, 14.5, 0.62, false, this.getPxFactor())
     }
 
     func stepChipLabel(): String {
@@ -435,6 +381,7 @@ class EntryView {
         let tmpNextLabels = concatArr(nextOnly, buildBoardMechLabels(this.game, geom))
         let tmpDigits = concatArr(buildBoardDigits(this.game, geom, factor), buildBoardMechPaths(this.game, geom, factor))
         let tmpGates = buildBoardGates(this.game, geom)
+        let tmpUnder = buildBoardMechUnder(this.game, geom, factor)
         this.lastBuildUs = (MonoTime.now() - tBuild0).toMicroseconds()
 
         let tAssign0 = MonoTime.now()
@@ -447,6 +394,7 @@ class EntryView {
         this.boardNextLabels = tmpNextLabels
         this.boardDigits = tmpDigits
         this.boardGates = tmpGates
+        this.boardUnder = tmpUnder
         this.lastAssignUs = (MonoTime.now() - tAssign0).toMicroseconds()
     }
 
@@ -1548,17 +1496,6 @@ class EntryView {
                         // A2: 48vp hit area — in-page back: iOS edge swipe does not pop on Keels 0.2.2
                         this.backButton({ => this.leaveBoard() }, true)
                         Blank()
-                        Text("负重")
-                            .fontSize(12)
-                            .fontColor(if (this.ladenNow()) { Theme.whitePaper } else { Theme.ink })
-                            .fontFamily(this.sansFamily())
-                            .padding(left: 8, right: 8)
-                            .height(24)
-                            .borderRadius(4)
-                            .border(width: 1, color: Theme.qingDeep)
-                            .backgroundColor(if (this.ladenNow()) { Theme.qingDeep } else { Theme.whitePaper })
-                            .textAlign(TextAlign.Center)
-                            .visibility(if (this.hasBurden()) { Visibility.Visible } else { Visibility.None })
                     }
                     .width(100.percent)
                     .height(48)
@@ -1574,9 +1511,10 @@ class EntryView {
                     .backgroundColor(Theme.paperLine)
                     .margin(left: 20, right: 20)
 
-                if (this.hasParityBoard() || this.curLevel().stepLimit > 0) {
+                if (this.hasParityBoard() || this.curLevel().stepLimit > 0 || this.hasBurden()) {
                     Row(space: 8) {
                         if (this.hasParityBoard()) {
+                            // Keels 0.2.2: .border() resets radius to 0, so .borderRadius() MUST come after .border() (see scripts/check_border_radius.py)
                             Text(this.stepChipLabel())
                                 .fontSize(15)
                                 .fontWeight(FontWeight.Bold)
@@ -1584,8 +1522,8 @@ class EntryView {
                                 .fontFamily(this.serifBoldFamily())
                                 .padding(left: 12, right: 12)
                                 .height(28)
-                                .borderRadius(4)
                                 .border(width: 1, color: this.stepChipBorder())
+                                .borderRadius(4)
                                 .backgroundColor(Theme.whitePaper)
                         }
                         if (this.curLevel().stepLimit > 0) {
@@ -1596,9 +1534,41 @@ class EntryView {
                                 .fontFamily(this.serifBoldFamily())
                                 .padding(left: 12, right: 12)
                                 .height(28)
-                                .borderRadius(4)
                                 .border(width: this.stepLeftBorderW(), color: this.stepLeftBorderColor())
+                                .borderRadius(4)
                                 .backgroundColor(Theme.whitePaper)
+                        }
+                        if (this.hasBurden() && this.ladenNow()) {
+                            Row {
+                                Stack(alignContent: Alignment.TopStart) {
+                                    ForEach(
+                                        this.chipBagPaths(),
+                                        itemGenerator: { item: BoardPath, idx: Int64 =>
+                                            Path(width: 32.0, height: 28.0, commands: item.commands)
+                                                .fill(item.color)
+                                                .fillOpacity(item.fillOp)
+                                                .stroke(item.stroke)
+                                                .strokeWidth(item.strokeW)
+                                                .strokeLineCap(LineCapStyle.Round)
+                                                .strokeLineJoin(LineJoinStyle.Round)
+                                                .antiAlias(true)
+                                                .position(x: 0, y: 0)
+                                        },
+                                        keyGeneratorFunc: { item: BoardPath, idx: Int64 => "${idx}-${item.color}-${item.commands}" }
+                                    )
+                                }.width(32).height(28)
+                                Text("负重")
+                                    .fontSize(15)
+                                    .fontWeight(FontWeight.Bold)
+                                    .fontColor(Theme.ink)
+                                    .fontFamily(this.serifBoldFamily())
+                                    .padding(right: 12)
+                                    .height(28)
+                            }
+                            .height(28)
+                            .border(width: 1, color: Theme.paperLine)
+                            .borderRadius(4)
+                            .backgroundColor(Theme.whitePaper)
                         }
                     }
                     .justifyContent(FlexAlign.Center)
@@ -1654,7 +1624,7 @@ class EntryView {
                 }
                 .width(100.percent)
                 .height(Theme.bandH)
-                .margin(top: if (this.hasParityBoard() || this.curLevel().stepLimit > 0) { 0 } else { 4 }, bottom: Theme.bandClear)
+                .margin(top: if (this.hasParityBoard() || this.curLevel().stepLimit > 0 || this.hasBurden()) { 0 } else { 4 }, bottom: Theme.bandClear)
                 Scroll {
                     Column {
                         Stack(alignContent: Alignment.TopStart) {
@@ -1673,6 +1643,25 @@ class EntryView {
                                 // Keels 0.2.2: ForEach key label is keyGeneratorFunc (macro passes it to forEachUpdateFunction)
                                 keyGeneratorFunc: { item: BoardRect, idx: Int64 =>
                                     "${idx}-${item.x}-${item.y}-${item.color}-${item.stroke}"
+                                }
+                            )
+
+                            // Layer 2: P4 skin under-layer (hatch / bridge / notch / grain bags), Path only
+                            ForEach(
+                                this.boardUnder,
+                                itemGenerator: { item: BoardPath, idx: Int64 =>
+                                    Path(width: this.boardW(), height: this.boardH(), commands: item.commands)
+                                        .fill(item.color)
+                                        .fillOpacity(item.fillOp)
+                                        .stroke(item.stroke)
+                                        .strokeWidth(item.strokeW)
+                                        .strokeLineCap(LineCapStyle.Round)
+                                        .strokeLineJoin(LineJoinStyle.Round)
+                                        .antiAlias(true)
+                                        .position(x: 0, y: 0)
+                                },
+                                keyGeneratorFunc: { item: BoardPath, idx: Int64 =>
+                                    "${idx}-${item.color}-${item.commands}-${item.stroke}-${item.fillOp}"
                                 }
                             )
 
@@ -1840,7 +1829,7 @@ class EntryView {
                                         .fontFamily(this.serifBoldFamily())
                                         .fontColor(Theme.vermillion)
                                         .maxLines(1)
-                                        .width(86)
+                                        .width(this.rejectToastW)
                                         .height(28)
                                         .textAlign(TextAlign.Center)
                                         .padding(left: 14, right: 14)
