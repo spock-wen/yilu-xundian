@@ -631,35 +631,8 @@ class EntryView {
         return "${this.currentChapter().name}·驿程"
     }
 
-    func chapterCurrentName(): String {
-        let ch = this.currentChapter()
-        if (!ChapterCatalog.isOpen(ch.id, this.cleared)) {
-            return "未开"
-        }
-        if (this.cleared >= ch.levelStart + ch.levelCount) {
-            return "已通"
-        }
-        if (this.cleared < ch.levelStart) {
-            if (ch.levelStart < this.levels.size) {
-                return this.levels[ch.levelStart].name
-            }
-            return ""
-        }
-        if (this.cleared < this.levels.size) {
-            return this.levels[this.cleared].name
-        }
-        return ""
-    }
-
     func chapterListFooter(): String {
-        let ch = this.currentChapter()
-        let n = ChapterCatalog.clearedCount(this.chapterIndex, this.cleared)
-        /* 本章尺寸取自 LevelCatalog 首驿（ch1–3 6×6，ch4–10 7×7）。 */
-        if (ch.levelStart < this.levels.size) {
-            let board = this.levels[ch.levelStart]
-            return "已通 ${n} · 当前${this.chapterCurrentName()} · 共10驿 · ${board.cols}×${board.rows}"
-        }
-        return "已通 ${n} · 当前${this.chapterCurrentName()} · 共10驿"
+        return ChapterCatalog.chapterListFooterText(this.chapterIndex, this.cleared, this.levels)
     }
 
     func chapterOpenFooter(): String {
@@ -1424,33 +1397,13 @@ class EntryView {
                             itemGenerator: {item: LevelDef, index: Int64 =>
                                 Row {
                                     if (item.id < this.cleared) {
-                                        Text("通")
-                                            .fontSize(14)
-                                            .fontColor(Theme.success)
-                                            .fontFamily(this.serifFamily())
-                                            .width(32)
-                                            .height(32)
-                                            .border(width: 1, color: Theme.success)
-                                            .borderRadius(16)
-                                            .textAlign(TextAlign.Center)
+                                        this.checkCircleIcon(32)
                                         Column {
-                                            Row(space: 6) {
-                                                Text(item.name)
-                                                    .fontSize(16)
-                                                    .fontColor(Theme.ink)
-                                                    .fontFamily(this.serifBoldFamily())
-                                                    .fontWeight(FontWeight.Bold)
-                                                if (ChapterCatalog.isDessert(item.id)) {
-                                                    Text("点心")
-                                                        .fontSize(11)
-                                                        .lineHeight(15)
-                                                        .fontColor(Theme.inkMuted)
-                                                        .fontFamily(this.sansFamily())
-                                                        .padding(left: 4, right: 4)
-                                                        .border(width: 1, color: Theme.paperLine)
-                                                        .borderRadius(4)
-                                                }
-                                            }
+                                            Text(item.name)
+                                                .fontSize(16)
+                                                .fontColor(Theme.ink)
+                                                .fontFamily(this.serifBoldFamily())
+                                                .fontWeight(FontWeight.Bold)
                                             Text("${item.cols}×${item.rows}")
                                                 .fontSize(12)
                                                 .fontColor(Theme.inkMuted)
@@ -1459,10 +1412,16 @@ class EntryView {
                                         .margin(left: 10)
                                         .alignItems(HorizontalAlign.Start)
                                         Blank()
-                                        Text("已通")
-                                            .fontSize(12)
-                                            .fontColor(Theme.success)
-                                            .fontFamily(this.sansFamily())
+                                        Row(space: 10) {
+                                            if (ChapterCatalog.isDessert(item.id)) {
+                                                this.dessertTag(0)
+                                            }
+                                            Text("已通")
+                                                .fontSize(12)
+                                                .fontColor(Theme.success)
+                                                .fontFamily(this.sansFamily())
+                                        }
+                                        .alignItems(VerticalAlign.Center)
                                     } else if (item.id == this.cleared) {
                                         Text("${index + 1}")
                                             .fontSize(14)
@@ -1474,23 +1433,11 @@ class EntryView {
                                             .borderRadius(16)
                                             .textAlign(TextAlign.Center)
                                         Column {
-                                            Row(space: 6) {
-                                                Text(item.name)
-                                                    .fontSize(16)
-                                                    .fontColor(Theme.ink)
-                                                    .fontFamily(this.serifBoldFamily())
-                                                    .fontWeight(FontWeight.Bold)
-                                                if (ChapterCatalog.isDessert(item.id)) {
-                                                    Text("点心")
-                                                        .fontSize(11)
-                                                        .lineHeight(15)
-                                                        .fontColor(Theme.ink)
-                                                        .fontFamily(this.sansFamily())
-                                                        .padding(left: 4, right: 4)
-                                                        .border(width: 1, color: Theme.ink)
-                                                        .borderRadius(4)
-                                                }
-                                            }
+                                            Text(item.name)
+                                                .fontSize(16)
+                                                .fontColor(Theme.ink)
+                                                .fontFamily(this.serifBoldFamily())
+                                                .fontWeight(FontWeight.Bold)
                                             Text("${item.cols}×${item.rows}")
                                                 .fontSize(12)
                                                 .fontColor(Theme.inkMuted)
@@ -1499,10 +1446,16 @@ class EntryView {
                                         .margin(left: 10)
                                         .alignItems(HorizontalAlign.Start)
                                         Blank()
-                                        Text("当前")
-                                            .fontSize(12)
-                                            .fontColor(Theme.ink)
-                                            .fontFamily(this.sansFamily())
+                                        Row(space: 10) {
+                                            if (ChapterCatalog.isDessert(item.id)) {
+                                                this.dessertTag(1)
+                                            }
+                                            Text("当前")
+                                                .fontSize(12)
+                                                .fontColor(Theme.ink)
+                                                .fontFamily(this.sansFamily())
+                                        }
+                                        .alignItems(VerticalAlign.Center)
                                     } else {
                                         Text("${index + 1}")
                                             .fontSize(14)
@@ -1514,23 +1467,11 @@ class EntryView {
                                             .borderRadius(16)
                                             .textAlign(TextAlign.Center)
                                         Column {
-                                            Row(space: 6) {
-                                                Text(item.name)
-                                                    .fontSize(16)
-                                                    .fontColor(Theme.locked)
-                                                    .fontFamily(this.serifBoldFamily())
-                                                    .fontWeight(FontWeight.Bold)
-                                                if (ChapterCatalog.isDessert(item.id)) {
-                                                    Text("点心")
-                                                        .fontSize(11)
-                                                        .lineHeight(15)
-                                                        .fontColor(Theme.locked)
-                                                        .fontFamily(this.sansFamily())
-                                                        .padding(left: 4, right: 4)
-                                                        .border(width: 1, color: Theme.locked)
-                                                        .borderRadius(4)
-                                                }
-                                            }
+                                            Text(item.name)
+                                                .fontSize(16)
+                                                .fontColor(Theme.locked)
+                                                .fontFamily(this.serifBoldFamily())
+                                                .fontWeight(FontWeight.Bold)
                                             Text("${item.cols}×${item.rows}")
                                                 .fontSize(12)
                                                 .fontColor(Theme.locked)
@@ -1539,18 +1480,21 @@ class EntryView {
                                         .margin(left: 10)
                                         .alignItems(HorizontalAlign.Start)
                                         Blank()
-                                        Text("锁")
-                                            .fontSize(12)
-                                            .fontColor(Theme.locked)
-                                            .fontFamily(this.sansFamily())
+                                        Row(space: 17) {
+                                            if (ChapterCatalog.isDessert(item.id)) {
+                                                this.dessertTag(2)
+                                            }
+                                            this.lockIcon(Theme.locked)
+                                        }
+                                        .alignItems(VerticalAlign.Center)
                                     }
                                 }
                                 .width(100.percent)
-                                .height(56)
-                                .padding(left: 12, right: 12)
+                                .height(52)
+                                .padding(left: 12, right: 16)
                                 .backgroundColor(Theme.whitePaper)
-                                .borderRadius(10)
-                                .border(width: 1, color: this.rowBorder(item.id))
+                                .border(width: this.rowBorderW(item.id), color: this.rowBorder(item.id))
+                                .borderRadius(8)
                                 .onClick({event => this.openFromList(item.id)})
                             }
                         )
