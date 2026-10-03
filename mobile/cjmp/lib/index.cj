@@ -405,6 +405,10 @@ class EntryView {
     }
 
     protected override func aboutToAppear(): Unit {
+        let savedCleared = ProgressStore.load(makeProgressBackend(), this.levels.size)
+        if (savedCleared > this.cleared) {
+            this.cleared = savedCleared
+        }
         this.rebuildBoard()
     }
 
@@ -625,6 +629,7 @@ class EntryView {
                     if (this.game.isWin()) {
                         if (this.levelIndex + 1 > this.cleared) {
                             this.cleared = this.levelIndex + 1
+                            ProgressStore.save(makeProgressBackend(), this.cleared)
                         }
                         this.screen = 2
                         if (PERF_LOG) {
