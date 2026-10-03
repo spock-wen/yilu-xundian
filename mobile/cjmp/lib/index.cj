@@ -206,6 +206,26 @@ class EntryView {
         .height(d)
     }
 
+    func checkMarkCmds(): String {
+        return checkMarkIconPaths(7.0, 7.0, 12.0, this.getPxFactor())[0].commands
+    }
+
+    @Builder func checkMarkIcon() {
+        Stack(alignContent: Alignment.TopStart) {
+            Path(width: 14.0, height: 14.0, commands: this.checkMarkCmds())
+                .fill(Theme.success)
+                .fillOpacity(0.0)
+                .stroke(Theme.success)
+                .strokeWidth(1.6)
+                .strokeLineCap(LineCapStyle.Round)
+                .strokeLineJoin(LineJoinStyle.Round)
+                .antiAlias(true)
+                .position(x: 0.0, y: 0.0)
+        }
+        .width(14)
+        .height(14)
+    }
+
     func lockW(): Float64 {
         let (w, _) = lockIconBox(0.62)
         return w
@@ -773,6 +793,30 @@ class EntryView {
         }
         return 1.0
     }
+
+    func groupChapterId(index: Int64): Int64 {
+        return ChapterCatalog.chapterIdForLevel(index)
+    }
+
+    func groupIsFirst(index: Int64): Bool {
+        let chId = this.groupChapterId(index)
+        return index == ChapterCatalog.byIndex(chId).levelStart
+    }
+
+    func groupLabelColor(chapterId: Int64): Int64 {
+        if (ChapterCatalog.groupState(chapterId, this.cleared) == 2) {
+            return Theme.locked
+        }
+        return Theme.ink
+    }
+
+    func groupLineColor(chapterId: Int64): Int64 {
+        if (ChapterCatalog.groupIsCurrent(chapterId, this.cleared)) {
+            return Theme.ink
+        }
+        return Theme.paperLine
+    }
+
     func build() {
         Column {
             if (this.screen == 0) {
@@ -942,107 +986,153 @@ class EntryView {
                         ForEach(
                             this.levels,
                             itemGenerator: {item: LevelDef, index: Int64 =>
-                                Row {
-                                    if (index < this.cleared) {
-                                        this.checkCircleIcon(36)
+                                Column {
+                                    if (this.groupIsFirst(index)) {
                                         Column {
-                                            Text(item.name)
-                                                .fontSize(18)
-                                                .fontColor(Theme.ink)
-                                                .fontFamily(this.serifBoldFamily())
-                                                .fontWeight(FontWeight.Bold)
-                                            Text("${item.cols}×${item.rows}")
-                                                .fontSize(12)
-                                                .fontColor(Theme.inkMuted)
-                                                .fontFamily(this.sansFamily())
-                                        }
-                                        .margin(left: 12)
-                                        .alignItems(HorizontalAlign.Start)
-                                        Blank()
-                                        Row(space: 10) {
-                                            if (ChapterCatalog.isDessert(item.id)) {
-                                                this.dessertTag(0)
+                                            Row {
+                                                Text(ChapterCatalog.byIndex(this.groupChapterId(index)).label)
+                                                    .fontSize(16)
+                                                    .fontColor(this.groupLabelColor(this.groupChapterId(index)))
+                                                    .fontFamily(this.serifBoldFamily())
+                                                    .fontWeight(FontWeight.Bold)
+                                                Blank()
+                                                if (ChapterCatalog.groupState(this.groupChapterId(index), this.cleared) == 0) {
+                                                    Text(ChapterCatalog.groupHeaderRight(this.groupChapterId(index), this.cleared))
+                                                        .fontSize(12)
+                                                        .fontColor(Theme.inkMuted)
+                                                        .fontFamily(this.sansFamily())
+                                                } else if (ChapterCatalog.groupState(this.groupChapterId(index), this.cleared) == 1) {
+                                                    Row(space: 4) {
+                                                        this.checkMarkIcon()
+                                                        Text(ChapterCatalog.groupHeaderRight(this.groupChapterId(index), this.cleared))
+                                                            .fontSize(12)
+                                                            .fontColor(Theme.success)
+                                                            .fontFamily(this.sansFamily())
+                                                    }
+                                                    .alignItems(VerticalAlign.Center)
+                                                } else {
+                                                    Row(space: 4) {
+                                                        this.lockIcon(Theme.locked)
+                                                        Text(ChapterCatalog.groupHeaderRight(this.groupChapterId(index), this.cleared))
+                                                            .fontSize(12)
+                                                            .fontColor(Theme.locked)
+                                                            .fontFamily(this.sansFamily())
+                                                    }
+                                                    .alignItems(VerticalAlign.Center)
+                                                }
                                             }
-                                            Text("已通")
-                                                .fontSize(14)
-                                                .fontColor(Theme.success)
-                                                .fontFamily(this.sansFamily())
+                                            .width(100.percent)
+                                            .height(39)
+                                            .alignItems(VerticalAlign.Center)
+                                            Column() {}.width(100.percent).height(1).backgroundColor(this.groupLineColor(this.groupChapterId(index)))
                                         }
-                                        .alignItems(VerticalAlign.Center)
-                                    } else if (index == this.cleared) {
-                                        Text("${index + 1}")
-                                            .fontSize(16)
-                                            .fontColor(Theme.whitePaper)
-                                            .fontFamily(this.serifFamily())
-                                            .width(36)
-                                            .height(36)
-                                            .backgroundColor(Theme.ink)
-                                            .borderRadius(18)
-                                            .textAlign(TextAlign.Center)
-                                        Column {
-                                            Text(item.name)
-                                                .fontSize(18)
-                                                .fontColor(Theme.ink)
-                                                .fontFamily(this.serifBoldFamily())
-                                                .fontWeight(FontWeight.Bold)
-                                            Text("${item.cols}×${item.rows}")
-                                                .fontSize(12)
-                                                .fontColor(Theme.inkMuted)
-                                                .fontFamily(this.sansFamily())
-                                        }
-                                        .margin(left: 12)
-                                        .alignItems(HorizontalAlign.Start)
-                                        Blank()
-                                        Row(space: 10) {
-                                            if (ChapterCatalog.isDessert(item.id)) {
-                                                this.dessertTag(1)
-                                            }
-                                            Text("当前")
-                                                .fontSize(14)
-                                                .fontColor(Theme.ink)
-                                                .fontFamily(this.sansFamily())
-                                        }
-                                        .alignItems(VerticalAlign.Center)
-                                    } else {
-                                        Text("${index + 1}")
-                                            .fontSize(16)
-                                            .fontColor(Theme.locked)
-                                            .fontFamily(this.serifFamily())
-                                            .width(36)
-                                            .height(36)
-                                            .border(width: 1, color: Theme.locked)
-                                            .borderRadius(18)
-                                            .textAlign(TextAlign.Center)
-                                        Column {
-                                            Text(item.name)
-                                                .fontSize(18)
-                                                .fontColor(Theme.locked)
-                                                .fontFamily(this.serifBoldFamily())
-                                                .fontWeight(FontWeight.Bold)
-                                            Text("${item.cols}×${item.rows}")
-                                                .fontSize(12)
-                                                .fontColor(Theme.locked)
-                                                .fontFamily(this.sansFamily())
-                                        }
-                                        .margin(left: 12)
-                                        .alignItems(HorizontalAlign.Start)
-                                        Blank()
-                                        Row(space: 17) {
-                                            if (ChapterCatalog.isDessert(item.id)) {
-                                                this.dessertTag(2)
-                                            }
-                                            this.lockIcon(Theme.locked)
-                                        }
-                                        .alignItems(VerticalAlign.Center)
+                                        .width(100.percent)
+                                        .height(40)
+                                        .margin(top: if (index == 0) { 0 } else { 4 }, bottom: 0)
                                     }
+                                    Row {
+                                        if (index < this.cleared) {
+                                            this.checkCircleIcon(36)
+                                            Column {
+                                                Text(item.name)
+                                                    .fontSize(18)
+                                                    .fontColor(Theme.ink)
+                                                    .fontFamily(this.serifBoldFamily())
+                                                    .fontWeight(FontWeight.Bold)
+                                                Text("${item.cols}×${item.rows}")
+                                                    .fontSize(12)
+                                                    .fontColor(Theme.inkMuted)
+                                                    .fontFamily(this.sansFamily())
+                                            }
+                                            .margin(left: 12)
+                                            .alignItems(HorizontalAlign.Start)
+                                            Blank()
+                                            Row(space: 10) {
+                                                if (ChapterCatalog.isDessert(item.id)) {
+                                                    this.dessertTag(0)
+                                                }
+                                                Text("已通")
+                                                    .fontSize(14)
+                                                    .fontColor(Theme.success)
+                                                    .fontFamily(this.sansFamily())
+                                            }
+                                            .alignItems(VerticalAlign.Center)
+                                        } else if (index == this.cleared) {
+                                            Text("${index + 1}")
+                                                .fontSize(16)
+                                                .fontColor(Theme.whitePaper)
+                                                .fontFamily(this.serifFamily())
+                                                .width(36)
+                                                .height(36)
+                                                .backgroundColor(Theme.ink)
+                                                .borderRadius(18)
+                                                .textAlign(TextAlign.Center)
+                                            Column {
+                                                Text(item.name)
+                                                    .fontSize(18)
+                                                    .fontColor(Theme.ink)
+                                                    .fontFamily(this.serifBoldFamily())
+                                                    .fontWeight(FontWeight.Bold)
+                                                Text("${item.cols}×${item.rows}")
+                                                    .fontSize(12)
+                                                    .fontColor(Theme.inkMuted)
+                                                    .fontFamily(this.sansFamily())
+                                            }
+                                            .margin(left: 12)
+                                            .alignItems(HorizontalAlign.Start)
+                                            Blank()
+                                            Row(space: 10) {
+                                                if (ChapterCatalog.isDessert(item.id)) {
+                                                    this.dessertTag(1)
+                                                }
+                                                Text("当前")
+                                                    .fontSize(14)
+                                                    .fontColor(Theme.ink)
+                                                    .fontFamily(this.sansFamily())
+                                            }
+                                            .alignItems(VerticalAlign.Center)
+                                        } else {
+                                            Text("${index + 1}")
+                                                .fontSize(16)
+                                                .fontColor(Theme.locked)
+                                                .fontFamily(this.serifFamily())
+                                                .width(36)
+                                                .height(36)
+                                                .border(width: 1, color: Theme.locked)
+                                                .borderRadius(18)
+                                                .textAlign(TextAlign.Center)
+                                            Column {
+                                                Text(item.name)
+                                                    .fontSize(18)
+                                                    .fontColor(Theme.locked)
+                                                    .fontFamily(this.serifBoldFamily())
+                                                    .fontWeight(FontWeight.Bold)
+                                                Text("${item.cols}×${item.rows}")
+                                                    .fontSize(12)
+                                                    .fontColor(Theme.locked)
+                                                    .fontFamily(this.sansFamily())
+                                            }
+                                            .margin(left: 12)
+                                            .alignItems(HorizontalAlign.Start)
+                                            Blank()
+                                            Row(space: 17) {
+                                                if (ChapterCatalog.isDessert(item.id)) {
+                                                    this.dessertTag(2)
+                                                }
+                                                this.lockIcon(Theme.locked)
+                                            }
+                                            .alignItems(VerticalAlign.Center)
+                                        }
+                                    }
+                                    .width(100.percent)
+                                    .height(64)
+                                    .padding(left: 14, right: 16)
+                                    .backgroundColor(Theme.whitePaper)
+                                    .border(width: this.rowBorderW(index), color: this.rowBorder(index))
+                                    .borderRadius(8)
+                                    .onClick({event => this.openFromList(index)})
                                 }
                                 .width(100.percent)
-                                .height(64)
-                                .padding(left: 14, right: 16)
-                                .backgroundColor(Theme.whitePaper)
-                                .border(width: this.rowBorderW(index), color: this.rowBorder(index))
-                                .borderRadius(8)
-                                .onClick({event => this.openFromList(index)})
                             }
                         )
                     }
@@ -1050,7 +1140,7 @@ class EntryView {
                 }
                 .width(100.percent)
                 .layoutWeight(1)
-                Text("已通 ${this.cleared} · 当前 ${this.currentName()}")
+                Text(ChapterCatalog.yichengFooter(this.cleared, this.levels.size, this.currentName()))
                     .fontSize(12)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.sansFamily())
