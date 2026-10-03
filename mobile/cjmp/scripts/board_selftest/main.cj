@@ -2532,6 +2532,167 @@ func j25IconTests(ctx: Ctx): Unit {
     println("J25 icons done checks=${ctx.checks - c0}")
 }
 
+/* ===== J26 章节文案/点心/分组头纯函数自测 ===== */
+
+func j26StrContains(s: String, sub: String): Bool {
+    if (sub.size == 0) {
+        return true
+    }
+    if (s.size < sub.size) {
+        return false
+    }
+    var i: Int64 = 0
+    while (i <= s.size - sub.size) {
+        var matchFound = true
+        var j: Int64 = 0
+        while (j < sub.size) {
+            match (s.get(i + j)) {
+                case Some(b1) => match (sub.get(j)) {
+                    case Some(b2) => if (b1 != b2) { matchFound = false }
+                    case None => matchFound = false
+                }
+                case None => matchFound = false
+            }
+            if (!matchFound) {
+                break
+            }
+            j = j + 1
+        }
+        if (matchFound) {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+func j26StrStartsWith(s: String, prefix: String): Bool {
+    if (s.size < prefix.size) {
+        return false
+    }
+    var i: Int64 = 0
+    while (i < prefix.size) {
+        match (s.get(i)) {
+            case Some(b1) => match (prefix.get(i)) {
+                case Some(b2) => if (b1 != b2) { return false }
+                case None => return false
+            }
+            case None => return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+func j26ChapterTextTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
+    let c0 = ctx.checks
+
+    // 1. 点心数据自测
+    let dIds = ChapterCatalog.dessertIds()
+    ctx.ck(dIds.size == 10, "J26 dessertIds size=${dIds.size} want=10")
+    for (ch in 0..10) {
+        let wantId = ch * 10 + 4
+        ctx.ck(dIds[ch] == wantId, "J26 dessertId[${ch}]=${dIds[ch]} want=${wantId}")
+    }
+
+    var dessertMatchCount: Int64 = 0
+    for (id in 0..100) {
+        if (ChapterCatalog.isDessert(id)) {
+            dessertMatchCount = dessertMatchCount + 1
+        }
+    }
+    ctx.ck(dessertMatchCount == 10, "J26 isDessert count 0..99 = ${dessertMatchCount} want=10")
+    ctx.ck(dessertMatchCount == ChapterCatalog.dessertCount(), "J26 dessertCount() == ${ChapterCatalog.dessertCount()}")
+
+    ctx.ck(!ChapterCatalog.isDessert(5), "J26 isDessert(5) false")
+    ctx.ck(!ChapterCatalog.isDessert(0), "J26 isDessert(0) false")
+    ctx.ck(!ChapterCatalog.isDessert(100), "J26 isDessert(100) false")
+    ctx.ck(!ChapterCatalog.isDessert(-1), "J26 isDessert(-1) false")
+
+    // 核对每个 dessert id 对应关卡名与 SPEC 一致
+    let specDessertNames = [
+        "涿郡·中山",
+        "平原·安德",
+        "徐州·盱眙",
+        "吕布·小沛·第 2 驿",
+        "投袁·邺·第 2 驿",
+        "荆州·宜城",
+        "赤壁·柴桑·第 1 驿",
+        "入蜀·涪",
+        "汉中·南郑",
+        "北伐·陈仓"
+    ]
+    for (i in 0..dIds.size) {
+        let did = dIds[i]
+        ctx.ck(did < levels.size, "J26 dessert id=${did} < levels.size=${levels.size}")
+        if (did < levels.size) {
+            let actualName = levels[did].name
+            let wantName = specDessertNames[i]
+            ctx.ck(actualName == wantName, "J26 dessert id=${did} name='${actualName}' want='${wantName}'")
+        }
+    }
+
+    // 2. yichengFooter 文案自测
+    let yf1 = ChapterCatalog.yichengFooter(100, 100, "已通")
+    ctx.ck(yf1 == "已通 100 · 驿路全通", "J26 yichengFooter(100,100,已通)='${yf1}'")
+    ctx.ck(!j26StrContains(yf1, "当前已通"), "J26 yichengFooter(100,100) no '当前已通'")
+
+    let yf2 = ChapterCatalog.yichengFooter(2, 100, "X")
+    ctx.ck(yf2 == "已通 2 · 当前 X", "J26 yichengFooter(2,100,X)='${yf2}'")
+
+    let yf3 = ChapterCatalog.yichengFooter(0, 100, "Y")
+    ctx.ck(yf3 == "已通 0 · 当前 Y", "J26 yichengFooter(0,100,Y)='${yf3}'")
+
+    // 3. chapterListFooterText 文案自测
+    let clf0 = ChapterCatalog.chapterListFooterText(0, 10, levels)
+    ctx.ck(clf0 == "已通 10 · 本章全通 · 下一章 平原 · 共10驿 · 6×6", "J26 ch0,cleared=10 footer='${clf0}'")
+
+    let clf9 = ChapterCatalog.chapterListFooterText(9, 100, levels)
+    ctx.ck(clf9 == "已通 10 · 本章全通 · 驿路终章 · 共10驿 · 7×7", "J26 ch9,cleared=100 footer='${clf9}'")
+
+    let clf2 = ChapterCatalog.chapterListFooterText(0, 2, levels)
+    let wantClf2 = "已通 2 · 当前" + levels[2].name + " · 共10驿 · 6×6"
+    ctx.ck(clf2 == wantClf2, "J26 ch0,cleared=2 footer='${clf2}' want='${wantClf2}'")
+
+    let clf4 = ChapterCatalog.chapterListFooterText(4, 3, levels)
+    ctx.ck(j26StrStartsWith(clf4, "已通 0 · 当前未开"), "J26 ch4,cleared=3 startsWith '已通 0 · 当前未开'")
+
+    // 对 chapterId 0..9 × cleared ∈ {0,3,9,10,15,25,50,99,100} 的所有组合,结果都不含「当前已通」
+    let testCleared = [0, 3, 9, 10, 15, 25, 50, 99, 100]
+    for (cid in 0..10) {
+        for (clr in testCleared) {
+            let txt = ChapterCatalog.chapterListFooterText(cid, clr, levels)
+            ctx.ck(!j26StrContains(txt, "当前已通"), "J26 cid=${cid} clr=${clr} no '当前已通': '${txt}'")
+        }
+    }
+
+    // 4. groupState/groupHeaderRight/groupIsCurrent 自测
+    // cleared=14 时
+    // ch0 → 状态1,"全通 10 / 10",非当前
+    ctx.ck(ChapterCatalog.groupState(0, 14) == 1, "J26 clr=14 ch0 state=1")
+    ctx.ck(ChapterCatalog.groupHeaderRight(0, 14) == "全通 10 / 10", "J26 clr=14 ch0 headerRight='全通 10 / 10'")
+    ctx.ck(!ChapterCatalog.groupIsCurrent(0, 14), "J26 clr=14 ch0 not current")
+
+    // ch1 → 状态0,"已通 4 / 10",当前
+    ctx.ck(ChapterCatalog.groupState(1, 14) == 0, "J26 clr=14 ch1 state=0")
+    ctx.ck(ChapterCatalog.groupHeaderRight(1, 14) == "已通 4 / 10", "J26 clr=14 ch1 headerRight='已通 4 / 10'")
+    ctx.ck(ChapterCatalog.groupIsCurrent(1, 14), "J26 clr=14 ch1 is current")
+
+    // ch2 → 状态2,"未开"
+    ctx.ck(ChapterCatalog.groupState(2, 14) == 2, "J26 clr=14 ch2 state=2")
+    ctx.ck(ChapterCatalog.groupHeaderRight(2, 14) == "未开", "J26 clr=14 ch2 headerRight='未开'")
+    ctx.ck(!ChapterCatalog.groupIsCurrent(2, 14), "J26 clr=14 ch2 not current")
+
+    // cleared=100 时 10 章全是状态1 且 groupIsCurrent 全 false
+    for (cid in 0..10) {
+        ctx.ck(ChapterCatalog.groupState(cid, 100) == 1, "J26 clr=100 cid=${cid} state=1")
+        ctx.ck(ChapterCatalog.groupHeaderRight(cid, 100) == "全通 10 / 10", "J26 clr=100 cid=${cid} headerRight='全通 10 / 10'")
+        ctx.ck(!ChapterCatalog.groupIsCurrent(cid, 100), "J26 clr=100 cid=${cid} isCurrent false")
+    }
+
+    println("J26 chapter text done checks=${ctx.checks - c0}")
+}
+
 /* ===== P4 DUMP:按场景文件渲染 app 各板层 JSON(与设计稿 PNG 对拍,box-only) ===== */
 
 func dumpBool(v: Bool): String {
@@ -2967,6 +3128,8 @@ main(args: Array<String>): Int64 {
     j24ProgressFileTests(ctx)
     /* J25 icon vector path checks. */
     j25IconTests(ctx)
+    /* J26 chapter text and group header checks. */
+    j26ChapterTextTests(levels, ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit}")
     ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")

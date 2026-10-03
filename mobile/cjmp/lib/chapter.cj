@@ -268,10 +268,95 @@ public class ChapterCatalog {
         return n
     }
 
-    public static func isDessert(levelId: Int64): Bool {
-        /* SHIP 点心: 涿郡·中山. Mock 第5驿 = JSON id 4. */
-        return levelId == 4
+    // boards-locked 的 dessert 字段; mobile/shared/levels/levels.json 不带 dessert 键且按现有测试不得带, 所以这里是该数据的镜像, 由 scripts/check_ui_diffs.py 与 boards-locked 对账
+    public static func dessertIds(): Array<Int64> {
+        return [4, 14, 24, 34, 44, 54, 64, 74, 84, 94]
     }
+
+    public static func isDessert(levelId: Int64): Bool {
+        let ids = ChapterCatalog.dessertIds()
+        var i: Int64 = 0
+        while (i < ids.size) {
+            if (ids[i] == levelId) {
+                return true
+            }
+            i = i + 1
+        }
+        return false
+    }
+
+    public static func dessertCount(): Int64 {
+        return ChapterCatalog.dessertIds().size
+    }
+
+    public static func yichengFooter(cleared: Int64, total: Int64, currentName: String): String {
+        if (total > 0 && cleared >= total) {
+            return "已通 ${total} · 驿路全通"
+        }
+        return "已通 ${cleared} · 当前 ${currentName}"
+    }
+
+    public static func chapterListFooterText(chapterId: Int64, cleared: Int64, levels: ArrayList<LevelDef>): String {
+        let ch = ChapterCatalog.byIndex(chapterId)
+        let n = ChapterCatalog.clearedCount(chapterId, cleared)
+        var dims = ""
+        if (ch.levelStart < levels.size) {
+            let board = levels[ch.levelStart]
+            dims = " · ${board.cols}×${board.rows}"
+        }
+        if (ch.levelCount > 0 && n >= ch.levelCount) {
+            if (chapterId < ChapterCatalog.count() - 1) {
+                let nextCh = ChapterCatalog.byIndex(chapterId + 1)
+                return "已通 ${n} · 本章全通 · 下一章 ${nextCh.name} · 共10驿${dims}"
+            } else {
+                return "已通 ${n} · 本章全通 · 驿路终章 · 共10驿${dims}"
+            }
+        }
+        var curName = ""
+        if (!ChapterCatalog.isOpen(ch.id, cleared)) {
+            curName = "未开"
+        } else if (cleared < ch.levelStart) {
+            if (ch.levelStart < levels.size) {
+                curName = levels[ch.levelStart].name
+            }
+        } else if (cleared < levels.size) {
+            curName = levels[cleared].name
+        }
+        return "已通 ${n} · 当前${curName} · 共10驿${dims}"
+    }
+
+    public static func groupState(chapterId: Int64, cleared: Int64): Int64 {
+        let ch = ChapterCatalog.byIndex(chapterId)
+        if (cleared < ch.levelStart) {
+            return 2
+        }
+        if (ch.levelCount > 0 && ChapterCatalog.clearedCount(chapterId, cleared) >= ch.levelCount) {
+            return 1
+        }
+        return 0
+    }
+
+    public static func groupHeaderRight(chapterId: Int64, cleared: Int64): String {
+        let ch = ChapterCatalog.byIndex(chapterId)
+        let st = ChapterCatalog.groupState(chapterId, cleared)
+        if (st == 1) {
+            return "全通 ${ch.levelCount} / ${ch.levelCount}"
+        }
+        if (st == 2) {
+            return "未开"
+        }
+        let n = ChapterCatalog.clearedCount(chapterId, cleared)
+        return "已通 ${n} / ${ch.levelCount}"
+    }
+
+    public static func groupIsCurrent(chapterId: Int64, cleared: Int64): Bool {
+        let ch = ChapterCatalog.byIndex(chapterId)
+        if (ch.levelCount <= 0) {
+            return false
+        }
+        return cleared >= ch.levelStart && cleared < ch.levelStart + ch.levelCount
+    }
+
 
     public static func clearedCount(chapterId: Int64, cleared: Int64): Int64 {
         let ch = ChapterCatalog.byIndex(chapterId)
