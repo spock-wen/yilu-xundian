@@ -291,70 +291,9 @@ class EntryView {
         return (midX + 12.0, midY)
     }
 
-    // U3: Collect board obstacles for toast avoidance (designer ruling)
+    // U3 plan A: route boxes soft (toast pass 2); logic lives in board_mech.cj buildToastObstacles
     func collectToastObstacles(): Array<ToastBox> {
-        let list = ArrayList<ToastBox>()
-
-        // 1. Flash line: bounding box of start/end points inflated by 1.5 (3 vp stroke, round cap)
-        let (sx, sy) = this.rejectEdgeStartPoint()
-        let (ex, ey) = this.rejectEdgeEndPoint()
-        let minX = if (sx <= ex) { sx } else { ex }
-        let maxX = if (sx >= ex) { sx } else { ex }
-        let minY = if (sy <= ey) { sy } else { ey }
-        let maxY = if (sy >= ey) { sy } else { ey }
-        list.add(ToastBox(minX - 1.5, minY - 1.5, maxX + 1.5, maxY + 1.5))
-
-        // 2. Head dot: cx±(r+0.5), cy±(r+0.5)
-        for (dot in this.boardDots) {
-            let rEff = dot.r + 0.5
-            list.add(ToastBox(dot.cx - rEff, dot.cy - rEff, dot.cx + rEff, dot.cy + rEff))
-        }
-
-        // 3. Station circles: cx±(r+strokeW/2) (gold ring already has a bigger r entry)
-        for (circle in this.boardStationCircles) {
-            let extra = if (circle.hasStroke) { circle.strokeW * 0.5 } else { 0.0 }
-            let rEff = circle.r + extra
-            list.add(ToastBox(circle.cx - rEff, circle.cy - rEff, circle.cx + rEff, circle.cy + rEff))
-        }
-
-        // 4. 下一驿 labels: anchored at left edge and baseline (cy+r+12)
-        var ni: Int64 = 0
-        while (ni < this.obstacleNextCnt && ni < this.boardNextLabels.size) {
-            let lbl = this.boardNextLabels[ni]
-            let baseline = lbl.y + 0.88 * lbl.size
-            list.add(ToastBox(lbl.x - 0.5, baseline - 10.0, lbl.x + 35.0, baseline + 3.5))
-            ni = ni + 1
-        }
-
-        // 5. Parity labels: glyph centred on seam midpoint (mx, my)
-        for (lbl in this.boardParityLabels) {
-            let mx = lbl.x + 5.5
-            let my = lbl.y - 4.0 + 0.88 * lbl.size
-            list.add(ToastBox(mx - 6.5, my - 8.5, mx + 6.5, my + 5.0))
-        }
-
-
-        // 6. Walls: width/2 padding, clear = 2.0
-        for (wall in this.boardWalls) {
-            let hw = wall.width * 0.5
-            let minX = (if (wall.x1 <= wall.x2) { wall.x1 } else { wall.x2 }) - hw
-            let maxX = (if (wall.x1 >= wall.x2) { wall.x1 } else { wall.x2 }) + hw
-            let minY = (if (wall.y1 <= wall.y2) { wall.y1 } else { wall.y2 }) - hw
-            let maxY = (if (wall.y1 >= wall.y2) { wall.y1 } else { wall.y2 }) + hw
-            list.add(ToastBox(minX, minY, maxX, maxY, 2.0))
-        }
-
-        // 7. Route: width/2 padding, clear = 2.0
-        for (route in this.boardRoute) {
-            let hw = route.width * 0.5
-            let minX = (if (route.x1 <= route.x2) { route.x1 } else { route.x2 }) - hw
-            let maxX = (if (route.x1 >= route.x2) { route.x1 } else { route.x2 }) + hw
-            let minY = (if (route.y1 <= route.y2) { route.y1 } else { route.y2 }) - hw
-            let maxY = (if (route.y1 >= route.y2) { route.y1 } else { route.y2 }) + hw
-            list.add(ToastBox(minX, minY, maxX, maxY, 2.0))
-        }
-
-        return list.toArray()
+        return buildToastObstacles(this.boardGeom(), this.rejectFromX, this.rejectFromY, this.rejectToX, this.rejectToY, this.boardDots, this.boardStationCircles, this.boardNextLabels, this.obstacleNextCnt, this.boardParityLabels, this.boardWalls, this.boardRoute)
     }
 
     func rejectPlacement(): ToastPlacement {

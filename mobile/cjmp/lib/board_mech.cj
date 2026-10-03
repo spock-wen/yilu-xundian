@@ -910,3 +910,70 @@ public func chipRowOffsets(rowW: Float64, widths: Array<Float64>, gap: Float64):
     }
     return out.toArray()
 }
+
+/* designer ruling plan A;route polyline boxes 是 soft,仅用于 toast pass 2;
+   index.cj collectToastObstacles 委托到这里。 */
+public func buildToastObstacles(geom: BoardGeom, fromX: Int64, fromY: Int64, toX: Int64, toY: Int64, dots: Array<BoardDot>, stations: Array<BoardDot>, nextLabels: Array<BoardLabel>, nextCnt: Int64, parityLabels: Array<BoardLabel>, walls: Array<BoardSeg>, route: Array<BoardSeg>): Array<ToastBox> {
+    let list = ArrayList<ToastBox>()
+
+    // 1. Flash line: bounding box of start/end points inflated by 1.5 (3 vp stroke, round cap)
+    let (midX, midY) = geom.seamMid(fromX, fromY, toX, toY)
+    let (sx, sy) = if (fromX != toX) { (midX, midY - 12.0) } else { (midX - 12.0, midY) }
+    let (ex, ey) = if (fromX != toX) { (midX, midY + 12.0) } else { (midX + 12.0, midY) }
+    let fMinX = if (sx <= ex) { sx } else { ex }
+    let fMaxX = if (sx >= ex) { sx } else { ex }
+    let fMinY = if (sy <= ey) { sy } else { ey }
+    let fMaxY = if (sy >= ey) { sy } else { ey }
+    list.add(ToastBox(fMinX - 1.5, fMinY - 1.5, fMaxX + 1.5, fMaxY + 1.5))
+
+    // 2. Head dot: cx±(r+0.5), cy±(r+0.5)
+    for (dot in dots) {
+        let rEff = dot.r + 0.5
+        list.add(ToastBox(dot.cx - rEff, dot.cy - rEff, dot.cx + rEff, dot.cy + rEff))
+    }
+
+    // 3. Station circles: cx±(r+strokeW/2)
+    for (circle in stations) {
+        let extra = if (circle.hasStroke) { circle.strokeW * 0.5 } else { 0.0 }
+        let rEff = circle.r + extra
+        list.add(ToastBox(circle.cx - rEff, circle.cy - rEff, circle.cx + rEff, circle.cy + rEff))
+    }
+
+    // 4. 下一驿 labels: anchored at left edge and baseline (cy+r+12)
+    var ni: Int64 = 0
+    while (ni < nextCnt && ni < nextLabels.size) {
+        let lbl = nextLabels[ni]
+        let baseline = lbl.y + 0.88 * lbl.size
+        list.add(ToastBox(lbl.x - 0.5, baseline - 10.0, lbl.x + 35.0, baseline + 3.5))
+        ni = ni + 1
+    }
+
+    // 5. Parity labels: glyph centred on seam midpoint (mx, my)
+    for (lbl in parityLabels) {
+        let mx = lbl.x + 5.5
+        let my = lbl.y - 4.0 + 0.88 * lbl.size
+        list.add(ToastBox(mx - 6.5, my - 8.5, mx + 6.5, my + 5.0))
+    }
+
+    // 6. Walls: width/2 padding, clear = 2.0
+    for (wall in walls) {
+        let hw = wall.width * 0.5
+        let minX = (if (wall.x1 <= wall.x2) { wall.x1 } else { wall.x2 }) - hw
+        let maxX = (if (wall.x1 >= wall.x2) { wall.x1 } else { wall.x2 }) + hw
+        let minY = (if (wall.y1 <= wall.y2) { wall.y1 } else { wall.y2 }) - hw
+        let maxY = (if (wall.y1 >= wall.y2) { wall.y1 } else { wall.y2 }) + hw
+        list.add(ToastBox(minX, minY, maxX, maxY, 2.0))
+    }
+
+    // 7. Route: width/2 padding, clear = 2.0, soft = true
+    for (seg in route) {
+        let hw = seg.width * 0.5
+        let minX = (if (seg.x1 <= seg.x2) { seg.x1 } else { seg.x2 }) - hw
+        let maxX = (if (seg.x1 >= seg.x2) { seg.x1 } else { seg.x2 }) + hw
+        let minY = (if (seg.y1 <= seg.y2) { seg.y1 } else { seg.y2 }) - hw
+        let maxY = (if (seg.y1 >= seg.y2) { seg.y1 } else { seg.y2 }) + hw
+        list.add(ToastBox(minX, minY, maxX, maxY, 2.0, true))
+    }
+
+    return list.toArray()
+}

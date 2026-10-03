@@ -18,6 +18,11 @@ class Ctx {
     public var checks: Int64 = 0
     public var steps: Int64 = 0
     public var levels: Int64 = 0
+    public var toastN: Int64 = 0
+    public var toastShown: Int64 = 0
+    public var toastRelaxed: Int64 = 0
+    public var toastNot: Int64 = 0
+    public var toastHit: Int64 = 0
 
     public init() {}
 
@@ -366,6 +371,11 @@ func fuzz(game: PatrolGame, id: Int64, step: Int64, ctx: Ctx) {
             if (rejectShouldFlash(game) && code == 4) {
                 ctx.ck(mechToastText(game) == "粮重不可进", "${tag} code=4 toast='${mechToastText(game)}' want=粮重不可进")
             }
+            /* J21 toast placement sweep for every flashing reject */
+            if (rejectShouldFlash(game)) {
+                j21Check(game, 411.0, tag, ctx)
+                j21Check(game, 360.0, tag, ctx)
+            }
         }
         k = k + 1
     }
@@ -420,6 +430,7 @@ class DStat {
 }
 
 let dStat = DStat()
+let j21Dir = Ctx()
 
 /* 手工小棋盘(同 shared-test mkLevel 写法):clues=(n,x,y) 即 (编号,列,行)。 */
 func mkTiny(cols: Int64, rows: Int64, clues: Array<(Int64, Int64, Int64)>): LevelDef {
@@ -467,6 +478,10 @@ func dirExpect(fails: ArrayList<String>, g: PatrolGame, name: String, cell: Cell
         dStat.flash = dStat.flash + 1
     } else {
         dStat.noflash = dStat.noflash + 1
+    }
+    if (fl) {
+        j21Check(g, 411.0, "directed ${name} w=411", j21Dir)
+        j21Check(g, 360.0, "directed ${name} w=360", j21Dir)
     }
     dStat.checks = dStat.checks + 1
     if (fl != wantFlash) {
@@ -1454,6 +1469,240 @@ func j20SkinGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
         "J20 chips3 gaps !=8")
     ctx.ck(absF((32.0 + 15.0 * 2.0 + 12.0) - 74.0) < 1e-9, "J20 burden chip w=${32.0 + 15.0 * 2.0 + 12.0} want=74")
 }
+/* ===== J21 toast placement checks ===== */
+
+/* Mirror EntryView.rebuildBoard obstacle collection (lib/index.cj ~374-381). */
+func j21Obstacles(game: PatrolGame, geom: BoardGeom, fromX: Int64, fromY: Int64, toX: Int64, toY: Int64): Array<ToastBox> {
+    let walls = concatArr(buildBoardWalls(game, geom), buildBoardMechWalls(game, geom))
+    let parity = buildBoardParityLabels(game, geom, 3.0)
+    let route = buildBoardRoute(game, geom)
+    let dots = buildBoardHeadDot(game, geom)
+    let stations = concatArr(buildBoardStationCircles(game, geom), buildBoardMechDots(game, geom))
+    let nextOnly = buildBoardNextLabels(game, geom, 3.0)
+    let labels = concatArr(nextOnly, buildBoardMechLabels(game, geom))
+    return buildToastObstacles(geom, fromX, fromY, toX, toY, dots, stations, labels, nextOnly.size, parity, walls, route)
+}
+
+/* Run toast placement for a given game state and tray width; validate margins and overlap. */
+func j21Check(game: PatrolGame, w: Float64, tag: String, ctx: Ctx): Option<ToastPlacement> {
+    let geom = boardGeomFor(game.level.cols, game.level.rows, w)
+    let txt = mechToastText(game)
+    if (txt.size == 0) {
+        return None
+    }
+    let tw = mechToastWidth(txt)
+    let fx = game.lastRejectFromX
+    let fy = game.lastRejectFromY
+    let tx = game.lastRejectToX
+    let ty = game.lastRejectToY
+    if (fx < 0 || fy < 0 || tx < 0 || ty < 0) {
+        return None
+    }
+    let obs = j21Obstacles(game, geom, fx, fy, tx, ty)
+    let (mx, my) = geom.seamMid(fx, fy, tx, ty)
+    let p = toastPlaceW(geom.trayW(), geom.trayH(), mx, my, obs, tw)
+    ctx.toastN = ctx.toastN + 1
+    if (p.shown) {
+        ctx.toastShown = ctx.toastShown + 1
+        if (p.relaxed) {
+            ctx.toastRelaxed = ctx.toastRelaxed + 1
+        }
+        let trayW = geom.trayW()
+        let trayH = geom.trayH()
+        ctx.ck(p.x >= 16.0 - 1e-6, "${tag} toast x=${p.x} < 16")
+        ctx.ck(p.x + tw <= trayW - 16.0 + 1e-6, "${tag} toast x+tw=${p.x + tw} > trayW-16=${trayW - 16.0}")
+        ctx.ck(p.y >= 8.0 - 1e-6, "${tag} toast y=${p.y} < 8")
+        ctx.ck(p.y + 28.0 <= trayH - 8.0 + 1e-6, "${tag} toast y+28=${p.y + 28.0} > trayH-8=${trayH - 8.0}")
+        /* overlap test with every obstacle box */
+        var bi: Int64 = 0
+        while (bi < obs.size) {
+            let b = obs[bi]
+            let ox = p.x + 1e-6 < b.x1 && p.x + tw - 1e-6 > b.x0
+            let oy = p.y + 1e-6 < b.y1 && p.y + 28.0 - 1e-6 > b.y0
+            if (ox && oy) {
+                if (!(b.soft && p.relaxed)) {
+                    ctx.toastHit = ctx.toastHit + 1
+                    ctx.ck(false, "${tag} J21 toast overlap box[${bi}]=(${b.x0},${b.y0},${b.x1},${b.y1}) soft=${b.soft} relaxed=${p.relaxed}")
+                }
+            }
+            bi = bi + 1
+        }
+        ctx.ck(true, "${tag} J21 overlap pass")
+    } else {
+        ctx.toastNot = ctx.toastNot + 1
+    }
+    return Some(p)
+}
+
+/* J21 directed toast scenarios: replay taps, reject the last, and validate toast placement. */
+func j21ToastTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
+    let scenarios: Array<(String, Int64, Array<(Int64,Int64)>, Int64)> = [
+        ("v2_L90_burden_reject", 90,
+         [(6,6),(5,6),(4,6),(3,6),(2,6),(2,5),(3,5),(4,5),(5,5),(6,5),(6,4),(5,4),(4,4),(4,3),(5,3),(6,3),(6,2),(6,1),(6,0),(5,0),(5,1),(4,1)], 4),
+        ("v2_L93_reject", 93,
+         [(4,2),(4,3),(4,4),(4,5),(3,5),(2,5),(1,5),(1,4),(2,4),(3,4),(3,3),(2,3),(1,3),(1,2),(2,2),(3,2),(3,1),(4,1),(5,1),(5,2),(5,3),(5,4),(5,5)], 4),
+        ("v2_L97_reject", 97,
+         [(6,0),(5,0),(5,1),(6,1),(6,2),(6,3),(6,4),(6,5),(6,6),(5,6),(5,5),(5,4),(4,4),(3,4),(3,3),(4,3),(5,3),(5,2),(4,2),(4,1),(4,0),(3,0),(3,1),(3,2),(2,2),(2,3),(1,3),(0,3)], 5),
+        ("v2_L99_reject", 99,
+         [(2,6),(1,6),(0,6),(0,5),(0,4),(0,3),(1,3),(2,3),(2,2),(1,2)], 5),
+        ("v2_L95_collapse_reject", 95,
+         [(6,2),(5,2),(5,1),(4,1),(3,1),(3,0),(2,0),(1,0),(0,0),(0,1),(1,1),(2,1)], 5)
+    ]
+    let ws = [411.0, 360.0]
+    for (sc in scenarios) {
+        let name = sc[0]
+        let wantId = sc[1]
+        let cells = sc[2]
+        let wantCode = sc[3]
+        /* Find level by id */
+        var lvFound: Option<LevelDef> = None
+        for (lv in levels) {
+            if (lv.id == wantId) {
+                lvFound = Some(lv)
+            }
+        }
+        match (lvFound) {
+            case None =>
+                ctx.ck(false, "J21 ${name} level ${wantId} not found")
+                continue
+            case Some(lv) =>
+                let game = PatrolGame(lv)
+                /* Replay all taps except the last */
+                var ok = true
+                var si: Int64 = 0
+                while (si < cells.size - 1 && ok) {
+                    if (!game.tryStep(Cell(cells[si][0], cells[si][1]))) {
+                        ctx.ck(false, "J21 ${name} setup step ${si} (${cells[si][0]},${cells[si][1]}) rejected code=${game.lastReject}")
+                        ok = false
+                    }
+                    si = si + 1
+                }
+                if (!ok) { continue }
+                /* Try the last cell which must be rejected */
+                let lastC = cells[cells.size - 1]
+                let accepted = game.tryStep(Cell(lastC[0], lastC[1]))
+                ctx.ck(!accepted, "J21 ${name} last step accepted unexpectedly")
+                ctx.ck(game.lastReject == wantCode, "J21 ${name} code=${game.lastReject} want=${wantCode}")
+                ctx.ck(rejectShouldFlash(game), "J21 ${name} flash=false")
+                if (wantCode == 4) {
+                    ctx.ck(mechToastText(game) == "粮重不可进", "J21 ${name} toast='${mechToastText(game)}'")
+                }
+                if (wantCode == 5) {
+                    ctx.ck(mechToastText(game) == "此路不通", "J21 ${name} toast='${mechToastText(game)}'")
+                }
+                /* Run j21Check at both widths */
+                for (w in ws) {
+                    let tag = "J21 ${name} w=${w}"
+                    let r = j21Check(game, w, tag, ctx)
+                    match (r) {
+                        case Some(p) =>
+                            println("J21 ${name} w=${w} shown=${p.shown} relaxed=${p.relaxed} step=${p.step} x=${p.x} y=${p.y} lift=${p.lift}")
+                        case None =>
+                            println("J21 ${name} w=${w} placement=None")
+                    }
+                }
+        }
+    }
+    /* Directed assertions for specific scenarios */
+    /* L93 @411 -> shown, relaxed, step==3, x~217.0, y~258.0 */
+    /* L93 @360 -> shown, relaxed, step==3, x~184.5, y~233.0 */
+    /* (before the fix, old toast.cj no pass 2, both were shown=false -> 粮重不可进 toast never appeared; plan A: only route boxes are soft) */
+    /* L97 @411 -> shown, !relaxed, step==2, x==16, y==128.5, lift==12 */
+    /* L99 @411 -> shown, !relaxed, step==1, x==141.5, y==91.5 */
+    /* L97 @360 -> shown, !relaxed, step==2, x==16, y==111, lift==12 */
+    /* L99 @360 -> shown, !relaxed, step==1, x==129, y==79 */
+    /* Re-run the specific scenarios to assert exact values */
+    for (sc in scenarios) {
+        let name = sc[0]
+        let wantId = sc[1]
+        let cells = sc[2]
+        var lvFound: Option<LevelDef> = None
+        for (lv in levels) {
+            if (lv.id == wantId) { lvFound = Some(lv) }
+        }
+        match (lvFound) {
+            case None => continue
+            case Some(lv) =>
+                let game = PatrolGame(lv)
+                var si: Int64 = 0
+                var ok = true
+                while (si < cells.size - 1 && ok) {
+                    if (!game.tryStep(Cell(cells[si][0], cells[si][1]))) { ok = false }
+                    si = si + 1
+                }
+                if (!ok) { continue }
+                game.tryStep(Cell(cells[cells.size-1][0], cells[cells.size-1][1]))
+                if (name == "v2_L93_reject") {
+                    let p411 = j21Check(game, 411.0, "J21-assert L93@411", ctx)
+                    match (p411) {
+                        case Some(p) =>
+                            ctx.ck(p.shown, "J21 L93@411 shown=false")
+                            ctx.ck(p.relaxed, "J21 L93@411 relaxed=false")
+                            ctx.ck(p.step == 3, "J21 L93@411 step=${p.step} want=3")
+                            ctx.ck(absF(p.x - 217.0) < 0.01, "J21 L93@411 x=${p.x} want=217.0")
+                            ctx.ck(absF(p.y - 258.0) < 0.01, "J21 L93@411 y=${p.y} want=258.0")
+                        case None => ctx.ck(false, "J21 L93@411 None")
+                    }
+                    let p360 = j21Check(game, 360.0, "J21-assert L93@360", ctx)
+                    match (p360) {
+                        case Some(p) =>
+                            ctx.ck(p.shown, "J21 L93@360 shown=false")
+                            ctx.ck(p.relaxed, "J21 L93@360 relaxed=false")
+                            ctx.ck(p.step == 3, "J21 L93@360 step=${p.step} want=3")
+                            ctx.ck(absF(p.x - 184.5) < 0.01, "J21 L93@360 x=${p.x} want=184.5")
+                            ctx.ck(absF(p.y - 233.0) < 0.01, "J21 L93@360 y=${p.y} want=233.0")
+                        case None => ctx.ck(false, "J21 L93@360 None")
+                    }
+                }
+                if (name == "v2_L97_reject") {
+                    let p411 = j21Check(game, 411.0, "J21-assert L97@411", ctx)
+                    match (p411) {
+                        case Some(p) =>
+                            ctx.ck(p.shown, "J21 L97@411 shown=false")
+                            ctx.ck(!p.relaxed, "J21 L97@411 relaxed=true")
+                            ctx.ck(p.step == 2, "J21 L97@411 step=${p.step} want=2")
+                            ctx.ck(absF(p.x - 16.0) < 0.01, "J21 L97@411 x=${p.x} want=16.0")
+                            ctx.ck(absF(p.y - 128.5) < 0.01, "J21 L97@411 y=${p.y} want=128.5")
+                            ctx.ck(absF(p.lift - 12.0) < 0.01, "J21 L97@411 lift=${p.lift} want=12.0")
+                        case None => ctx.ck(false, "J21 L97@411 None")
+                    }
+                    let p360 = j21Check(game, 360.0, "J21-assert L97@360", ctx)
+                    match (p360) {
+                        case Some(p) =>
+                            ctx.ck(p.shown, "J21 L97@360 shown=false")
+                            ctx.ck(!p.relaxed, "J21 L97@360 relaxed=true")
+                            ctx.ck(p.step == 2, "J21 L97@360 step=${p.step} want=2")
+                            ctx.ck(absF(p.x - 16.0) < 0.01, "J21 L97@360 x=${p.x} want=16.0")
+                            ctx.ck(absF(p.y - 111.0) < 0.01, "J21 L97@360 y=${p.y} want=111.0")
+                            ctx.ck(absF(p.lift - 12.0) < 0.01, "J21 L97@360 lift=${p.lift} want=12.0")
+                        case None => ctx.ck(false, "J21 L97@360 None")
+                    }
+                }
+                if (name == "v2_L99_reject") {
+                    let p411 = j21Check(game, 411.0, "J21-assert L99@411", ctx)
+                    match (p411) {
+                        case Some(p) =>
+                            ctx.ck(p.shown, "J21 L99@411 shown=false")
+                            ctx.ck(!p.relaxed, "J21 L99@411 relaxed=true")
+                            ctx.ck(p.step == 1, "J21 L99@411 step=${p.step} want=1")
+                            ctx.ck(absF(p.x - 141.5) < 0.01, "J21 L99@411 x=${p.x} want=141.5")
+                            ctx.ck(absF(p.y - 91.5) < 0.01, "J21 L99@411 y=${p.y} want=91.5")
+                        case None => ctx.ck(false, "J21 L99@411 None")
+                    }
+                    let p360 = j21Check(game, 360.0, "J21-assert L99@360", ctx)
+                    match (p360) {
+                        case Some(p) =>
+                            ctx.ck(p.shown, "J21 L99@360 shown=false")
+                            ctx.ck(!p.relaxed, "J21 L99@360 relaxed=true")
+                            ctx.ck(p.step == 1, "J21 L99@360 step=${p.step} want=1")
+                            ctx.ck(absF(p.x - 129.0) < 0.01, "J21 L99@360 x=${p.x} want=129.0")
+                            ctx.ck(absF(p.y - 79.0) < 0.01, "J21 L99@360 y=${p.y} want=79.0")
+                        case None => ctx.ck(false, "J21 L99@360 None")
+                    }
+                }
+        }
+    }
+}
 
 /* ===== P4 DUMP:按场景文件渲染 app 各板层 JSON(与设计稿 PNG 对拍,box-only) ===== */
 
@@ -1863,13 +2112,26 @@ main(args: Array<String>): Int64 {
     if (dirMsg != "") {
         ctx.failures.add(dirMsg)
     }
+    ctx.checks = ctx.checks + j21Dir.checks
+    ctx.toastN = ctx.toastN + j21Dir.toastN
+    ctx.toastShown = ctx.toastShown + j21Dir.toastShown
+    ctx.toastRelaxed = ctx.toastRelaxed + j21Dir.toastRelaxed
+    ctx.toastNot = ctx.toastNot + j21Dir.toastNot
+    ctx.toastHit = ctx.toastHit + j21Dir.toastHit
+    for (f in j21Dir.failures) {
+        ctx.failures.add(f)
+    }
     /* J13 定向纯函数检查。 */
     j13RejectGateTests(levels, ctx)
     /* J14 定向几何/滑行检查。 */
     j14SlideGeomTests(levels, ctx)
     /* J20 塌桥/负重皮肤几何检查。 */
     j20SkinGeomTests(levels, ctx)
+    /* J21 toast placement checks。 */
+    j21ToastTests(levels, ctx)
     ctx.checks = ctx.checks + dStat.checks
+    println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit}")
+    ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")
     println("SELFTEST levels=${ctx.levels} steps=${ctx.steps} checks=${ctx.checks} rejects=[${sb.toString()}] failures=${ctx.failures.size}")
     println("DIRECTED flash=${dStat.flash} noflash=${dStat.noflash} failures=${dStat.fails}")
     var f: Int64 = 0
