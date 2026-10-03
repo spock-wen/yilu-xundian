@@ -1339,7 +1339,375 @@ func j20SkinGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     ctx.ck(absF((32.0 + 15.0 * 2.0 + 12.0) - 74.0) < 1e-9, "J20 burden chip w=${32.0 + 15.0 * 2.0 + 12.0} want=74")
 }
 
+/* ===== P4 DUMP:按场景文件渲染 app 各板层 JSON(与设计稿 PNG 对拍,box-only) ===== */
+
+func dumpBool(v: Bool): String {
+    if (v) {
+        return "true"
+    }
+    return "false"
+}
+
+/* 是否含需转义字节(" \ 或 C0 控制符);无则走快路径原样输出。 */
+func dumpNeedsEsc(s: String): Bool {
+    var i: Int64 = 0
+    while (i < s.size) {
+        match (s.get(i)) {
+            case Some(b) => if (b < 32u8 || b == 34u8 || b == 92u8) {
+                return true
+            }
+            case None => ()
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/* 手拼 JSON 字符串:转义 " 与 \,控制符换空格;≥0x80 字节原样(UTF-8 仍合法)。 */
+func dumpJsonStr(s: String): String {
+    if (!dumpNeedsEsc(s)) {
+        return "\"" + s + "\""
+    }
+    let out = ArrayList<UInt8>()
+    var i: Int64 = 0
+    while (i < s.size) {
+        match (s.get(i)) {
+            case Some(b) =>
+                if (b == 34u8 || b == 92u8) {
+                    out.add(92u8)
+                    out.add(b)
+                } else if (b < 32u8) {
+                    out.add(32u8)
+                } else {
+                    out.add(b)
+                }
+            case None => ()
+        }
+        i = i + 1
+    }
+    return "\"" + unsafe { String.fromUtf8Unchecked(out.toArray()) } + "\""
+}
+
+/* [start,end) 按空白(空格/Tab/CR)切 token;空行返回空表。 */
+func dumpTokens(b: Array<UInt8>, start: Int64, end: Int64): ArrayList<Array<UInt8>> {
+    let toks = ArrayList<Array<UInt8>>()
+    var i = start
+    while (i < end) {
+        while (i < end && (b[i] == 32u8 || b[i] == 9u8 || b[i] == 13u8)) {
+            i = i + 1
+        }
+        if (i >= end) {
+            break
+        }
+        let s = i
+        while (i < end && b[i] != 32u8 && b[i] != 9u8 && b[i] != 13u8) {
+            i = i + 1
+        }
+        let arr = Array<UInt8>(i - s, repeat: 0u8)
+        var j: Int64 = 0
+        while (j < i - s) {
+            arr[j] = b[s + j]
+            j = j + 1
+        }
+        toks.add(arr)
+    }
+    return toks
+}
+
+/* 各层结构体数组 → JSON 数组(字段同名展开,数字用插值)。 */
+func dumpRects(sb: StringBuilder, a: Array<BoardRect>) {
+    sb.append("[")
+    var i: Int64 = 0
+    while (i < a.size) {
+        if (i > 0) {
+            sb.append(",")
+        }
+        let r = a[i]
+        sb.append("{\"x\":${r.x},\"y\":${r.y},\"w\":${r.w},\"h\":${r.h},\"color\":${r.color},\"stroke\":${r.stroke},\"strokeW\":${r.strokeW}}")
+        i = i + 1
+    }
+    sb.append("]")
+}
+
+func dumpSegs(sb: StringBuilder, a: Array<BoardSeg>) {
+    sb.append("[")
+    var i: Int64 = 0
+    while (i < a.size) {
+        if (i > 0) {
+            sb.append(",")
+        }
+        let s = a[i]
+        sb.append("{\"x1\":${s.x1},\"y1\":${s.y1},\"x2\":${s.x2},\"y2\":${s.y2},\"color\":${s.color},\"width\":${s.width}}")
+        i = i + 1
+    }
+    sb.append("]")
+}
+
+func dumpDots(sb: StringBuilder, a: Array<BoardDot>) {
+    sb.append("[")
+    var i: Int64 = 0
+    while (i < a.size) {
+        if (i > 0) {
+            sb.append(",")
+        }
+        let d = a[i]
+        sb.append("{\"cx\":${d.cx},\"cy\":${d.cy},\"r\":${d.r},\"fill\":${d.fill},\"stroke\":${d.stroke},\"strokeW\":${d.strokeW},\"hasStroke\":${dumpBool(d.hasStroke)}}")
+        i = i + 1
+    }
+    sb.append("]")
+}
+
+func dumpPaths(sb: StringBuilder, a: Array<BoardPath>) {
+    sb.append("[")
+    var i: Int64 = 0
+    while (i < a.size) {
+        if (i > 0) {
+            sb.append(",")
+        }
+        let p = a[i]
+        sb.append("{\"commands\":${dumpJsonStr(p.commands)},\"color\":${p.color},\"strokeW\":${p.strokeW},\"stroke\":${p.stroke},\"fillOp\":${p.fillOp}}")
+        i = i + 1
+    }
+    sb.append("]")
+}
+
+/* labels 只出 text,x,y,size,color。 */
+func dumpLabels(sb: StringBuilder, a: Array<BoardLabel>) {
+    sb.append("[")
+    var i: Int64 = 0
+    while (i < a.size) {
+        if (i > 0) {
+            sb.append(",")
+        }
+        let l = a[i]
+        sb.append("{\"text\":${dumpJsonStr(l.text)},\"x\":${l.x},\"y\":${l.y},\"size\":${l.size},\"color\":${l.color}}")
+        i = i + 1
+    }
+    sb.append("]")
+}
+
+/* gates(BoardImg)无图片字节,仅几何字段。 */
+func dumpImgs(sb: StringBuilder, a: Array<BoardImg>) {
+    sb.append("[")
+    var i: Int64 = 0
+    while (i < a.size) {
+        if (i > 0) {
+            sb.append(",")
+        }
+        let g = a[i]
+        sb.append("{\"x\":${g.x},\"y\":${g.y},\"w\":${g.w},\"h\":${g.h},\"vertical\":${dumpBool(g.vertical)}}")
+        i = i + 1
+    }
+    sb.append("]")
+}
+
+/* 一行 "<name> <levelId> <step> ...":step 为 "x,y"(tryStep,被拒不报错)或 "u"(undo);
+   末尾输出一行 P4DUMP\t<name>\t<json>。几何同 app:boardGeomFor(cols,rows,393.0)、f=3;
+   cOpt=Some(c) 时改用 BoardGeom(c, cols, rows)(同 J20 测试构造)覆盖格宽。 */
+func dumpLine(b: Array<UInt8>, start: Int64, end: Int64, levels: ArrayList<LevelDef>, cOpt: Option<Float64>) {
+    let toks = dumpTokens(b, start, end)
+    if (toks.size < 2) {
+        return
+    }
+    let name = unsafe { String.fromUtf8Unchecked(toks.get(0).getOrThrow()) }
+    let idTok = toks.get(1).getOrThrow()
+    let idNums = lineInts(idTok, 0, idTok.size)
+    var lvFound: Option<LevelDef> = None
+    var wantId: Int64 = -1
+    if (idNums.size >= 1) {
+        wantId = idNums[0]
+        for (lv in levels) {
+            if (lv.id == wantId) {
+                lvFound = Some(lv)
+            }
+        }
+    }
+    match (lvFound) {
+        case None =>
+            println("P4DUMP\t${name}\t{\"error\":\"level ${wantId} not found\"}")
+        case Some(lv) =>
+            var geom = boardGeomFor(lv.cols, lv.rows, 393.0)
+            match (cOpt) {
+                case Some(cv) => geom = BoardGeom(cv, lv.cols, lv.rows)
+                case None => ()
+            }
+            let game = PatrolGame(lv)
+            var t: Int64 = 2
+            while (t < toks.size) {
+                let tk = toks.get(t).getOrThrow()
+                if (tk.size == 1 && tk[0] == 117u8) {
+                    game.undo()
+                } else {
+                    let ns = lineInts(tk, 0, tk.size)
+                    if (ns.size >= 2) {
+                        game.tryStep(Cell(ns[0], ns[1])) /* 被拒:留在 lastReject,不算错 */
+                    }
+                }
+                t = t + 1
+            }
+            dumpOne(name, lv, geom, game)
+    }
+}
+
+/* 汇总一关的全部板层为单个 JSON 对象并打印 P4DUMP 行。 */
+func dumpOne(name: String, lv: LevelDef, geom: BoardGeom, game: PatrolGame) {
+    let sb = StringBuilder()
+    sb.append("{\"name\":${dumpJsonStr(name)},\"level\":${lv.id},\"cols\":${geom.cols},\"rows\":${geom.rows}")
+    sb.append(",\"c\":${geom.c},\"gap\":${geom.gap},\"pad\":${geom.pad},\"ox\":${geom.cellX(0)},\"oy\":${geom.cellY(0)},\"pitch\":${geom.pitch()},\"f\":3.0")
+    sb.append(",\"laden\":${dumpBool(game.laden)},\"lastReject\":${game.lastReject},\"flash\":${dumpBool(rejectShouldFlash(game))},\"toast\":${dumpJsonStr(mechToastText(game))}")
+    sb.append(",\"cells\":")
+    dumpRects(sb, buildBoardCells(game, geom))
+    sb.append(",\"grid\":")
+    dumpSegs(sb, buildBoardGrid(geom))
+    sb.append(",\"walls\":")
+    dumpSegs(sb, buildBoardWalls(game, geom))
+    sb.append(",\"mechWalls\":")
+    dumpSegs(sb, buildBoardMechWalls(game, geom))
+    sb.append(",\"under\":")
+    dumpPaths(sb, buildBoardMechUnder(game, geom, 3.0))
+    sb.append(",\"mech\":")
+    dumpPaths(sb, buildBoardMechPaths(game, geom, 3.0))
+    sb.append(",\"digits\":")
+    dumpPaths(sb, buildBoardDigits(game, geom, 3.0))
+    sb.append(",\"route\":")
+    dumpSegs(sb, buildBoardRoute(game, geom))
+    sb.append(",\"head\":")
+    dumpDots(sb, buildBoardHeadDot(game, geom))
+    sb.append(",\"stations\":")
+    dumpDots(sb, buildBoardStationCircles(game, geom))
+    sb.append(",\"dots\":")
+    dumpDots(sb, buildBoardMechDots(game, geom))
+    sb.append(",\"gates\":")
+    dumpImgs(sb, buildBoardGates(game, geom))
+    sb.append(",\"labels\":")
+    dumpLabels(sb, buildBoardMechLabels(game, geom))
+    sb.append("}")
+    println("P4DUMP\t${name}\t${sb.toString()}")
+}
+
+/* args[2] 是否以 "dump=" 起头(逐字节,避免 String.startsWith 依赖)。 */
+func dumpIsDumpArg(s: String): Bool {
+    let want = [100u8, 117u8, 109u8, 112u8, 61u8]
+    if (s.size < 5) {
+        return false
+    }
+    var i: Int64 = 0
+    while (i < 5) {
+        match (s.get(i)) {
+            case Some(b) => if (b != want[i]) {
+                return false
+            }
+            case None => return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+/* 取 "dump=" 之后的路径子串。 */
+func dumpArgPath(s: String): String {
+    let n = s.size - 5
+    let arr = Array<UInt8>(n, repeat: 0u8)
+    var i: Int64 = 0
+    while (i < n) {
+        match (s.get(i + 5)) {
+            case Some(b) => arr[i] = b
+            case None => ()
+        }
+        i = i + 1
+    }
+    return unsafe { String.fromUtf8Unchecked(arr) }
+}
+
+/* args 是否 "c=<number>" 起头(逐字节,'c'=99、'='=61)。 */
+func dumpIsCArg(s: String): Bool {
+    if (s.size < 3) {
+        return false
+    }
+    match (s.get(0)) {
+        case Some(b) => if (b != 99u8) {
+            return false
+        }
+        case None => return false
+    }
+    match (s.get(1)) {
+        case Some(b) => if (b != 61u8) {
+            return false
+        }
+        case None => return false
+    }
+    return true
+}
+
+/* 手写解析 "c=" 之后的十进制 Float64(整数+小数部分,无指数);无数字返回 -1。 */
+func dumpParseC(s: String): Float64 {
+    var v = 0.0
+    var frac = 0.0
+    var scale = 0.1
+    var seenDot = false
+    var seenDig = false
+    var i: Int64 = 2
+    while (i < s.size) {
+        match (s.get(i)) {
+            case Some(b) =>
+                if (b >= 48u8 && b <= 57u8) {
+                    seenDig = true
+                    if (seenDot) {
+                        frac = frac + Float64(Int64(b) - 48) * scale
+                        scale = scale * 0.1
+                    } else {
+                        v = v * 10.0 + Float64(Int64(b) - 48)
+                    }
+                } else if (b == 46u8 && !seenDot) {
+                    seenDot = true
+                }
+            case None => ()
+        }
+        i = i + 1
+    }
+    if (!seenDig) {
+        return -1.0
+    }
+    return v + frac
+}
+
+/* dump 模式入口:逐行跑场景,每行一条 P4DUMP,恒返回 0;cOpt 覆盖格宽。 */
+func dumpRun(levelsPath: String, scenPath: String, cOpt: Option<Float64>): Int64 {
+    let lvText = unsafe { String.fromUtf8Unchecked(File.readFrom(levelsPath)) }
+    let loaded = levelsFromJson(lvText)
+    if (loaded.error != "") {
+        println("P4DUMP error levels-parse: ${loaded.error}")
+        return 2
+    }
+    let levels = loaded.levels
+    let bytes = File.readFrom(scenPath)
+    var start: Int64 = 0
+    var pos: Int64 = 0
+    while (pos < bytes.size) {
+        if (bytes[pos] == 10u8) {
+            dumpLine(bytes, start, pos, levels, cOpt)
+            start = pos + 1
+        }
+        pos = pos + 1
+    }
+    if (start < bytes.size) {
+        dumpLine(bytes, start, bytes.size, levels, cOpt)
+    }
+    return 0
+}
+
 main(args: Array<String>): Int64 {
+    if (args.size >= 3 && dumpIsDumpArg(args[2])) {
+        /* 可选第 4 参 c=<number>:覆盖格宽(默认 393 宽的 boardGeomFor)。 */
+        var cOpt: Option<Float64> = None
+        if (args.size >= 4 && dumpIsCArg(args[3])) {
+            let cv = dumpParseC(args[3])
+            if (cv > 0.0) {
+                cOpt = Some(cv)
+            }
+        }
+        return dumpRun(args[0], dumpArgPath(args[2]), cOpt)
+    }
     if (args.size < 2) {
         println("usage: main <levels.json> <inputs.txt>")
         return 2
