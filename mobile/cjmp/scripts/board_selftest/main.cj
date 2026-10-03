@@ -2,6 +2,7 @@ package ohos_app_cangjie_entry
 
 import std.fs.*
 import std.collection.ArrayList
+import std.convert.*
 import std.math.*
 import ohos_app_cangjie_entry.engine.*
 import ohos_app_cangjie_entry.game.*
@@ -909,7 +910,8 @@ func j14SlideGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     ctx.ck(found, "J14 no slide level in catalog")
 }
 
-/* J20:粮袋路径包围盒(袋口梯形 + 袋身椭圆 ±rx/±ry + 系口线)。 */
+/* J20:粮袋含描边外框(袋口梯形 + 袋身椭圆 ±rx/±ry + 系口线 中心线几何的
+   bbox,四周各扩 h=0.7k —— 描边在内,极值=颈顶/椭圆端,系口线在内)。 */
 func j20BagBox(cx: Float64, cy: Float64, k: Float64): (Float64, Float64, Float64, Float64) {
     let nk = bagNeckPts(cx, cy, k)
     let e = bagBodyEllipse(cx, cy, k)
@@ -958,7 +960,35 @@ func j20BagBox(cx: Float64, cy: Float64, k: Float64): (Float64, Float64, Float64
     if (t[3] > mxy) {
         mxy = t[3]
     }
-    return (mnx, mny, mxx, mxy)
+    let h = 0.7 * k
+    return (mnx - h, mny - h, mxx + h, mxy + h)
+}
+
+/* J20:命令串里全部数字(按序 x,y 平铺,已除以 f;字母 M/L/C/Q/Z 丢弃)。 */
+func j20CmdNums(cmds: String, f: Float64): Array<Float64> {
+    let out = ArrayList<Float64>()
+    let n = cmds.size
+    var i: Int64 = 0
+    while (i < n) {
+        let b = cmds.get(i).getOrThrow()
+        if (b == 32u8 || b == 9u8) {
+            i = i + 1
+            continue
+        }
+        let start = i
+        while (i < n) {
+            let cb = cmds.get(i).getOrThrow()
+            if (cb == 32u8 || cb == 9u8) {
+                break
+            }
+            i = i + 1
+        }
+        let tok = cmds[start..i]
+        if (tok != "M" && tok != "L" && tok != "C" && tok != "Q" && tok != "Z") {
+            out.add(Float64.parse(tok) / f)
+        }
+    }
+    return out.toArray()
 }
 
 /* J20:断桩检查(bridgeStumpPolys):28 数、两截各 7 顶点、锯齿侧=下标 1..5、
@@ -1093,8 +1123,70 @@ func j20SkinGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
             "J20 plank vert center mismatch c=${c}")
         i = i + 1
     }
+    /* 板条描边向内:level 95 未塌板条 = 名义盒内缩 0.5(半径 1.5)、描边 1 在内;
+       under 层首个 qing 实心 path 的命令串数字(÷f,x,y 对)极值 +0.5 == bridgePlankRect
+       (贝塞尔控制点在名义盒内,0.05 容差)。 */
+    var lv95: Option<LevelDef> = None
+    li = 0
+    while (li < levels.size) {
+        let lv = levels.get(li).getOrThrow()
+        if (lv.id == 95) {
+            lv95 = Some(lv)
+        }
+        li = li + 1
+    }
+    var gotPlank = false
+    match (lv95) {
+        case Some(lv) =>
+            match (lv.collapse) {
+                case Some(cd) =>
+                    let g41 = BoardGeom(41.0, 7, 7)
+                    let under = buildBoardMechUnder(PatrolGame(lv), g41, 3.0)
+                    var pi: Int64 = 0
+                    while (pi < under.size && !gotPlank) {
+                        let p = under.get(pi).getOrThrow()
+                        if (p.color == Theme.qing && p.fillOp == 1.0) {
+                            gotPlank = true
+                            let nums = j20CmdNums(p.commands, 3.0)
+                            ctx.ck(nums.size % 2 == 0 && nums.size >= 16,
+                                "J20 plank nums=${nums.size} want even >=16 c=41")
+                            var mnx = 1e9
+                            var mny = 1e9
+                            var mxx = -1e9
+                            var mxy = -1e9
+                            var q: Int64 = 0
+                            while (q + 1 < nums.size) {
+                                if (nums[q] < mnx) {
+                                    mnx = nums[q]
+                                }
+                                if (nums[q] > mxx) {
+                                    mxx = nums[q]
+                                }
+                                if (nums[q + 1] < mny) {
+                                    mny = nums[q + 1]
+                                }
+                                if (nums[q + 1] > mxy) {
+                                    mxy = nums[q + 1]
+                                }
+                                q = q + 2
+                            }
+                            let pr = bridgePlankRect(g41, cd.x1, cd.y1, cd.x2, cd.y2)
+                            ctx.ck(absF((mnx - 0.5) - pr[0]) < 0.05 && absF((mny - 0.5) - pr[1]) < 0.05
+                                && absF((mxx + 0.5) - pr[2]) < 0.05 && absF((mxy + 0.5) - pr[3]) < 0.05,
+                                "J20 plank outer=(${mnx - 0.5},${mny - 0.5},${mxx + 0.5},${mxy + 0.5}) want=(${pr[0]},${pr[1]},${pr[2]},${pr[3]}) c=41")
+                        }
+                        pi = pi + 1
+                    }
+                case None => ctx.ck(false, "J20 level 95 collapse missing")
+            }
+        case None => ctx.ck(false, "J20 level 95 missing from catalog")
+    }
+    ctx.ck(gotPlank, "J20 plank qing fill path missing (level 95, c=41)")
     ctx.ck(gMin >= 1.4, "J20 stump narrowest=${gMin} want>=1.4")
-    /* (c) 粮袋:宽 16k、高 19.5k(1e-9);加描边半宽 0.7k 后 17.4k×20.9k(0.01k)。
+    /* (c) 粮袋:外墨框 = 中心线几何(梯形/椭圆/系口线)bbox 四周各扩 h=0.7k
+       (描边在内,极值=颈顶/椭圆端,系口线在内),宽 16k、高 19.5k(1e-6),== bagOuterBox;
+       设计稿 17.4k×20.9k 为设计师笔误,不再检查。梯形中心线在外梯形内
+       (顶边 y=cy-9k、上半宽 5k、y=cy-3k 处半宽 2.5k)。
        bagPaths 3 个,前两个 hollow=false→gold / hollow=true→whitePaper,描边 ink;
        装卸点不落在带数字(waypoint)格,禁区不含装卸点。 */
     let k41 = skinK(41.0)
@@ -1102,15 +1194,39 @@ func j20SkinGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     var bi: Int64 = 0
     while (bi < 3) {
         let bk = bks[bi]
+        let h = 0.7 * bk
         let (mnx, mny, mxx, mxy) = j20BagBox(0.0, 0.0, bk)
-        ctx.ck(absF((mxx - mnx) - 16.0 * bk) < 1e-9, "J20 bag w=${mxx - mnx} want=${16.0 * bk} k=${bk}")
-        ctx.ck(absF((mxy - mny) - 19.5 * bk) < 1e-9, "J20 bag h=${mxy - mny} want=${19.5 * bk} k=${bk}")
-        ctx.ck(absF((mxx - mnx + 1.4 * bk) - 17.4 * bk) < 0.01 * bk,
-            "J20 bag ink w=${mxx - mnx + 1.4 * bk} want=${17.4 * bk} k=${bk}")
-        ctx.ck(absF((mxy - mny + 1.4 * bk) - 20.9 * bk) < 0.01 * bk,
-            "J20 bag ink h=${mxy - mny + 1.4 * bk} want=${20.9 * bk} k=${bk}")
+        ctx.ck(absF((mxx - mnx) - 16.0 * bk) < 1e-6, "J20 bag w=${mxx - mnx} want=${16.0 * bk} k=${bk}")
+        ctx.ck(absF((mxy - mny) - 19.5 * bk) < 1e-6, "J20 bag h=${mxy - mny} want=${19.5 * bk} k=${bk}")
+        let ob = bagOuterBox(0.0, 0.0, bk)
+        ctx.ck(absF(mnx - ob[0]) < 1e-6 && absF(mny - ob[1]) < 1e-6
+            && absF(mxx - ob[2]) < 1e-6 && absF(mxy - ob[3]) < 1e-6,
+            "J20 bag box=(${mnx},${mny},${mxx},${mxy}) want=(${ob[0]},${ob[1]},${ob[2]},${ob[3]}) k=${bk}")
+        let nk = bagNeckPts(0.0, 0.0, bk)
+        var nMinY = nk[1]
+        var inTrap = true
+        var v: Int64 = 0
+        while (v < 4) {
+            let nx = nk[v * 2]
+            let ny = nk[v * 2 + 1]
+            if (ny < nMinY) {
+                nMinY = ny
+            }
+            /* 外梯形半宽:顶 y=-9k 处 5k,线性收到 y=-3k 处 2.5k */
+            let hw = 5.0 * bk - 2.5 * bk * (ny + 9.0 * bk) / (6.0 * bk)
+            if (absF(nx) > hw + 1e-9 || ny < -9.0 * bk - 1e-9 || ny > -3.0 * bk + 1e-9) {
+                inTrap = false
+            }
+            v = v + 1
+        }
+        ctx.ck(absF((nMinY - h) + 9.0 * bk) < 1e-6,
+            "J20 bag neck top=${nMinY - h} want=${-9.0 * bk} k=${bk}")
+        ctx.ck(inTrap, "J20 bag neck centreline out of outer trapezoid k=${bk}")
+        let e = bagBodyEllipse(0.0, 0.0, bk)
+        ctx.ck(absF((e[1] + e[3] + h) - 10.5 * bk) < 1e-6,
+            "J20 bag ellipse bottom=${e[1] + e[3] + h} want=${10.5 * bk} k=${bk}")
         if (bi == 0) {
-            println("J20 bag ink box=${17.4 * bk}x${20.9 * bk} k=${bk}")
+            println("J20 bag outer box=${16.0 * bk}x${19.5 * bk} k=${bk}")
         }
         bi = bi + 1
     }

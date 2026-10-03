@@ -118,7 +118,8 @@ public func buildBoardMechUnder(game: PatrolGame, geom: BoardGeom, pxPerVp: Floa
             list.add(BoardPath(polyPathCmds(notch, f), Theme.inkMuted, 0.0, fillOp: 1.0))
             if (!game.isEdgeCollapsed(cd.x1, cd.y1, cd.x2, cd.y2)) {
                 let pr = bridgePlankRect(geom, cd.x1, cd.y1, cd.x2, cd.y2)
-                list.add(BoardPath(rrectPathCmds(pr[0], pr[1], pr[2], pr[3], 2.0, f),
+                /* 描边向内:路径内缩半线宽 0.5,外角半径 2→内 1.5,外轮廓=名义盒。 */
+                list.add(BoardPath(rrectPathCmds(pr[0] + 0.5, pr[1] + 0.5, pr[2] - 0.5, pr[3] - 0.5, 1.5, f),
                     Theme.qing, 1.0, stroke: Theme.qingDeep, fillOp: 1.0))
                 list.add(BoardPath(segsPathCmds(bridgeSeamSegs(geom, cd.x1, cd.y1, cd.x2, cd.y2), f),
                     Theme.qingDeep, 1.0, fillOp: 0.0))
@@ -741,15 +742,26 @@ public func segsPathCmds(segs: Array<Float64>, f: Float64): String {
 
 /* ---- 粮袋(脚本 sack(cx,cy,k),k 为缩放系数) ---- */
 
-/* 袋口梯形 4 顶点(x,y 平铺):下宽 5k、上宽 10k、高 6k,位于 cy 上方。 */
+/* 袋口梯形中心线 4 顶点(x,y 平铺;描边在内,h=0.7k):外梯形下宽 5k、上宽 10k、
+   高 6k 逐边内缩 h(斜边沿法向偏移后解析求交):上边 y=cy-9k+h、下边 y=cy-3k-h,
+   上半宽 5k-1.5h、下半宽 2.5k-2h/3。含描边外框见 bagOuterBox。 */
 public func bagNeckPts(cx: Float64, cy: Float64, k: Float64): Array<Float64> {
-    return [cx - 2.5 * k, cy - 3.0 * k, cx + 2.5 * k, cy - 3.0 * k,
-        cx + 5.0 * k, cy - 9.0 * k, cx - 5.0 * k, cy - 9.0 * k]
+    let h = 0.7 * k
+    return [cx - 2.5 * k + 2.0 * h / 3.0, cy - 3.0 * k - h,
+        cx + 2.5 * k - 2.0 * h / 3.0, cy - 3.0 * k - h,
+        cx + 5.0 * k - 1.5 * h, cy - 9.0 * k + h, cx - 5.0 * k + 1.5 * h, cy - 9.0 * k + h]
 }
 
-/* 袋身椭圆 [中心x,中心y,rx,ry]:包围盒 [cx-8k,cy-3.5k,cx+8k,cy+10.5k]。 */
+/* 袋身椭圆中心线 [中心x,中心y,rx,ry](描边在内,h=0.7k):中心 (cx,cy+3.5k),
+   rx=8k-h、ry=7k-h,含 1.4k 描边后外包围盒 [cx-8k,cy-3.5k,cx+8k,cy+10.5k]。 */
 public func bagBodyEllipse(cx: Float64, cy: Float64, k: Float64): Array<Float64> {
-    return [cx, cy + 3.5 * k, 8.0 * k, 7.0 * k]
+    let h = 0.7 * k
+    return [cx, cy + 3.5 * k, 8.0 * k - h, 7.0 * k - h]
+}
+
+/* 粮袋含描边的外框 [x0,y0,x1,y1]:16k 宽 × 19.5k 高,供测试断言。 */
+public func bagOuterBox(cx: Float64, cy: Float64, k: Float64): Array<Float64> {
+    return [cx - 8.0 * k, cy - 9.0 * k, cx + 8.0 * k, cy + 10.5 * k]
 }
 
 /* 系口线两端点(x0,y0,x1,y1)。 */
@@ -758,7 +770,8 @@ public func bagTiePts(cx: Float64, cy: Float64, k: Float64): Array<Float64> {
 }
 
 /* 粮袋 3 个 BoardPath(梯形、椭圆、系口线);前两个填 hollow?whitePaper:gold、
-   ink 描边 1.4k,第三个只描边同宽。墨迹外框 (16k+1.4k)×(19.5k+1.4k)。 */
+   ink 描边 1.4k(向内画,路径为中心线几何),第三个只描边同宽居中。
+   含描边外框 16k×19.5k,描边在内(见 bagOuterBox)。 */
 public func bagPaths(cx: Float64, cy: Float64, k: Float64, hollow: Bool, f: Float64): Array<BoardPath> {
     let fill = if (hollow) { Theme.whitePaper } else { Theme.gold }
     let sw = 1.4 * k
