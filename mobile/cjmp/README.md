@@ -70,11 +70,12 @@ SVG 图标（`icon-undo`、`icon-reset`）与字体的同步行为不变。
 
 ## 进度存档
 
-- **当前状态**：纯逻辑已完成 —— `lib/progress.cj`（编解码、校验、`ProgressStore`、`ProgressBackend` 接口），`index.cj` 接线（启动时 `aboutToAppear` 读取、通关时写），selftest J23 覆盖。平台后端 `lib/progress_io.cj` 的 `makeProgressBackend()` 目前返回 `NullProgressBackend`（即暂不落盘），后续替换为 std.fs 文件实现：iOS 用 `std.env.getHomeDirectory()`，Android 目录由宿主补丁经环境变量 `YILU_FILES_DIR` 传入，读不到就用 Null 后端。（Mac 只读探测已确认 PersistentStorage 在 0.2.2 的 Android/iOS 库里不存在，故不用。）
-- **存档格式**：`{"v":1,"cleared":N}`；`cleared` = 已通关数（0..总关数，总关数取 `levels.size`，当前 100）；`v` 不为 1、JSON 损坏、负数、非整数、超长数字一律按 0；超过总关数则截断到总关数；写失败只打一行 `[progress] save failed: ...` 并降级为内存。
-- **已知问题**：后端未接通前重启会丢进度；Android 返回键补丁用 moveTaskToBack，进程存活，不能当「杀进程」；iOS HOME=数据容器、Android 目录来源待真机核实。
-- **清除办法**：Android `adb shell pm clear com.yilu.xundian`；iOS 模拟器 `xcrun simctl uninstall booted com.yilu.xundian`。不提供 App 内清除入口（PM 已定）。
-- **Mac 验证要点**：Android：安装→通几关→`adb shell am force-stop com.yilu.xundian`→重新启动→首页「已通 N」保持→`pm clear`→重启回到只开第一关；`adb logcat | grep '\[progress\]'`。iOS：`xcrun simctl terminate booted com.yilu.xundian`→`simctl launch`→同上；清除用 `simctl uninstall`。杀进程必须用 am force-stop / simctl terminate，不能用返回键。
+- **当前状态**：已实现落盘。纯逻辑 `lib/progress.cj`（编解码、校验、`ProgressStore`、`ProgressBackend` 接口），后端 `lib/progress_io.cj`（std.fs 文件后端 `FileProgressBackend` + 纯函数 `progressPickDir` + 工厂 `makeProgressBackend`），`index.cj` 接线（启动 `aboutToAppear` 读取、通关时写）。selftest J23（纯逻辑）与 J24（真实 std.fs 文件，写 /tmp）覆盖。Android 宿主补丁 `scripts/patch_android_filesdir.py`（带 `selftest` 子命令）已接入 `build_from_repo.sh` 的 STEP C3。真机/模拟器上的实际落盘尚未验证（见已知问题）。
+- **存档格式**：`{"v":1,"cleared":N}`；`cleared` = 已通关数（0..总关数，总关数取 `levels.size`，当前 100）；`v` 不为 1、JSON 损坏、负数、非整数、超长数字一律按 0；超过总关数则截断到总关数；写失败只打一行 `[progress] save failed` 并降级为内存。
+- **存档位置与目录选择规则**：文件名 `progress.json`（写入 `progress.json.tmp` 再 rename 覆盖，成功后不残留 tmp）。目录：先取环境变量 `YILU_FILES_DIR`（Android 宿主补丁在 Activity.onCreate 里 `android.system.Os.setenv` 设为 `getFilesDir()`，即 `/data/data/com.yilu.xundian/files`），其次 `HOME` 非空且不是 `/` 时用 `$HOME/Documents`（iOS，HOME 即 app 数据容器），都没有则用 Null 后端（不落盘）。不调用 `std.env.getHomeDirectory()`（pw_dir 为 NULL 时可能崩）。目录不存在会自动创建。
+- **已知问题**：**Android 补丁锚点（Keels `keels create` 0.2.2 生成物里的 `setInstanceName(...)` 行）和 iOS 的 HOME 目录需在真机/模拟器上确认**；锚点变化时 build_from_repo.sh 会明确报错退出；Android 返回键补丁用 moveTaskToBack，进程存活，不能当「杀进程」；iOS 的 Documents 在备份/文件共享范围内属实现细节，未评估。
+- **清除办法**：Android `adb shell pm clear com.yilu.xundian`（或 `adb shell run-as com.yilu.xundian rm files/progress.json`）；iOS 模拟器 `xcrun simctl uninstall booted com.yilu.xundian`（卸载会删除数据容器）。不提供 App 内清除入口（PM 已定）。
+- **验证要点**：杀进程必须用 `adb shell am force-stop com.yilu.xundian` / `xcrun simctl terminate booted com.yilu.xundian`，不能用返回键。检查落盘：Android `adb shell run-as com.yilu.xundian cat files/progress.json`（debug 包）；iOS `xcrun simctl get_app_container booted com.yilu.xundian data` 下的 `Documents/progress.json`。步骤：通第 1 关 → 文件应为 `{"v":1,"cleared":1}` → 杀进程 → 重启 → 首页「已通 1」→ 点「开始」应进入第 2 关 → 清除 → 重启回到只开第一关。
 
 ## 已知问题与变通方案 (Workarounds)
 
