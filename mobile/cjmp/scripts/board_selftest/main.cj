@@ -835,6 +835,152 @@ func j14SlideGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     ctx.ck(found, "J14 no slide level in catalog")
 }
 
+/* ===== K2 定向检查：caption 3 行规则（design §3, caption.cj） ===== */
+
+/* 按 '\n' 切成行（captionWrap 的输出约定）。 */
+func capSplitLines(s: String): ArrayList<String> {
+    let out = ArrayList<String>()
+    let cur = ArrayList<Rune>()
+    for (r in s.toRuneArray()) {
+        if (r == r'\n') {
+            out.add(String(cur.toArray()))
+            cur.clear()
+        } else {
+            cur.add(r)
+        }
+    }
+    out.add(String(cur.toArray()))
+    return out
+}
+
+/* 是否含省略号 '…'（U+2026）。 */
+func capHasEllipsis(s: String): Bool {
+    for (r in s.toRuneArray()) {
+        if (r == r'…') {
+            return true
+        }
+    }
+    return false
+}
+
+/* 把各行用 " · " 重新连起来。 */
+func capJoinSegs(parts: ArrayList<String>): String {
+    let sb = StringBuilder()
+    var i: Int64 = 0
+    while (i < parts.size) {
+        if (i > 0) {
+            sb.append(" · ")
+        }
+        sb.append(parts[i])
+        i += 1
+    }
+    return sb.toString()
+}
+
+/* 按 " · "（空格+间隔号+空格）切段，同 caption.cj/splitSegments 的切法。 */
+func capSplitSegs(s: String): ArrayList<String> {
+    let out = ArrayList<String>()
+    let runes = s.toRuneArray()
+    let cur = ArrayList<Rune>()
+    var i: Int64 = 0
+    while (i < runes.size) {
+        if (i + 2 < runes.size && runes[i] == r' ' && runes[i + 1] == r'·' && runes[i + 2] == r' ') {
+            out.add(String(cur.toArray()))
+            cur.clear()
+            i += 3
+        } else {
+            cur.add(runes[i])
+            i += 1
+        }
+    }
+    out.add(String(cur.toArray()))
+    return out
+}
+
+func captionTests(ctx: Ctx): Unit {
+    let chapters = ChapterCatalog.all()
+    let ws = [393.0, 411.0, 411.4, 360.0, 320.0]
+    /* 期望行数表：章序 0..9 × W=393/411/411.4/360/320。 */
+    let wantLines: Array<Array<Int64>> = [
+        [1, 1, 1, 1, 1], /* 涿郡 */
+        [1, 1, 1, 1, 1], /* 平原 */
+        [1, 1, 1, 1, 1], /* 徐州 */
+        [1, 1, 1, 1, 1], /* 吕布 */
+        [2, 2, 2, 3, 3], /* 投袁 */
+        [1, 1, 1, 1, 2], /* 荆州 */
+        [1, 1, 1, 1, 2], /* 赤壁 */
+        [2, 2, 2, 3, 3], /* 入蜀 */
+        [1, 1, 1, 2, 2], /* 汉中南中 */
+        [1, 1, 1, 1, 2] /* 北伐 */
+    ]
+    var ci: Int64 = 0
+    while (ci < chapters.size) {
+        let ch = chapters[ci]
+        let line = ch.chromeLine()
+        var wi: Int64 = 0
+        while (wi < 5) {
+            let w = ws[wi]
+            let availW = w - 32.0
+            let tag = "${ch.name} W=${w}"
+            let lines = capSplitLines(captionWrap(line, availW))
+            /* a) 行数 */
+            ctx.ck(lines.size == wantLines[ci][wi],
+                "caption lines ${tag} got=${lines.size} want=${wantLines[ci][wi]}")
+            /* b) 每行宽 ≤ availW（左右边距 (W-宽)/2 ≥ 16）且不含省略号 */
+            var li: Int64 = 0
+            while (li < lines.size) {
+                ctx.ck(captionTextWidth(lines[li]) <= availW + 1e-9,
+                    "caption width ${tag} line${li} w=${captionTextWidth(lines[li])} avail=${availW}")
+                ctx.ck(!capHasEllipsis(lines[li]),
+                    "caption ellipsis ${tag} line${li} must not contain …")
+                li += 1
+            }
+            /* c) 文本不变：1 行等于原文；2/3 行用 " · " 重连等于原文 */
+            if (lines.size == 1) {
+                ctx.ck(lines[0] == line, "caption text ${tag} single line changed")
+            } else {
+                ctx.ck(capJoinSegs(lines) == line, "caption text ${tag} rejoined != chromeLine")
+            }
+            /* d) 3 行时：单独的 3-line seg width 断言 + 3 段恰为按 " · " 切出的 3 段 */
+            if (lines.size == 3) {
+                var k: Int64 = 0
+                while (k < 3) {
+                    ctx.ck(captionTextWidth(lines[k]) <= w - 32.0 + 1e-9,
+                        "3-line seg width ${tag} seg${k} w=${captionTextWidth(lines[k])} avail=${w - 32.0}")
+                    k += 1
+                }
+                let segs = capSplitSegs(line)
+                ctx.ck(segs.size == 3, "caption 3segs ${tag} n=${segs.size}")
+                if (segs.size == 3) {
+                    ctx.ck(lines[0] == segs[0] && lines[1] == segs[1] && lines[2] == segs[2],
+                        "caption 3seg text ${tag} segments mismatch")
+                }
+            }
+            wi += 1
+        }
+        ci += 1
+    }
+    /* e) 合成断言：省略号只出现在单段本身超宽时（A 为 40 字长段 > 任何 availW=288） */
+    let lsb = StringBuilder()
+    var n: Int64 = 0
+    while (n < 40) {
+        lsb.append("长")
+        n += 1
+    }
+    let synth = lsb.toString() + " · 短乙 · 短丙"
+    let slines = capSplitLines(captionWrap(synth, 288.0))
+    ctx.ck(slines.size >= 2 && slines.size <= 3,
+        "caption synth lines=${slines.size} want 2..3")
+    ctx.ck(slines.size >= 1 && capHasEllipsis(slines[0]),
+        "caption synth line1 must contain … (long first segment)")
+    var q: Int64 = 1
+    while (q < slines.size) {
+        ctx.ck(!capHasEllipsis(slines[q]),
+            "caption synth line${q} must not contain …")
+        q += 1
+    }
+}
+
 main(args: Array<String>): Int64 {
     if (args.size < 2) {
         println("usage: main <levels.json> <inputs.txt>")
@@ -879,6 +1025,8 @@ main(args: Array<String>): Int64 {
     j13RejectGateTests(levels, ctx)
     /* J14 定向几何/滑行检查。 */
     j14SlideGeomTests(levels, ctx)
+    /* K2 定向 caption 3 行规则检查。 */
+    captionTests(ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("SELFTEST levels=${ctx.levels} steps=${ctx.steps} checks=${ctx.checks} rejects=[${sb.toString()}] failures=${ctx.failures.size}")
     println("DIRECTED flash=${dStat.flash} noflash=${dStat.noflash} failures=${dStat.fails}")

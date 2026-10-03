@@ -3,7 +3,7 @@ package ohos_app_cangjie_entry
 import std.collection.ArrayList
 
 /*
- * Caption text width estimation and two-line wrapping for board chromeLine.
+ * Caption text width estimation and up-to-three-line wrapping for board chromeLine.
  *
  * Rationale:
  * There is no text-measure API in CJMP / Keels 0.2.2, so text width is estimated
@@ -35,6 +35,14 @@ import std.collection.ArrayList
  *   kept character is any of: ' ', '·', '：' (U+FF1A), '；' (U+FF1B), '，' (U+FF0C),
  *   '、' (U+3001), ':', ';', ',', or an unmatched opening bracket '（', '('.
  *   Repeat until the last kept char is none of those (or prefix is empty), then append "…".
+ *
+ * Wrap ruling (design §3.2, CAPTION_AND_SLIDE_RULINGS_20261003):
+ * - Whole caption fits availW -> single line.
+ * - Otherwise split at the first " · " into two lines; if line 2 still exceeds
+ *   availW (would need a third line), split the whole caption into " · "-separated
+ *   segments: line 1 = segment 1, line 2 = segment 2, line 3 = all remaining
+ *   segments re-joined with " · " (max 3 lines, each truncated on its own).
+ *   With only 2 segments, stay at 2 lines (each truncated, as before).
  */
 
 func runeAdvance(r: Rune): Float64 {
@@ -164,6 +172,25 @@ public func captionTextWidth(s: String): Float64 {
     return total
 }
 
+// Split runes into segments separated by " · " (space, middle dot U+00B7, space).
+// The separator itself is not part of any segment; empty segments are kept.
+func splitSegments(runes: Array<Rune>): ArrayList<Array<Rune>> {
+    let segments = ArrayList<Array<Rune>>()
+    var start: Int64 = 0
+    var i: Int64 = 0
+    while (i + 2 < runes.size) {
+        if (runes[i] == r' ' && runes[i + 1] == r'·' && runes[i + 2] == r' ') {
+            segments.add(subRunes(runes, start, i))
+            start = i + 3
+            i = start
+        } else {
+            i += 1
+        }
+    }
+    segments.add(subRunes(runes, start, runes.size))
+    return segments
+}
+
 public func captionWrap(line: String, availW: Float64): String {
     let runes = line.toRuneArray()
     if (runesWidth(runes) <= availW) {
@@ -188,6 +215,33 @@ public func captionWrap(line: String, availW: Float64): String {
 
     let line1Runes = subRunes(runes, 0, splitIdx)
     let line2Runes = subRunes(runes, splitIdx + 3, runes.size)
+
+    if (runesWidth(line2Runes) > availW) {
+        // Three-line ruling (design §3.2): line 2 would overflow, so re-wrap
+        // the whole caption by " · " segments: 1st segment, 2nd segment, then
+        // all remaining segments re-joined with " · " on the third line.
+        let segments = splitSegments(runes)
+        if (segments.size >= 3) {
+            let line3Runes = ArrayList<Rune>()
+            var s: Int64 = 2
+            while (s < segments.size) {
+                if (s > 2) {
+                    line3Runes.add(r' ')
+                    line3Runes.add(r'·')
+                    line3Runes.add(r' ')
+                }
+                for (r in segments[s]) {
+                    line3Runes.add(r)
+                }
+                s += 1
+            }
+            let l1 = String(truncateRunes(segments[0], availW))
+            let l2 = String(truncateRunes(segments[1], availW))
+            let l3 = String(truncateRunes(line3Runes.toArray(), availW))
+            return l1 + "\n" + l2 + "\n" + l3
+        }
+        // Only 2 segments: fall through to the two-line path below.
+    }
 
     let line1Final = truncateRunes(line1Runes, availW)
     let line2Final = truncateRunes(line2Runes, availW)
