@@ -24,6 +24,10 @@ import std.collection.ArrayList
  *      same horizontal search (|dx| <= 96); take the SMALLEST lift that has a fit.
  *  (c) If (b) has none: BELOW, y = midY + 8 (top = midY + 8), same horizontal search, |dx| <= 96.
  *  (d) If nothing fits: do NOT place toast; return shown = false, step = 0, x = midX - tw/2, y = midY - 36, lift = 0.
+ *      (作废,由 (e) 取代)
+ *  (e) FALLBACK: If (a)(b)(c) have no fit (including after pass 2 removing soft boxes):
+ *      place toast outside tray, horizontally centred on tray: x = (trayW - tw) / 2.0,
+ *      bottom edge 6u above tray top (y = -34.0), shown = true, step = 4, lift = 0.0, relaxed = false.
  *
  * Two-pass placement (soft / relaxed):
  *   Pass 1 runs placeOnce with ALL obstacle boxes. If it finds a valid placement
@@ -33,8 +37,7 @@ import std.collection.ArrayList
  *   hard). It runs placeOnce with the filtered hard-only boxes and the candidate
  *   x set generated from those filtered boxes. If pass 2 finds a valid
  *   placement, return it with relaxed = true. Clearances are unchanged.
- *   If pass 2 also fails, return the pass-1 shown = false result unchanged
- *   (rule (d) kept).
+ *   If pass 2 also fails, fallback (e) takes effect.
  */
 
 public struct ToastBox {
@@ -98,6 +101,10 @@ public struct ToastPlacement {
         this.lift = lift
         this.relaxed = relaxed
     }
+}
+
+public func toastIsOutsideTray(p: ToastPlacement): Bool {
+    return p.step == 4
 }
 
 public func isBlocking(box: ToastBox, x: Float64, tw: Float64, top: Float64, bottom: Float64): Bool {
@@ -222,7 +229,7 @@ public func toastPlace(trayW: Float64, trayH: Float64, midX: Float64, midY: Floa
     return toastPlaceW(trayW, trayH, midX, midY, boxes, 86.0)
 }
 
-public func toastPlaceW(trayW: Float64, trayH: Float64, midX: Float64, midY: Float64, boxes: Array<ToastBox>, tw: Float64): ToastPlacement {
+public func toastPlaceNoFallback(trayW: Float64, trayH: Float64, midX: Float64, midY: Float64, boxes: Array<ToastBox>, tw: Float64): ToastPlacement {
     // Pass 1: all boxes
     let r1 = placeOnce(trayW, trayH, midX, midY, boxes, tw)
     if (r1.shown) {
@@ -243,4 +250,12 @@ public func toastPlaceW(trayW: Float64, trayH: Float64, midX: Float64, midY: Flo
 
     // Both passes failed; return pass-1 result (shown=false)
     return r1
+}
+
+public func toastPlaceW(trayW: Float64, trayH: Float64, midX: Float64, midY: Float64, boxes: Array<ToastBox>, tw: Float64): ToastPlacement {
+    let r = toastPlaceNoFallback(trayW, trayH, midX, midY, boxes, tw)
+    if (r.shown) {
+        return r
+    }
+    return ToastPlacement((trayW - tw) / 2.0, -34.0, true, 4, 0.0)
 }

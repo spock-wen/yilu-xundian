@@ -23,6 +23,13 @@ class Ctx {
     public var toastRelaxed: Int64 = 0
     public var toastNot: Int64 = 0
     public var toastHit: Int64 = 0
+    public var toastFallback: Int64 = 0
+    public var sweep320Count: Int64 = 0
+    public var sweep320NotShown: Int64 = 0
+    public let sweep320FallbackIds = ArrayList<Int64>()
+    public let sweep320FallbackTags = ArrayList<String>()
+    public let sweep360FallbackTags = ArrayList<String>()
+    public let sweep411FallbackTags = ArrayList<String>()
 
     public init() {}
 
@@ -373,8 +380,43 @@ func fuzz(game: PatrolGame, id: Int64, step: Int64, ctx: Ctx) {
             }
             /* J21 toast placement sweep for every flashing reject */
             if (rejectShouldFlash(game)) {
-                j21Check(game, 411.0, tag, ctx)
-                j21Check(game, 360.0, tag, ctx)
+                let p411 = j21Check(game, 411.0, tag, ctx)
+                match (p411) {
+                    case Some(p) =>
+                        if (p.step == 4) {
+                            ctx.sweep411FallbackTags.add(tag)
+                        }
+                    case None => ()
+                }
+                let p360 = j21Check(game, 360.0, tag, ctx)
+                match (p360) {
+                    case Some(p) =>
+                        if (p.step == 4) {
+                            ctx.sweep360FallbackTags.add(tag)
+                        }
+                    case None => ()
+                }
+                let p320 = j21Check(game, 320.0, tag, ctx)
+                match (p320) {
+                    case Some(p) =>
+                        ctx.sweep320Count = ctx.sweep320Count + 1
+                        if (!p.shown) {
+                            ctx.sweep320NotShown = ctx.sweep320NotShown + 1
+                        }
+                        if (p.step == 4) {
+                            var exists = false
+                            for (existingId in ctx.sweep320FallbackIds) {
+                                if (existingId == id) {
+                                    exists = true
+                                }
+                            }
+                            if (!exists) {
+                                ctx.sweep320FallbackIds.add(id)
+                            }
+                            ctx.sweep320FallbackTags.add(tag)
+                        }
+                    case None => ()
+                }
             }
         }
         k = k + 1
@@ -482,6 +524,7 @@ func dirExpect(fails: ArrayList<String>, g: PatrolGame, name: String, cell: Cell
     if (fl) {
         j21Check(g, 411.0, "directed ${name} w=411", j21Dir)
         j21Check(g, 360.0, "directed ${name} w=360", j21Dir)
+        j21Check(g, 320.0, "directed ${name} w=320", j21Dir)
     }
     dStat.checks = dStat.checks + 1
     if (fl != wantFlash) {
@@ -1646,37 +1689,58 @@ func j21Check(game: PatrolGame, w: Float64, tag: String, ctx: Ctx): Option<Toast
     }
     let obs = j21Obstacles(game, geom, fx, fy, tx, ty)
     let (mx, my) = geom.seamMid(fx, fy, tx, ty)
-    let p = toastPlaceW(geom.trayW(), geom.trayH(), mx, my, obs, tw)
+    let trayW = geom.trayW()
+    let trayH = geom.trayH()
+    let p = toastPlaceW(trayW, trayH, mx, my, obs, tw)
+    let q = toastPlaceNoFallback(trayW, trayH, mx, my, obs, tw)
+    if (q.shown) {
+        ctx.ck(p.shown == q.shown, "${tag} fallback invariant shown p=${p.shown} q=${q.shown}")
+        ctx.ck(p.step == q.step, "${tag} fallback invariant step p=${p.step} q=${q.step}")
+        ctx.ck(absF(p.x - q.x) < 1e-9, "${tag} fallback invariant x p=${p.x} q=${q.x}")
+        ctx.ck(absF(p.y - q.y) < 1e-9, "${tag} fallback invariant y p=${p.y} q=${q.y}")
+        ctx.ck(absF(p.lift - q.lift) < 1e-9, "${tag} fallback invariant lift p=${p.lift} q=${q.lift}")
+        ctx.ck(p.relaxed == q.relaxed, "${tag} fallback invariant relaxed p=${p.relaxed} q=${q.relaxed}")
+    } else {
+        ctx.ck(p.step == 4, "${tag} fallback invariant unshown must be step 4, got ${p.step}")
+    }
     ctx.toastN = ctx.toastN + 1
     if (p.shown) {
         ctx.toastShown = ctx.toastShown + 1
-        if (p.relaxed) {
-            ctx.toastRelaxed = ctx.toastRelaxed + 1
-        }
-        let trayW = geom.trayW()
-        let trayH = geom.trayH()
-        ctx.ck(p.x >= 16.0 - 1e-6, "${tag} toast x=${p.x} < 16")
-        ctx.ck(p.x + tw <= trayW - 16.0 + 1e-6, "${tag} toast x+tw=${p.x + tw} > trayW-16=${trayW - 16.0}")
-        ctx.ck(p.y >= 8.0 - 1e-6, "${tag} toast y=${p.y} < 8")
-        ctx.ck(p.y + 28.0 <= trayH - 8.0 + 1e-6, "${tag} toast y+28=${p.y + 28.0} > trayH-8=${trayH - 8.0}")
-        /* overlap test with every obstacle box */
-        var bi: Int64 = 0
-        while (bi < obs.size) {
-            let b = obs[bi]
-            let ox = p.x + 1e-6 < b.x1 && p.x + tw - 1e-6 > b.x0
-            let oy = p.y + 1e-6 < b.y1 && p.y + 28.0 - 1e-6 > b.y0
-            if (ox && oy) {
-                if (!(b.soft && p.relaxed)) {
-                    ctx.toastHit = ctx.toastHit + 1
-                    ctx.ck(false, "${tag} J21 toast overlap box[${bi}]=(${b.x0},${b.y0},${b.x1},${b.y1}) soft=${b.soft} relaxed=${p.relaxed}")
-                }
+        if (p.step == 4) {
+            ctx.toastFallback = ctx.toastFallback + 1
+            ctx.ck(absF(p.x - (trayW - tw) / 2.0) < 1e-6, "${tag} fallback x=${p.x} want=${(trayW - tw) / 2.0}")
+            ctx.ck(absF(p.y - (-34.0)) < 1e-6, "${tag} fallback y=${p.y} want=-34.0")
+            ctx.ck(p.x >= 0.0 - 1e-6, "${tag} fallback x=${p.x} < 0")
+            ctx.ck(p.x + tw <= trayW + 1e-6, "${tag} fallback x+tw=${p.x + tw} > trayW=${trayW}")
+            ctx.ck(!p.relaxed, "${tag} fallback relaxed=true want=false")
+        } else {
+            if (p.relaxed) {
+                ctx.toastRelaxed = ctx.toastRelaxed + 1
             }
-            bi = bi + 1
+            ctx.ck(p.x >= 16.0 - 1e-6, "${tag} toast x=${p.x} < 16")
+            ctx.ck(p.x + tw <= trayW - 16.0 + 1e-6, "${tag} toast x+tw=${p.x + tw} > trayW-16=${trayW - 16.0}")
+            ctx.ck(p.y >= 8.0 - 1e-6, "${tag} toast y=${p.y} < 8")
+            ctx.ck(p.y + 28.0 <= trayH - 8.0 + 1e-6, "${tag} toast y+28=${p.y + 28.0} > trayH-8=${trayH - 8.0}")
+            /* overlap test with every obstacle box */
+            var bi: Int64 = 0
+            while (bi < obs.size) {
+                let b = obs[bi]
+                let ox = p.x + 1e-6 < b.x1 && p.x + tw - 1e-6 > b.x0
+                let oy = p.y + 1e-6 < b.y1 && p.y + 28.0 - 1e-6 > b.y0
+                if (ox && oy) {
+                    if (!(b.soft && p.relaxed)) {
+                        ctx.toastHit = ctx.toastHit + 1
+                        ctx.ck(false, "${tag} J21 toast overlap box[${bi}]=(${b.x0},${b.y0},${b.x1},${b.y1}) soft=${b.soft} relaxed=${p.relaxed}")
+                    }
+                }
+                bi = bi + 1
+            }
+            ctx.ck(true, "${tag} J21 overlap pass")
         }
-        ctx.ck(true, "${tag} J21 overlap pass")
     } else {
         ctx.toastNot = ctx.toastNot + 1
     }
+    println("J21G ${tag} w=${w} shown=${p.shown} step=${p.step} relaxed=${p.relaxed} x=${p.x} y=${p.y} lift=${p.lift}")
     return Some(p)
 }
 
@@ -1694,7 +1758,7 @@ func j21ToastTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
         ("v2_L95_collapse_reject", 95,
          [(6,2),(5,2),(5,1),(4,1),(3,1),(3,0),(2,0),(1,0),(0,0),(0,1),(1,1),(2,1)], 5)
     ]
-    let ws = [411.0, 360.0]
+    let ws = [411.0, 360.0, 320.0]
     for (sc in scenarios) {
         let name = sc[0]
         let wantId = sc[1]
@@ -1848,6 +1912,134 @@ func j21ToastTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
                 }
         }
     }
+}
+
+func j27ReplayScenario(levels: ArrayList<LevelDef>, id: Int64, cells: Array<(Int64, Int64)>, ctx: Ctx): Option<PatrolGame> {
+    var lvFound: Option<LevelDef> = None
+    for (lv in levels) {
+        if (lv.id == id) {
+            lvFound = Some(lv)
+        }
+    }
+    match (lvFound) {
+        case None =>
+            ctx.ck(false, "J27 level ${id} not found")
+            return None
+        case Some(lv) =>
+            let game = PatrolGame(lv)
+            var ok = true
+            var si: Int64 = 0
+            while (si < cells.size - 1 && ok) {
+                if (!game.tryStep(Cell(cells[si][0], cells[si][1]))) {
+                    ctx.ck(false, "J27 level ${id} setup step ${si} rejected")
+                    ok = false
+                }
+                si = si + 1
+            }
+            if (!ok) {
+                return None
+            }
+            let lastC = cells[cells.size - 1]
+            let accepted = game.tryStep(Cell(lastC[0], lastC[1]))
+            ctx.ck(!accepted, "J27 level ${id} last step accepted unexpectedly")
+            return Some(game)
+    }
+}
+
+/* J27: 320 toast fallback (e) validation. */
+func j27ToastFallbackTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
+    let c0 = ctx.checks
+    let cells90: Array<(Int64, Int64)> = [
+        (6,6),(5,6),(4,6),(3,6),(2,6),(2,5),(3,5),(4,5),(5,5),(6,5),
+        (6,4),(5,4),(4,4),(4,3),(5,3),(6,3),(6,2),(6,1),(6,0),(5,0),(5,1),(4,1)
+    ]
+    let cells93: Array<(Int64, Int64)> = [
+        (4,2),(4,3),(4,4),(4,5),(3,5),(2,5),(1,5),(1,4),(2,4),(3,4),
+        (3,3),(2,3),(1,3),(1,2),(2,2),(3,2),(3,1),(4,1),(5,1),(5,2),(5,3),(5,4),(5,5)
+    ]
+
+    /* 1. L90 at w=320 */
+    match (j27ReplayScenario(levels, 90, cells90, ctx)) {
+        case Some(game) =>
+            let r = j21Check(game, 320.0, "J27 L90 w=320", ctx)
+            match (r) {
+                case Some(p) =>
+                    println("J27 L90 w=320 shown=${p.shown} step=${p.step} x=${p.x} y=${p.y}")
+                    if (p.step == 4) {
+                        let geom = boardGeomFor(game.level.cols, game.level.rows, 320.0)
+                        let txt = mechToastText(game)
+                        let tw = mechToastWidth(txt)
+                        let trayW = geom.trayW()
+                        ctx.ck(p.shown, "J27 L90 shown want true")
+                        ctx.ck(p.step == 4, "J27 L90 step want 4")
+                        ctx.ck(absF(p.x - (trayW - tw) / 2.0) < 1e-6, "J27 L90 x=${p.x} want fallback")
+                        ctx.ck(absF(p.y - (-34.0)) < 1e-6, "J27 L90 y=${p.y} want -34")
+                    } else {
+                        ctx.ck(p.shown, "J27 L90 shown want true")
+                    }
+                case None =>
+                    ctx.ck(false, "J27 L90 w=320 returned None")
+            }
+        case None => ()
+    }
+
+    /* 2. L93 at w=320 */
+    match (j27ReplayScenario(levels, 93, cells93, ctx)) {
+        case Some(game) =>
+            let r = j21Check(game, 320.0, "J27 L93 w=320", ctx)
+            match (r) {
+                case Some(p) =>
+                    println("J27 L93 w=320 shown=${p.shown} step=${p.step} x=${p.x} y=${p.y}")
+                    if (p.step == 4) {
+                        let geom = boardGeomFor(game.level.cols, game.level.rows, 320.0)
+                        let txt = mechToastText(game)
+                        let tw = mechToastWidth(txt)
+                        let trayW = geom.trayW()
+                        ctx.ck(p.shown, "J27 L93 shown want true")
+                        ctx.ck(p.step == 4, "J27 L93 step want 4")
+                        ctx.ck(absF(p.x - (trayW - tw) / 2.0) < 1e-6, "J27 L93 x=${p.x} want fallback")
+                        ctx.ck(absF(p.y - (-34.0)) < 1e-6, "J27 L93 y=${p.y} want -34")
+                    } else {
+                        ctx.ck(p.shown, "J27 L93 shown want true")
+                    }
+                case None =>
+                    ctx.ck(false, "J27 L93 w=320 returned None")
+            }
+        case None => ()
+    }
+
+    /* 3. 100 levels sweep fallback stats */
+    let idsSb = StringBuilder()
+    var ii: Int64 = 0
+    while (ii < ctx.sweep320FallbackIds.size) {
+        if (ii > 0) {
+            idsSb.append(", ")
+        }
+        idsSb.append("${ctx.sweep320FallbackIds.get(ii).getOrThrow()}")
+        ii = ii + 1
+    }
+    println("J27 320 sweep fallback cases=${ctx.sweep320FallbackTags.size} ids=[${idsSb.toString()}]")
+    ctx.ck(ctx.sweep320NotShown == 0, "J27 320 sweep unshown count=${ctx.sweep320NotShown} want=0")
+    for (t in ctx.sweep320FallbackTags) {
+        if (j26StrContains(t, "id=90") || j26StrContains(t, "id=93")) {
+            println("J27 320 sweep fallback reject point: ${t}")
+        }
+    }
+    println("J27 w=360/411 fallback cases=${ctx.sweep360FallbackTags.size + ctx.sweep411FallbackTags.size}")
+    println("J27 w=360 fallback cases=${ctx.sweep360FallbackTags.size}")
+    if (ctx.sweep360FallbackTags.size > 0) {
+        for (t in ctx.sweep360FallbackTags) {
+            println("  360 fallback tag: ${t}")
+        }
+    }
+    println("J27 w=411 fallback cases=${ctx.sweep411FallbackTags.size}")
+    if (ctx.sweep411FallbackTags.size > 0) {
+        for (t in ctx.sweep411FallbackTags) {
+            println("  411 fallback tag: ${t}")
+        }
+    }
+
+    println("J27 toast fallback done checks=${ctx.checks - c0}")
 }
 
 /* ===== J22 header chip row checks (mirror lib/index.cj ~1514-1572) ===== */
@@ -3107,6 +3299,7 @@ main(args: Array<String>): Int64 {
     ctx.toastRelaxed = ctx.toastRelaxed + j21Dir.toastRelaxed
     ctx.toastNot = ctx.toastNot + j21Dir.toastNot
     ctx.toastHit = ctx.toastHit + j21Dir.toastHit
+    ctx.toastFallback = ctx.toastFallback + j21Dir.toastFallback
     for (f in j21Dir.failures) {
         ctx.failures.add(f)
     }
@@ -3120,6 +3313,8 @@ main(args: Array<String>): Int64 {
     j20SkinGeomTests(levels, ctx)
     /* J21 toast placement checks。 */
     j21ToastTests(levels, ctx)
+    /* J27 toast fallback checks。 */
+    j27ToastFallbackTests(levels, ctx)
     /* J22 header chip row checks。 */
     j22HeaderChipTests(levels, ctx)
     /* J23 progress save/load checks。 */
@@ -3131,7 +3326,7 @@ main(args: Array<String>): Int64 {
     /* J26 chapter text and group header checks. */
     j26ChapterTextTests(levels, ctx)
     ctx.checks = ctx.checks + dStat.checks
-    println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit}")
+    println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit} fallback=${ctx.toastFallback}")
     ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")
     println("SELFTEST levels=${ctx.levels} steps=${ctx.steps} checks=${ctx.checks} rejects=[${sb.toString()}] failures=${ctx.failures.size}")
     println("DIRECTED flash=${dStat.flash} noflash=${dStat.noflash} failures=${dStat.fails}")
