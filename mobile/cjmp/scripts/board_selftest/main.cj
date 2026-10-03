@@ -2411,6 +2411,127 @@ func j24ProgressFileTests(ctx: Ctx): Unit {
     println("J24 progress file done checks=${ctx.checks - c0}")
 }
 
+/* ===== J25 图标矢量路径纯函数自测 ===== */
+
+func j25IconTests(ctx: Ctx): Unit {
+    let c0 = ctx.checks
+
+    // 1. checkCircleIconPaths(18.0, 18.0, 16.0, 3.0)
+    let p3 = checkCircleIconPaths(18.0, 18.0, 16.0, 3.0)
+    ctx.ck(p3.size == 2, "J25 checkCircle size=${p3.size} want=2")
+    for (i in 0..p3.size) {
+        let p = p3[i]
+        ctx.ck(p.color == Theme.success, "J25 checkCircle path[${i}] color=${p.color} want=${Theme.success}")
+        ctx.ck(p.stroke == Theme.success, "J25 checkCircle path[${i}] stroke=${p.stroke} want=${Theme.success}")
+        ctx.ck(absF(p.strokeW - 1.6) < 1e-9, "J25 checkCircle path[${i}] strokeW=${p.strokeW} want=1.6")
+        ctx.ck(absF(p.fillOp - 0.0) < 1e-9, "J25 checkCircle path[${i}] fillOp=${p.fillOp} want=0.0")
+
+        let nums = j20CmdNums(p.commands, 3.0)
+        var j: Int64 = 0
+        while (j + 1 < nums.size) {
+            let x = nums[j]
+            let y = nums[j + 1]
+            ctx.ck(x >= 18.0 - 16.0 - 0.01 && x <= 18.0 + 16.0 + 0.01,
+                "J25 checkCircle path[${i}] x=${x} in range [1.99, 34.01]")
+            ctx.ck(y >= 18.0 - 16.0 - 0.01 && y <= 18.0 + 16.0 + 0.01,
+                "J25 checkCircle path[${i}] y=${y} in range [1.99, 34.01]")
+            j = j + 2
+        }
+    }
+
+    // 对勾所有点落在圆内(到圆心距离 < r);且对勾 3 个点 y 先增后减(中间点最低:屏幕坐标 y 最大)
+    if (p3.size >= 2) {
+        let checkNums = j20CmdNums(p3[1].commands, 3.0)
+        ctx.ck(checkNums.size == 8, "J25 checkmark segs nums=${checkNums.size} want=8")
+        if (checkNums.size == 8) {
+            let x0 = checkNums[0]
+            let y0 = checkNums[1]
+            let x1 = checkNums[2]
+            let y1 = checkNums[3]
+            let x2 = checkNums[6]
+            let y2 = checkNums[7]
+
+            let d0 = sqrt((x0 - 18.0) * (x0 - 18.0) + (y0 - 18.0) * (y0 - 18.0))
+            let d1 = sqrt((x1 - 18.0) * (x1 - 18.0) + (y1 - 18.0) * (y1 - 18.0))
+            let d2 = sqrt((x2 - 18.0) * (x2 - 18.0) + (y2 - 18.0) * (y2 - 18.0))
+
+            ctx.ck(d0 < 16.0, "J25 checkmark p0 in circle d0=${d0} < 16.0")
+            ctx.ck(d1 < 16.0, "J25 checkmark p1 in circle d1=${d1} < 16.0")
+            ctx.ck(d2 < 16.0, "J25 checkmark p2 in circle d2=${d2} < 16.0")
+
+            ctx.ck(y1 > y0 && y1 > y2, "J25 checkmark y peak: y0=${y0}, y1=${y1}, y2=${y2}")
+        }
+    }
+
+    // 2. 同样用 f=2.625 再测一次(坐标 ÷f 后范围不变,证明 f 缩放正确)
+    let p26 = checkCircleIconPaths(18.0, 18.0, 16.0, 2.625)
+    ctx.ck(p26.size == 2, "J25 checkCircle f=2.625 size=${p26.size} want=2")
+    for (i in 0..p26.size) {
+        let nums = j20CmdNums(p26[i].commands, 2.625)
+        var j: Int64 = 0
+        while (j + 1 < nums.size) {
+            let x = nums[j]
+            let y = nums[j + 1]
+            ctx.ck(x >= 18.0 - 16.0 - 0.01 && x <= 18.0 + 16.0 + 0.01,
+                "J25 checkCircle f=2.625 path[${i}] x=${x}")
+            ctx.ck(y >= 18.0 - 16.0 - 0.01 && y <= 18.0 + 16.0 + 0.01,
+                "J25 checkCircle f=2.625 path[${i}] y=${y}")
+            j = j + 2
+        }
+    }
+
+    // 3. lockIconPaths(10.0, 10.0, 0.62, Theme.locked, 3.0)
+    let (boxW, boxH) = lockIconBox(0.62)
+    ctx.ck(absF(boxW - 16.0 * 0.62) < 1e-9, "J25 lockIconBox w=${boxW}")
+    ctx.ck(absF(boxH - 20.0 * 0.62) < 1e-9, "J25 lockIconBox h=${boxH}")
+
+    let lockPaths = lockIconPaths(10.0, 10.0, 0.62, Theme.locked, 3.0)
+    ctx.ck(lockPaths.size >= 2, "J25 lockPaths size=${lockPaths.size} want>=2")
+    let minX = 10.0 - boxW * 0.5 - 0.01
+    let maxX = 10.0 + boxW * 0.5 + 0.01
+    let minY = 10.0 - boxH * 0.5 - 0.01
+    let maxY = 10.0 + boxH * 0.5 + 0.01
+    for (i in 0..lockPaths.size) {
+        let lp = lockPaths[i]
+        ctx.ck(lp.color == Theme.locked, "J25 lockPath[${i}] color=${lp.color}")
+        ctx.ck(lp.stroke == Theme.locked, "J25 lockPath[${i}] stroke=${lp.stroke}")
+        ctx.ck(lp.strokeW >= 1.0, "J25 lockPath[${i}] strokeW=${lp.strokeW} want>=1.0")
+        ctx.ck(absF(lp.fillOp - 0.0) < 1e-9, "J25 lockPath[${i}] fillOp=${lp.fillOp} want=0.0")
+
+        let nums = j20CmdNums(lp.commands, 3.0)
+        var j: Int64 = 0
+        while (j + 1 < nums.size) {
+            let x = nums[j]
+            let y = nums[j + 1]
+            ctx.ck(x >= minX && x <= maxX, "J25 lockPath[${i}] x=${x} in [${minX}, ${maxX}]")
+            ctx.ck(y >= minY && y <= maxY, "J25 lockPath[${i}] y=${y} in [${minY}, ${maxY}]")
+            j = j + 2
+        }
+    }
+
+    // 4. checkMarkIconPaths(0.0, 0.0, 12.0, 3.0) 1 个 path,坐标 ÷3 绝对值 <= 6.01
+    let markPaths = checkMarkIconPaths(0.0, 0.0, 12.0, 3.0)
+    ctx.ck(markPaths.size == 1, "J25 checkMark size=${markPaths.size} want=1")
+    if (markPaths.size == 1) {
+        let mp = markPaths[0]
+        ctx.ck(mp.color == Theme.success, "J25 checkMark color=${mp.color}")
+        ctx.ck(mp.stroke == Theme.success, "J25 checkMark stroke=${mp.stroke}")
+        ctx.ck(absF(mp.strokeW - 1.6) < 1e-9, "J25 checkMark strokeW=${mp.strokeW}")
+        let nums = j20CmdNums(mp.commands, 3.0)
+        var j: Int64 = 0
+        while (j + 1 < nums.size) {
+            let x = nums[j]
+            let y = nums[j + 1]
+            ctx.ck(absF(x) <= 6.01, "J25 checkMark abs(x)=${absF(x)} <= 6.01")
+            ctx.ck(absF(y) <= 6.01, "J25 checkMark abs(y)=${absF(y)} <= 6.01")
+            j = j + 2
+        }
+    }
+
+    // 5. 打印一行 J25 icons done checks=N
+    println("J25 icons done checks=${ctx.checks - c0}")
+}
+
 /* ===== P4 DUMP:按场景文件渲染 app 各板层 JSON(与设计稿 PNG 对拍,box-only) ===== */
 
 func dumpBool(v: Bool): String {
@@ -2844,6 +2965,8 @@ main(args: Array<String>): Int64 {
     j23ProgressTests(ctx)
     /* J24 progress file backend checks (real std.fs under /tmp)。 */
     j24ProgressFileTests(ctx)
+    /* J25 icon vector path checks. */
+    j25IconTests(ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit}")
     ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")
