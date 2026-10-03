@@ -698,14 +698,24 @@ class EntryView {
         if (index == 0) {
             return Theme.whitePaper
         }
-        return Theme.ink
+        return Theme.qingDeep
     }
 
-    func cardBorder(open: Bool): Int64 {
+    func cardBorderOf(id: Int64, open: Bool): Int64 {
+        if (id == 0) {
+            return Theme.ink
+        }
         if (open) {
             return Theme.paperLine
         }
         return Theme.locked
+    }
+
+    func cardBorderW(id: Int64): Float64 {
+        if (id == 0) {
+            return 1.6
+        }
+        return 1.2
     }
 
     func nextLevel(): Unit {
@@ -1174,38 +1184,7 @@ class EntryView {
                             ChapterCatalog.all(),
                             itemGenerator: {item: ChapterDef, index: Int64 =>
                                 Column {
-                                if (item.id == 4) {
-                                    Image(rawImg("card_05_touyuan_v91"))
-                                        .width(100.percent)
-                                        .height(Theme.chapterSkinCardH)
-                                        .objectFit(ImageFit.Contain)
-                                } else if (item.id == 5) {
-                                    Image(rawImg("card_06_jingzhou_v91"))
-                                        .width(100.percent)
-                                        .height(Theme.chapterSkinCardH)
-                                        .objectFit(ImageFit.Contain)
-                                } else if (item.id == 6) {
-                                    Image(rawImg("card_07_chibi_v91"))
-                                        .width(100.percent)
-                                        .height(Theme.chapterSkinCardH)
-                                        .objectFit(ImageFit.Contain)
-                                } else if (item.id == 7) {
-                                    Image(rawImg("card_08_rushu_v91"))
-                                        .width(100.percent)
-                                        .height(Theme.chapterSkinCardH)
-                                        .objectFit(ImageFit.Contain)
-                                } else if (item.id == 8) {
-                                    Image(rawImg("card_09_hanzhong_v91"))
-                                        .width(100.percent)
-                                        .height(Theme.chapterSkinCardH)
-                                        .objectFit(ImageFit.Contain)
-                                } else if (item.id == 9) {
-                                    Image(rawImg("card_10_beifa_v91"))
-                                        .width(100.percent)
-                                        .height(Theme.chapterSkinCardH)
-                                        .objectFit(ImageFit.Contain)
-                                }
-                                Row(space: 8) {
+                                    Row(space: 8) {
                                     Row(space: 2) {
                                         if (item.id == 0) {
                                             Image(rawImg("bust_p01_cangguan"))
@@ -1372,15 +1351,19 @@ class EntryView {
                                             .height(28)
                                             .textAlign(TextAlign.Center)
                                             .backgroundColor(this.enterFill(index))
-                                            .borderRadius(6)
-                                            .border(width: 1, color: Theme.ink)
+                                            .border(width: 1.2, color: Theme.qingDeep)
+                                            .borderRadius(4)
                                     } else {
-                                        Text("未开")
-                                            .fontSize(12)
-                                            .fontColor(Theme.locked)
-                                            .fontFamily(this.sansFamily())
-                                            .width(48)
-                                            .textAlign(TextAlign.Center)
+                                        Row(space: 4) {
+                                            this.lockIcon(Theme.locked)
+                                            Text("未开")
+                                                .fontSize(12)
+                                                .fontColor(Theme.locked)
+                                                .fontFamily(this.sansFamily())
+                                        }
+                                        .width(56)
+                                        .justifyContent(FlexAlign.Center)
+                                        .alignItems(VerticalAlign.Center)
                                     }
                                 }
                                 .width(100.percent)
@@ -1389,8 +1372,8 @@ class EntryView {
                                 }
                                 .width(100.percent)
                                 .backgroundColor(Theme.whitePaper)
+                                .border(width: this.cardBorderW(item.id), color: this.cardBorderOf(item.id, this.chapterOpen(item.id)))
                                 .borderRadius(10)
-                                .border(width: 1, color: this.cardBorder(this.chapterOpen(item.id)))
                                 .clip(true)
                                 .onClick({event => this.openChapter(item.id)})
                             }
