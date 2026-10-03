@@ -177,6 +177,110 @@ class EntryView {
         })
     }
 
+    func checkIconCmds(d: Int64, i: Int64): String {
+        return checkCircleIconPaths(Float64(d) / 2.0, Float64(d) / 2.0, Float64(d) / 2.0, this.getPxFactor())[i].commands
+    }
+
+    @Builder func checkCircleIcon(d: Int64) {
+        Stack(alignContent: Alignment.TopStart) {
+            Path(width: Float64(d), height: Float64(d), commands: this.checkIconCmds(d, 0))
+                .fill(Theme.success)
+                .fillOpacity(0.0)
+                .stroke(Theme.success)
+                .strokeWidth(1.6)
+                .strokeLineCap(LineCapStyle.Round)
+                .strokeLineJoin(LineJoinStyle.Round)
+                .antiAlias(true)
+                .position(x: 0.0, y: 0.0)
+            Path(width: Float64(d), height: Float64(d), commands: this.checkIconCmds(d, 1))
+                .fill(Theme.success)
+                .fillOpacity(0.0)
+                .stroke(Theme.success)
+                .strokeWidth(1.6)
+                .strokeLineCap(LineCapStyle.Round)
+                .strokeLineJoin(LineJoinStyle.Round)
+                .antiAlias(true)
+                .position(x: 0.0, y: 0.0)
+        }
+        .width(d)
+        .height(d)
+    }
+
+    func lockW(): Float64 {
+        let (w, _) = lockIconBox(0.62)
+        return w
+    }
+
+    func lockH(): Float64 {
+        let (_, h) = lockIconBox(0.62)
+        return h
+    }
+
+    func lockIconCmds(i: Int64, color: Int64): String {
+        return lockIconPaths(this.lockW() / 2.0, this.lockH() / 2.0, 0.62, color, this.getPxFactor())[i].commands
+    }
+
+    @Builder func lockIcon(color: Int64) {
+        Stack(alignContent: Alignment.TopStart) {
+            Path(width: this.lockW(), height: this.lockH(), commands: this.lockIconCmds(0, color))
+                .fill(color)
+                .fillOpacity(0.0)
+                .stroke(color)
+                .strokeWidth(1.0)
+                .strokeLineCap(LineCapStyle.Round)
+                .strokeLineJoin(LineJoinStyle.Round)
+                .antiAlias(true)
+                .position(x: 0.0, y: 0.0)
+            Path(width: this.lockW(), height: this.lockH(), commands: this.lockIconCmds(1, color))
+                .fill(color)
+                .fillOpacity(0.0)
+                .stroke(color)
+                .strokeWidth(1.0)
+                .strokeLineCap(LineCapStyle.Round)
+                .strokeLineJoin(LineJoinStyle.Round)
+                .antiAlias(true)
+                .position(x: 0.0, y: 0.0)
+        }
+        .width(this.lockW())
+        .height(this.lockH())
+    }
+
+    @Builder func dessertTag(state: Int64) {
+        if (state == 0) {
+            Text("点心")
+                .fontSize(11)
+                .fontColor(Theme.inkMuted)
+                .fontFamily(this.sansFamily())
+                .height(18)
+                .padding(left: 5, right: 5)
+                .textAlign(TextAlign.Center)
+                .backgroundColor(Theme.whitePaper)
+                .border(width: 1, color: Theme.paperLine)
+                .borderRadius(3)
+        } else if (state == 1) {
+            Text("点心")
+                .fontSize(11)
+                .fontColor(Theme.ink)
+                .fontFamily(this.sansFamily())
+                .height(18)
+                .padding(left: 5, right: 5)
+                .textAlign(TextAlign.Center)
+                .backgroundColor(Theme.paperShade)
+                .borderRadius(3)
+        } else {
+            Text("点心")
+                .fontSize(11)
+                .fontColor(Theme.locked)
+                .fontFamily(this.sansFamily())
+                .height(18)
+                .padding(left: 5, right: 5)
+                .textAlign(TextAlign.Center)
+                .backgroundColor(Theme.paper)
+                .border(width: 1, color: Theme.locked)
+                .borderRadius(3)
+        }
+    }
+
     // Android system back override (Keels CustomView page-level back)
     protected override func onBackPress(): Bool {
         if (this.screen == 0) {
@@ -660,7 +764,14 @@ class EntryView {
         if (index == this.cleared) {
             return Theme.ink
         }
-        return Theme.whitePaper
+        return Theme.paperLine
+    }
+
+    func rowBorderW(index: Int64): Float64 {
+        if (index == this.cleared) {
+            return 1.4
+        }
+        return 1.0
     }
     func build() {
         Column {
@@ -827,32 +938,37 @@ class EntryView {
                 // Divider not in OpenSDK 0.2.2: 1vp hairline Column, same color/width as HarmonyOS
                 Column() {}.width(100.percent).height(1).backgroundColor(Theme.paperLine)
                 Scroll {
-                    Column(space: 10) {
+                    Column(space: 8) {
                         ForEach(
                             this.levels,
                             itemGenerator: {item: LevelDef, index: Int64 =>
                                 Row {
                                     if (index < this.cleared) {
-                                        Text("通")
-                                            .fontSize(14)
-                                            .fontColor(Theme.success)
-                                            .fontFamily(this.serifFamily())
-                                            .width(36)
-                                            .height(36)
-                                            .border(width: 1, color: Theme.success)
-                                            .borderRadius(18)
-                                            .textAlign(TextAlign.Center)
-                                        Text(item.name)
-                                            .fontSize(18)
-                                            .fontColor(Theme.ink)
-                                            .fontFamily(this.serifBoldFamily())
-                                            .fontWeight(FontWeight.Bold)
-                                            .margin(left: 12)
+                                        this.checkCircleIcon(36)
+                                        Column {
+                                            Text(item.name)
+                                                .fontSize(18)
+                                                .fontColor(Theme.ink)
+                                                .fontFamily(this.serifBoldFamily())
+                                                .fontWeight(FontWeight.Bold)
+                                            Text("${item.cols}×${item.rows}")
+                                                .fontSize(12)
+                                                .fontColor(Theme.inkMuted)
+                                                .fontFamily(this.sansFamily())
+                                        }
+                                        .margin(left: 12)
+                                        .alignItems(HorizontalAlign.Start)
                                         Blank()
-                                        Text("已通")
-                                            .fontSize(14)
-                                            .fontColor(Theme.success)
-                                            .fontFamily(this.sansFamily())
+                                        Row(space: 10) {
+                                            if (ChapterCatalog.isDessert(item.id)) {
+                                                this.dessertTag(0)
+                                            }
+                                            Text("已通")
+                                                .fontSize(14)
+                                                .fontColor(Theme.success)
+                                                .fontFamily(this.sansFamily())
+                                        }
+                                        .alignItems(VerticalAlign.Center)
                                     } else if (index == this.cleared) {
                                         Text("${index + 1}")
                                             .fontSize(16)
@@ -863,17 +979,30 @@ class EntryView {
                                             .backgroundColor(Theme.ink)
                                             .borderRadius(18)
                                             .textAlign(TextAlign.Center)
-                                        Text(item.name)
-                                            .fontSize(18)
-                                            .fontColor(Theme.ink)
-                                            .fontFamily(this.serifBoldFamily())
-                                            .fontWeight(FontWeight.Bold)
-                                            .margin(left: 12)
+                                        Column {
+                                            Text(item.name)
+                                                .fontSize(18)
+                                                .fontColor(Theme.ink)
+                                                .fontFamily(this.serifBoldFamily())
+                                                .fontWeight(FontWeight.Bold)
+                                            Text("${item.cols}×${item.rows}")
+                                                .fontSize(12)
+                                                .fontColor(Theme.inkMuted)
+                                                .fontFamily(this.sansFamily())
+                                        }
+                                        .margin(left: 12)
+                                        .alignItems(HorizontalAlign.Start)
                                         Blank()
-                                        Text("当前")
-                                            .fontSize(14)
-                                            .fontColor(Theme.ink)
-                                            .fontFamily(this.sansFamily())
+                                        Row(space: 10) {
+                                            if (ChapterCatalog.isDessert(item.id)) {
+                                                this.dessertTag(1)
+                                            }
+                                            Text("当前")
+                                                .fontSize(14)
+                                                .fontColor(Theme.ink)
+                                                .fontFamily(this.sansFamily())
+                                        }
+                                        .alignItems(VerticalAlign.Center)
                                     } else {
                                         Text("${index + 1}")
                                             .fontSize(16)
@@ -884,25 +1013,35 @@ class EntryView {
                                             .border(width: 1, color: Theme.locked)
                                             .borderRadius(18)
                                             .textAlign(TextAlign.Center)
-                                        Text(item.name)
-                                            .fontSize(18)
-                                            .fontColor(Theme.locked)
-                                            .fontFamily(this.serifBoldFamily())
-                                            .fontWeight(FontWeight.Bold)
-                                            .margin(left: 12)
+                                        Column {
+                                            Text(item.name)
+                                                .fontSize(18)
+                                                .fontColor(Theme.locked)
+                                                .fontFamily(this.serifBoldFamily())
+                                                .fontWeight(FontWeight.Bold)
+                                            Text("${item.cols}×${item.rows}")
+                                                .fontSize(12)
+                                                .fontColor(Theme.locked)
+                                                .fontFamily(this.sansFamily())
+                                        }
+                                        .margin(left: 12)
+                                        .alignItems(HorizontalAlign.Start)
                                         Blank()
-                                        Text("锁")
-                                            .fontSize(14)
-                                            .fontColor(Theme.locked)
-                                            .fontFamily(this.sansFamily())
+                                        Row(space: 17) {
+                                            if (ChapterCatalog.isDessert(item.id)) {
+                                                this.dessertTag(2)
+                                            }
+                                            this.lockIcon(Theme.locked)
+                                        }
+                                        .alignItems(VerticalAlign.Center)
                                     }
                                 }
                                 .width(100.percent)
                                 .height(64)
-                                .padding(left: 14, right: 14)
+                                .padding(left: 14, right: 16)
                                 .backgroundColor(Theme.whitePaper)
-                                .borderRadius(10)
-                                .border(width: 1, color: this.rowBorder(index))
+                                .border(width: this.rowBorderW(index), color: this.rowBorder(index))
+                                .borderRadius(8)
                                 .onClick({event => this.openFromList(index)})
                             }
                         )
