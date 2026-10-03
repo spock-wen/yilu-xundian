@@ -2048,6 +2048,163 @@ func j22HeaderChipTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     println("J22 header chips done checks=${ctx.checks - checks0}")
 }
 
+/* ===== J23:progress 存档编解码/存取检查(box-only) ===== */
+
+/* 内存假后端:可注入读/写异常与写失败,记录写入次数与最后内容。 */
+class J23MemBackend <: ProgressBackend {
+    public var text: Option<String> = None
+    public var writes: Int64 = 0
+    public var writeOk: Bool = true
+    public var writeThrows: Bool = false
+    public var readThrows: Bool = false
+
+    public init() {}
+
+    public func read(): Option<String> {
+        if (readThrows) {
+            throw Exception("j23 read")
+        }
+        return text
+    }
+
+    public func write(t: String): Bool {
+        writes = writes + 1
+        if (writeThrows) {
+            throw Exception("j23 write")
+        }
+        if (!writeOk) {
+            return false
+        }
+        text = Some(t)
+        return true
+    }
+}
+
+func j23ProgressTests(ctx: Ctx): Unit {
+    let c0 = ctx.checks
+    /* (1) 编解码往返与精确编码格式。 */
+    for (n in [0, 1, 50, 100]) {
+        ctx.ck(progressDecode(progressEncode(n), 100) == n,
+            "J23 roundtrip n=${n} got=${progressDecode(progressEncode(n), 100)}")
+    }
+    ctx.ck(progressEncode(0) == "{\"v\":1,\"cleared\":0}", "J23 encode0=${progressEncode(0)}")
+    ctx.ck(progressEncode(12) == "{\"v\":1,\"cleared\":12}", "J23 encode12=${progressEncode(12)}")
+    ctx.ck(progressEncode(-5) == progressEncode(0), "J23 encodeNeg=${progressEncode(-5)}")
+    /* (2) 坏输入全部解码为 0。 */
+    let bads: Array<String> = ["", "   ", "{}", "not json", "{\"v\":1,\"cleared\":", "{\"v\":1",
+        "[1,2]", "12", "null", "{\"v\":1}", "{\"cleared\":7}"]
+    for (b in bads) {
+        ctx.ck(progressDecode(b, 100) == 0, "J23 bad input <${b}> got=${progressDecode(b, 100)}")
+    }
+    /* (3) 负数 cleared 拒绝。 */
+    ctx.ck(progressDecode("{\"v\":1,\"cleared\":-3}", 100) == 0,
+        "J23 negative cleared got=${progressDecode("{\"v\":1,\"cleared\":-3}", 100)}")
+    /* (4) 超过 total 钳到 total。 */
+    ctx.ck(progressDecode("{\"v\":1,\"cleared\":999}", 100) == 100,
+        "J23 clamp999 got=${progressDecode("{\"v\":1,\"cleared\":999}", 100)}")
+    ctx.ck(progressDecode("{\"v\":1,\"cleared\":100}", 57) == 57,
+        "J23 clamp t57 got=${progressDecode("{\"v\":1,\"cleared\":100}", 57)}")
+    ctx.ck(progressDecode("{\"v\":1,\"cleared\":5}", 0) == 0,
+        "J23 clamp t0 got=${progressDecode("{\"v\":1,\"cleared\":5}", 0)}")
+    ctx.ck(progressDecode("{\"v\":1,\"cleared\":100}", 100) == 100,
+        "J23 clamp t100 got=${progressDecode("{\"v\":1,\"cleared\":100}", 100)}")
+    /* (5) 小数/科学计数/字符串/布尔/null/类型不对。 */
+    let wrongs: Array<String> = ["{\"v\":1,\"cleared\":1.5}", "{\"v\":1,\"cleared\":1e3}",
+        "{\"v\":1,\"cleared\":\"7\"}", "{\"v\":1,\"cleared\":true}", "{\"v\":1,\"cleared\":null}",
+        "{\"v\":\"1\",\"cleared\":7}"]
+    for (w in wrongs) {
+        ctx.ck(progressDecode(w, 100) == 0, "J23 wrong type <${w}> got=${progressDecode(w, 100)}")
+    }
+    /* (6) 版本号不匹配拒绝。 */
+    ctx.ck(progressDecode("{\"v\":2,\"cleared\":7}", 100) == 0,
+        "J23 v2 got=${progressDecode("{\"v\":2,\"cleared\":7}", 100)}")
+    ctx.ck(progressDecode("{\"v\":0,\"cleared\":7}", 100) == 0,
+        "J23 v0 got=${progressDecode("{\"v\":0,\"cleared\":7}", 100)}")
+    /* (7) 超长数字(会 Overflow)被吞掉返回 0。 */
+    ctx.ck(progressDecode("{\"v\":1,\"cleared\":99999999999999999999999}", 100) == 0, "J23 overflow cleared")
+    ctx.ck(progressDecode("{\"v\":99999999999999999999999,\"cleared\":7}", 100) == 0, "J23 overflow v")
+    /* (8) 多余键忽略/键序无关/空白容忍/尾部多余数据拒绝。 */
+    ctx.ck(progressDecode("{\"v\":1,\"cleared\":7,\"extra\":\"x\",\"best\":[1,2,3],\"chapter\":2}", 100) == 7,
+        "J23 extra keys got=${progressDecode("{\"v\":1,\"cleared\":7,\"extra\":\"x\",\"best\":[1,2,3],\"chapter\":2}", 100)}")
+    ctx.ck(progressDecode("{\"cleared\":7,\"v\":1}", 100) == 7,
+        "J23 key order got=${progressDecode("{\"cleared\":7,\"v\":1}", 100)}")
+    ctx.ck(progressDecode("{ \"v\" : 1 ,\n \"cleared\" : 7 }", 100) == 7,
+        "J23 whitespace got=${progressDecode("{ \"v\" : 1 ,\n \"cleared\" : 7 }", 100)}")
+    ctx.ck(progressDecode("{\"v\":1,\"cleared\":7} x", 100) == 0,
+        "J23 trailing junk got=${progressDecode("{\"v\":1,\"cleared\":7} x", 100)}")
+    /* (9) progressAfterWin 语义与单调性。 */
+    ctx.ck(progressAfterWin(0, 0, 100) == 1, "J23 win 0,0=${progressAfterWin(0, 0, 100)}")
+    ctx.ck(progressAfterWin(5, 2, 100) == 5, "J23 win 5,2=${progressAfterWin(5, 2, 100)}")
+    ctx.ck(progressAfterWin(5, 5, 100) == 6, "J23 win 5,5=${progressAfterWin(5, 5, 100)}")
+    ctx.ck(progressAfterWin(99, 99, 100) == 100, "J23 win 99,99=${progressAfterWin(99, 99, 100)}")
+    ctx.ck(progressAfterWin(100, 99, 100) == 100, "J23 win 100,99=${progressAfterWin(100, 99, 100)}")
+    ctx.ck(progressAfterWin(100, 100, 100) == 100, "J23 win 100,100=${progressAfterWin(100, 100, 100)}")
+    ctx.ck(progressAfterWin(3, -1, 100) == 3, "J23 win 3,-1=${progressAfterWin(3, -1, 100)}")
+    ctx.ck(progressAfterWin(0, 0, 0) == 0, "J23 win 0,0,t0=${progressAfterWin(0, 0, 0)}")
+    for (c in 0..100) {
+        let floorV = if (c < 100) { c } else { 100 }
+        for (li in [-1, 0, c - 1, c, c + 1, 99, 100]) {
+            let r = progressAfterWin(c, li, 100)
+            ctx.ck(r >= floorV && r <= 100 && r >= 0, "J23 monotonic c=${c} li=${li} r=${r}")
+        }
+    }
+    /* (10) ProgressStore.load 各分支。 */
+    let b0 = J23MemBackend()
+    ctx.ck(ProgressStore.load(b0, 100) == 0, "J23 load none")
+    let b1 = J23MemBackend()
+    b1.text = Some(progressEncode(42))
+    ctx.ck(ProgressStore.load(b1, 100) == 42, "J23 load 42")
+    let b2 = J23MemBackend()
+    b2.text = Some("garbage")
+    ctx.ck(ProgressStore.load(b2, 100) == 0, "J23 load garbage")
+    let b3 = J23MemBackend()
+    b3.text = Some(progressEncode(999))
+    ctx.ck(ProgressStore.load(b3, 100) == 100, "J23 load clamp")
+    let b4 = J23MemBackend()
+    b4.readThrows = true
+    ctx.ck(ProgressStore.load(b4, 100) == 0, "J23 load readThrows")
+    ctx.ck(ProgressStore.load(NullProgressBackend(), 100) == 0, "J23 load null backend")
+    /* (11) ProgressStore.save 各分支与失败后内容不被破坏。 */
+    let s0 = J23MemBackend()
+    ctx.ck(ProgressStore.save(s0, 7), "J23 save ok")
+    ctx.ck(s0.writes == 1, "J23 save writes=${s0.writes}")
+    match (s0.text) {
+        case Some(t) => ctx.ck(t == progressEncode(7), "J23 save text=<${t}>")
+        case None => ctx.ck(false, "J23 save text none")
+    }
+    ctx.ck(ProgressStore.load(s0, 100) == 7, "J23 save then load")
+    let s1 = J23MemBackend()
+    s1.writeOk = false
+    ctx.ck(!ProgressStore.save(s1, 9), "J23 save writeOk=false should fail")
+    ctx.ck(s1.writes == 1, "J23 s1 writes=${s1.writes}")
+    let s2 = J23MemBackend()
+    s2.writeThrows = true
+    ctx.ck(!ProgressStore.save(s2, 9), "J23 save writeThrows should fail")
+    ctx.ck(!ProgressStore.save(NullProgressBackend(), 9), "J23 save null backend")
+    let s3 = J23MemBackend()
+    ctx.ck(ProgressStore.save(s3, 7), "J23 s3 first save")
+    s3.writeOk = false
+    ctx.ck(!ProgressStore.save(s3, 9), "J23 s3 second save fails")
+    match (s3.text) {
+        case Some(t) => ctx.ck(t == progressEncode(7), "J23 s3 preserved text=<${t}>")
+        case None => ctx.ck(false, "J23 s3 text none")
+    }
+    /* (12) 全流程:通关序列逐级存档,最终 load==100 且恰好写 100 次。 */
+    let fb = J23MemBackend()
+    var c = 0
+    for (li in 0..100) {
+        let prev = c
+        c = progressAfterWin(c, li, 100)
+        if (c > prev) {
+            ctx.ck(ProgressStore.save(fb, c), "J23 flow save li=${li}")
+        }
+    }
+    ctx.ck(c == 100, "J23 flow final c=${c}")
+    ctx.ck(ProgressStore.load(fb, 100) == 100, "J23 flow load=${ProgressStore.load(fb, 100)}")
+    ctx.ck(fb.writes == 100, "J23 flow writes=${fb.writes}")
+    println("J23 progress done checks=${ctx.checks - c0}")
+}
+
 /* ===== P4 DUMP:按场景文件渲染 app 各板层 JSON(与设计稿 PNG 对拍,box-only) ===== */
 
 func dumpBool(v: Bool): String {
@@ -2477,6 +2634,8 @@ main(args: Array<String>): Int64 {
     j21ToastTests(levels, ctx)
     /* J22 header chip row checks。 */
     j22HeaderChipTests(levels, ctx)
+    /* J23 progress save/load checks。 */
+    j23ProgressTests(ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit}")
     ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")
