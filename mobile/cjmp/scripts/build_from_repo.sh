@@ -26,6 +26,14 @@
 #   iOS bundle identifier             : com.yilu.xundian
 #   (final IDs to be confirmed before App Store / Google Play release)
 #
+# Template patches applied automatically:
+#   STEP C   xundian.cpp FindClass com/example -> com/yilu (Android)
+#   STEP C2  EntryEntryAbilityActivity system-back guard (Android)
+#   STEP D   IPHONEOS_DEPLOYMENT_TARGET 12.0 -> 15.0 (iOS pbxproj)
+#   STEP D2  iOS host UIScene lifecycle patch (TN3187): scene manifest +
+#            SceneDelegate, window/root-VC moved out of AppDelegate
+#   STEP G   post-build check-app verification of the built .app (iOS)
+#
 # macOS bash 3.2 compatible (no associative arrays, no mapfile).
 set -euo pipefail
 
@@ -278,6 +286,24 @@ fi
 echo "  Patched $count_correct occurrence(s) to 15.0."
 
 # ---------------------------------------------------------------------------
+# STEP D2: Patch iOS host for UIScene lifecycle (TN3187)
+#
+# Apps built with the iOS 27 SDK must use the UIScene lifecycle; the Keels
+# template creates its window in AppDelegate and ships no
+# UIApplicationSceneManifest, so the app would crash at launch on iOS 27.
+# patch_ios_scene.py adds the manifest, a SceneDelegate, moves window/root-VC
+# creation into the scene delegate (StageApplication init stays in
+# AppDelegate) and registers the new files in the xcodeproj.
+# ---------------------------------------------------------------------------
+if [ "$BUILD_IOS" -eq 1 ]; then
+  echo "STEP D2: Patching iOS host for UIScene lifecycle"
+  if ! "$PY" "$SCRIPT_DIR/patch_ios_scene.py" patch "$PROJ/ios" --name xundian; then
+    echo "ERROR: patch_ios_scene.py patch failed (Keels template changed?)" >&2
+    exit 1
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # STEP E: Sync source, engine, levels and assets
 # ---------------------------------------------------------------------------
 echo "STEP E: Syncing source and assets"
@@ -349,6 +375,12 @@ if [ "$BUILD_IOS" -eq 1 ]; then
   IOS_APP="$PROJ/ios/output/DerivedData/Build/Products/Debug-iphonesimulator/xundian.app"
   if [ ! -d "$IOS_APP" ]; then
     echo "ERROR: expected iOS app bundle not found at $IOS_APP" >&2
+    exit 1
+  fi
+  # Post-build check: the .app Info.plist must carry the UIScene manifest
+  # and the executable must contain the SceneDelegate class.
+  if ! "$PY" "$SCRIPT_DIR/patch_ios_scene.py" check-app "$IOS_APP" --name xundian; then
+    echo "ERROR: iOS app bundle scene-manifest check failed" >&2
     exit 1
   fi
   echo "  iOS app: $IOS_APP"

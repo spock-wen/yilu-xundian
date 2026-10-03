@@ -33,13 +33,14 @@ mobile/cjmp/scripts/build_from_repo.sh [--out DIR] [--android] [--ios] [--auto-v
 
 - 默认同时构建双平台；`--android` / `--ios` 只构建对应平台。
 - 默认输出目录为 `<仓库>/mobile/cjmp/.host/`（已被 `.gitignore` 忽略），可用 `--out` 覆盖。
-- 脚本会自动完成：创建 Keels 工程 → **打两个已知模板补丁**（见下）→ 同步源码与资源 → `check_level.py` 与 `check_fonts.py` 校验 → `keels build apk` / `keels build ios-sim` → 打印产物路径、SHA-256 与包名。
+- 脚本会自动完成：创建 Keels 工程 → **打三个已知模板补丁**（见下）→ 同步源码与资源 → `check_level.py` 与 `check_fonts.py` 校验 → `keels build apk` / `keels build ios-sim` → 打印产物路径、SHA-256 与包名。
 - 最终输出 `BUILD_FROM_REPO OK`。
 
 ## 已知 Keels 模板补丁（脚本自动处理）
 
 1. **FindClass 包名 bug**：`keels create -n xundian --org com.yilu` 生成的 `android/app/src/main/cpp/xundian.cpp` 中，`g_jniEnv->FindClass("com/example/xundian/xundian")` 硬编码了 `com.example`，与命名空间 `com.yilu.xundian` 不符，导致启动即 `ClassNotFoundException com.example.xundian.xundian` 崩溃。脚本将其修补为 `com/yilu/xundian/xundian` 并校验。
 2. **iOS 部署目标**：模板生成的 `IPHONEOS_DEPLOYMENT_TARGET = 12.0`（project.pbxproj 中 4 处）在 Xcode 26/27 SDK 下无法构建，脚本统一修补为 `15.0` 并校验。
+3. **UIScene 生命周期（iOS 27 SDK 要求，TN3187）**：脚本（`patch_ios_scene.py`）在生成的 iOS 宿主里补 `UIApplicationSceneManifest`、新增 `SceneDelegate`、把窗口/根控制器创建从 AppDelegate 移到 scene willConnect；`StageApplication` 初始化保留在 AppDelegate。构建后（STEP G）校验 .app 的 Info.plist 及可执行文件。注意：补丁锚点按 Keels 引擎样例工程编写，尚未在 `keels create` 0.2.2 实际生成物上确认，首次 Mac 构建若报 template changed 需按实际模板调整。
 
 ## 包名
 
