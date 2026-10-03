@@ -1704,6 +1704,204 @@ func j21ToastTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     }
 }
 
+/* ===== J22 header chip row checks (mirror lib/index.cj ~1514-1572) ===== */
+
+/* MODEL/ESTIMATE — chip width model for the header chip row (Row(space:8), FlexAlign.Center).
+   Text chip = 12+12 padding + 2 border (1+1) + text width.
+   Burden chip = 32 (bag Stack) + 30 (two 15pt 负/重 glyphs) + 12 (right padding) + 2 border
+   = 76.0 (device-measured; only the burden chip is measured, the rest is a model).
+   Text width: 15.0 per CJK rune, 8.5 per ASCII digit, 4.0 per space, 5.0 for '·' (estimate). */
+func j22TextWidth(s: String): Float64 {
+    var w = 0.0
+    for (r in s.toRuneArray()) {
+        if (r == r' ') {
+            w = w + 4.0
+        } else if (r >= r'0' && r <= r'9') {
+            w = w + 8.5
+        } else if (r == r'·') {
+            w = w + 5.0
+        } else {
+            w = w + 15.0
+        }
+    }
+    return w
+}
+
+func j22TextChipW(s: String): Float64 {
+    return 12.0 + 12.0 + 2.0 + j22TextWidth(s)
+}
+
+/* 深拷贝 LevelDef(真实构造器 + 逐个赋 mechanism 变量),绝不改动共享目录对象。 */
+func j22CopyLevel(src: LevelDef): LevelDef {
+    let wps = ArrayList<Waypoint>()
+    for (wp in src.waypoints) {
+        wps.add(Waypoint(wp.n, wp.x, wp.y))
+    }
+    let wls = ArrayList<Wall>()
+    for (w in src.walls) {
+        wls.add(Wall(w.x1, w.y1, w.x2, w.y2))
+    }
+    let lv = LevelDef(src.id, src.name, src.cols, src.rows, wps, wls, ArrayList<ParityEdge>(), src.stepLimit)
+    match (src.ferry) {
+        case Some(f) => lv.ferry = Some(FerryDef(f.jiaX, f.jiaY, f.yiX, f.yiY))
+        case None => ()
+    }
+    for (ow in src.oneWays) {
+        lv.oneWays.add(OneWay(ow.fromX, ow.fromY, ow.toX, ow.toY))
+    }
+    for (c in src.slideCells) {
+        lv.slideCells.add(Cell(c.x, c.y))
+    }
+    for (g in src.sealGates) {
+        lv.sealGates.add(SealGate(g.x1, g.y1, g.x2, g.y2))
+    }
+    for (c in src.tokenCells) {
+        lv.tokenCells.add(Cell(c.x, c.y))
+    }
+    match (src.collapse) {
+        case Some(cd) => lv.collapse = Some(CollapseDef(cd.triggerX, cd.triggerY, cd.x1, cd.y1, cd.x2, cd.y2))
+        case None => ()
+    }
+    match (src.burden) {
+        case Some(b) =>
+            let forb = ArrayList<Cell>()
+            for (c in b.forbidden) {
+                forb.add(Cell(c.x, c.y))
+            }
+            lv.burden = Some(BurdenDef(forb, b.loadX, b.loadY, b.unloadX, b.unloadY, b.startLaden))
+        case None => ()
+    }
+    return lv
+}
+
+/* chips in lib order: parity(iff parityEdges>0), step(iff stepLimit>0), burden(iff burden && laden)。 */
+func j22ChipWidths(hasParity: Bool, hasStep: Bool, burdenOn: Bool, parityW: Float64, stepW: Float64): Array<Float64> {
+    let out = ArrayList<Float64>()
+    if (hasParity) {
+        out.add(parityW)
+    }
+    if (hasStep) {
+        out.add(stepW)
+    }
+    if (burdenOn) {
+        out.add(76.0)
+    }
+    return out.toArray()
+}
+
+/* 一个 (rowW, variant, state) 行:模型宽 → chipRowOffsets → 居中/间距/容纳断言 + 打印。返回 offsets。 */
+func j22Row(rowW: Float64, variant: String, state: String, widths: Array<Float64>, wantN: Int64, ctx: Ctx): Array<Float64> {
+    let xs = chipRowOffsets(rowW, widths, 8.0)
+    ctx.ck(xs.size == wantN && wantN == widths.size,
+        "J22 ${variant} ${state} w=${rowW} n=${xs.size} want=${wantN}")
+    let leftMargin = xs[0]
+    let rightEnd = xs[xs.size - 1] + widths[widths.size - 1]
+    let rightMargin = rowW - rightEnd
+    ctx.ck(absF(leftMargin - rightMargin) < 1e-9,
+        "J22 ${variant} ${state} w=${rowW} margins l=${leftMargin} r=${rightMargin}")
+    var gi: Int64 = 1
+    while (gi < xs.size) {
+        ctx.ck(absF((xs[gi] - (xs[gi - 1] + widths[gi - 1])) - 8.0) < 1e-9,
+            "J22 ${variant} ${state} w=${rowW} gap[${gi}]=${xs[gi] - xs[gi - 1] - widths[gi - 1]} want=8")
+        gi = gi + 1
+    }
+    /* laden 行(含负重 chip)须整体容纳在 rowW-32 内(两侧各 16) */
+    if (state == "laden") {
+        ctx.ck(leftMargin >= 16.0 - 1e-9 && rightMargin >= 16.0 - 1e-9,
+            "J22 ${variant} laden w=${rowW} margin<16 l=${leftMargin} r=${rightMargin}")
+        ctx.ck(rightEnd - leftMargin <= rowW - 32.0 + 1e-9,
+            "J22 ${variant} laden w=${rowW} content=${rightEnd - leftMargin} > rowW-32=${rowW - 32.0}")
+    }
+    let xsb = StringBuilder()
+    let wsb = StringBuilder()
+    var fi: Int64 = 0
+    while (fi < xs.size) {
+        if (fi > 0) {
+            xsb.append(",")
+            wsb.append(",")
+        }
+        xsb.append("${xs[fi]}")
+        wsb.append("${widths[fi]}")
+        fi = fi + 1
+    }
+    println("J22 chips w=${rowW} ${variant} ${state} n=${xs.size} x=[${xsb.toString()}] widths=[${wsb.toString()}] leftMargin=${leftMargin} gap=8")
+    return xs
+}
+
+/* 负重 chip 出现:前面每个 chip 恰左移 (76+8)/2=42,负重 chip 最右。 */
+func j22ShiftCheck(variant: String, idle: Array<Float64>, laden: Array<Float64>, ctx: Ctx): Unit {
+    var i: Int64 = 0
+    while (i < idle.size) {
+        ctx.ck(absF(laden[i] - (idle[i] - 42.0)) < 1e-9,
+            "J22 ${variant} burden shift chip[${i}]=${laden[i] - idle[i]} want=-42")
+        i = i + 1
+    }
+    ctx.ck(laden[laden.size - 1] > idle[idle.size - 1],
+        "J22 ${variant} burden chip not rightmost last=${laden[laden.size - 1]} idleLast=${idle[idle.size - 1]}")
+}
+
+func j22HeaderChipTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
+    let checks0 = ctx.checks
+    var lv90: Option<LevelDef> = None
+    for (lv in levels) {
+        if (lv.id == 90) {
+            lv90 = Some(lv)
+        }
+    }
+    match (lv90) {
+        case None => ctx.ck(false, "J22 level 90 missing from catalog")
+        case Some(src) =>
+            /* (1) 变体 A:仅 stepLimit=60;变体 B:再加一条奇偶边(首步 6,6→5,6 filled=1 奇,放行)。 */
+            let la = j22CopyLevel(src)
+            la.stepLimit = 60
+            let lb = j22CopyLevel(src)
+            lb.stepLimit = 60
+            lb.parityEdges.add(ParityEdge(6, 6, 5, 6, true, false))
+            /* (2) 在拷贝(变体 B)上重放 8 次输入:前 7 次后未负重,第 8 次(4,5 装粮格)后负重。 */
+            let g = PatrolGame(lb)
+            let taps: Array<(Int64, Int64)> = [(6, 6), (5, 6), (4, 6), (3, 6), (2, 6), (2, 5), (3, 5), (4, 5)]
+            var ti: Int64 = 0
+            while (ti < taps.size) {
+                ctx.ck(g.tryStep(Cell(taps[ti][0], taps[ti][1])),
+                    "J22 tap ${taps[ti][0]},${taps[ti][1]} rejected code=${g.lastReject}")
+                if (ti < 7) {
+                    ctx.ck(!g.laden, "J22 laden=true after tap ${ti + 1}")
+                } else {
+                    ctx.ck(g.laden, "J22 laden=false after tap 8 (load cell 4,5)")
+                }
+                ti = ti + 1
+            }
+            ctx.ck(g.filled() == 8, "J22 filled=${g.filled()} want=8")
+            ctx.ck(lb.stepLimit - g.filled() == 52, "J22 remaining=${lb.stepLimit - g.filled()} want=52")
+            /* (3) 三个宽度 × A/B × idle/laden 的排布断言(模型宽 + chipRowOffsets)。 */
+            let parityW = j22TextChipW("第 3 步")
+            let stepW = j22TextChipW("余步 · 52")
+            ctx.ck(absF(parityW - (12.0 + 12.0 + 2.0 + 15.0 + 4.0 + 8.5 + 4.0 + 15.0)) < 1e-9,
+                "J22 parity chip w=${parityW} want=72.5")
+            ctx.ck(absF(stepW - (12.0 + 12.0 + 2.0 + 15.0 + 15.0 + 4.0 + 5.0 + 4.0 + 8.5 + 8.5)) < 1e-9,
+                "J22 step chip w=${stepW} want=86")
+            let rowWs = [411.0, 360.0, 393.0]
+            for (rowW in rowWs) {
+                let nA0 = 0 + 1 + 0
+                let nA1 = 0 + 1 + 1
+                let nB0 = 1 + 1 + 0
+                let nB1 = 1 + 1 + 1
+                let aIdle = j22Row(rowW, "A", "idle", j22ChipWidths(false, true, false, parityW, stepW), nA0, ctx)
+                let aLaden = j22Row(rowW, "A", "laden", j22ChipWidths(false, true, true, parityW, stepW), nA1, ctx)
+                let bIdle = j22Row(rowW, "B", "idle", j22ChipWidths(true, true, false, parityW, stepW), nB0, ctx)
+                let bLaden = j22Row(rowW, "B", "laden", j22ChipWidths(true, true, true, parityW, stepW), nB1, ctx)
+                j22ShiftCheck("A", aIdle, aLaden, ctx)
+                j22ShiftCheck("B", bIdle, bLaden, ctx)
+            }
+            /* (4) 共享目录对象未被改动:stepLimit=0、无奇偶边、仍有 burden。 */
+            ctx.ck(src.stepLimit == 0, "J22 shared id=90 stepLimit=${src.stepLimit} want=0")
+            ctx.ck(src.parityEdges.size == 0, "J22 shared id=90 parityEdges=${src.parityEdges.size} want=0")
+            ctx.ck(src.burden.isSome(), "J22 shared id=90 burden missing")
+            ctx.ck(la.stepLimit == 60 && lb.parityEdges.size == 1, "J22 copies not configured as planned")
+    }
+    println("J22 header chips done checks=${ctx.checks - checks0}")
+}
+
 /* ===== P4 DUMP:按场景文件渲染 app 各板层 JSON(与设计稿 PNG 对拍,box-only) ===== */
 
 func dumpBool(v: Bool): String {
@@ -2129,6 +2327,8 @@ main(args: Array<String>): Int64 {
     j20SkinGeomTests(levels, ctx)
     /* J21 toast placement checks。 */
     j21ToastTests(levels, ctx)
+    /* J22 header chip row checks。 */
+    j22HeaderChipTests(levels, ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit}")
     ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")
