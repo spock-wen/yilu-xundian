@@ -1514,6 +1514,7 @@ class EntryView {
                 if (this.hasParityBoard() || this.curLevel().stepLimit > 0 || this.hasBurden()) {
                     Row(space: 8) {
                         if (this.hasParityBoard()) {
+                            // Keels 0.2.2: .border() resets radius to 0, so .borderRadius() MUST come after .border() (see scripts/check_border_radius.py)
                             Text(this.stepChipLabel())
                                 .fontSize(15)
                                 .fontWeight(FontWeight.Bold)
@@ -1521,8 +1522,8 @@ class EntryView {
                                 .fontFamily(this.serifBoldFamily())
                                 .padding(left: 12, right: 12)
                                 .height(28)
-                                .borderRadius(4)
                                 .border(width: 1, color: this.stepChipBorder())
+                                .borderRadius(4)
                                 .backgroundColor(Theme.whitePaper)
                         }
                         if (this.curLevel().stepLimit > 0) {
@@ -1533,8 +1534,8 @@ class EntryView {
                                 .fontFamily(this.serifBoldFamily())
                                 .padding(left: 12, right: 12)
                                 .height(28)
-                                .borderRadius(4)
                                 .border(width: this.stepLeftBorderW(), color: this.stepLeftBorderColor())
+                                .borderRadius(4)
                                 .backgroundColor(Theme.whitePaper)
                         }
                         if (this.hasBurden() && this.ladenNow()) {
@@ -1565,8 +1566,8 @@ class EntryView {
                                     .height(28)
                             }
                             .height(28)
-                            .borderRadius(4)
                             .border(width: 1, color: Theme.paperLine)
+                            .borderRadius(4)
                             .backgroundColor(Theme.whitePaper)
                         }
                     }
