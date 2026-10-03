@@ -7,8 +7,8 @@ ineffective (square corners on device). This script splits index.cj into modifie
 chains (maximal runs of consecutive lines starting with `.`), and flags any chain
 where `.borderRadius(` precedes a `.border(` that carries no `radius:` argument.
 
-Exit codes: 0 PASS, 1 violation in an enforced chain (or any violation with
---strict), 2 an enforced anchor is missing or its chain's radius is not 4.
+Exit codes: 0 PASS, 1 any border/borderRadius ordering violation,
+2 an enforced anchor is missing or its chain's radius is not 4.
 """
 import argparse
 import os
@@ -63,28 +63,21 @@ def chain_calls(chain):
     return border_idx, radius_idx, radius_val
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("path", nargs="?", default=DEFAULT_LIB,
-                    help="index.cj to lint (default: ../lib/index.cj)")
-    ap.add_argument("--strict", action="store_true",
-                    help="fail on violations in non-enforced chains too")
-    ap.add_argument("--verbose", action="store_true",
-                    help="also print OK lines for correct chains")
-    args = ap.parse_args()
+def check_source(text, filename="index.cj", check_anchors=False, verbose=False):
+    """Check text for border/borderRadius ordering violations.
 
-    text = open(args.path, encoding="utf-8").read()
+    Returns (violations, enforced_ok, missing_anchors).
+    """
     lines = text.splitlines()
-    name = os.path.basename(args.path)
+    name = os.path.basename(filename)
 
     enforced_ok = 0
-    warnings = 0
-    failures = 0
-    anchor_seen = {a: False for a in ENFORCED_ANCHORS}
+    violations = []
+    anchor_seen = {a: False for a in ENFORCED_ANCHORS} if check_anchors else {}
 
     for start, chain in split_chains(lines):
         calls = chain_calls(chain)
-        enforced = any(a in line for line in chain for a in ENFORCED_ANCHORS)
+        enforced = check_anchors and any(a in line for line in chain for a in ENFORCED_ANCHORS)
         if enforced:
             for a in ENFORCED_ANCHORS:
                 if any(a in line for line in chain) and calls is not None:
@@ -96,34 +89,94 @@ def main():
         border_idx, radius_idx, radius_val = calls
         radius_line = start + radius_idx
         if radius_idx < border_idx:
-            msg = ("VIOLATION %s:%d radius=%s chain starts line %d"
+            msg = ("VIOLATION %s:%d radius=%s chain starts line %d: borderRadius before border"
                    % (name, radius_line, radius_val, start))
-            if enforced:
-                print("FAIL: chip chain %s:%d borderRadius before border (%s)"
-                      % (name, radius_line, msg))
-                failures += 1
-            elif args.strict:
-                print(msg)
-                failures += 1
-            else:
-                print("%s WARN known-unfixed" % msg)
-                warnings += 1
+            violations.append(msg)
         else:
             if enforced:
                 enforced_ok += 1
-            if args.verbose:
+            if verbose:
                 print("OK %s:%d radius=%s chain starts line %d"
                       % (name, radius_line, radius_val, start))
 
-    missing = [a for a, seen in anchor_seen.items() if not seen]
+    missing = [a for a, seen in anchor_seen.items() if not seen] if check_anchors else []
+    return violations, enforced_ok, missing
+
+
+def run_selftest():
+    bad_snippet = """
+    Row()
+        .borderRadius(8)
+        .border(width: 1, color: Theme.accent)
+    """
+    good_snippet_after = """
+    Row()
+        .border(width: 1, color: Theme.accent)
+        .borderRadius(8)
+    """
+    good_snippet_with_radius = """
+    Row()
+        .borderRadius(8)
+        .border(width: 1, color: Theme.accent, radius: 8)
+    """
+
+    try:
+        # 1. borderRadius before border (without radius:) must be caught
+        v_bad, _, _ = check_source(bad_snippet, "test.cj", check_anchors=False)
+        assert len(v_bad) == 1, f"Expected 1 violation in bad snippet, got {len(v_bad)}"
+        assert "borderRadius before border" in v_bad[0], f"Unexpected violation message: {v_bad[0]}"
+
+        # 2. borderRadius after border must pass
+        v_good1, _, _ = check_source(good_snippet_after, "test.cj", check_anchors=False)
+        assert len(v_good1) == 0, f"Expected 0 violations in good snippet (after), got {len(v_good1)}"
+
+        # 3. .border(..., radius: 8) with radius parameter must pass
+        v_good2, _, _ = check_source(good_snippet_with_radius, "test.cj", check_anchors=False)
+        assert len(v_good2) == 0, f"Expected 0 violations in good snippet (with radius:), got {len(v_good2)}"
+
+        # 4. Combined good snippet must also pass
+        good_combined = good_snippet_after + "\n" + good_snippet_with_radius
+        v_comb, _, _ = check_source(good_combined, "test.cj", check_anchors=False)
+        assert len(v_comb) == 0, f"Expected 0 violations in combined good snippets, got {len(v_comb)}"
+    except AssertionError as e:
+        print("selftest FAIL: %s" % e, file=sys.stderr)
+        sys.exit(1)
+
+    print("selftest OK")
+    sys.exit(0)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("path", nargs="?", default=DEFAULT_LIB,
+                    help="index.cj to lint (default: ../lib/index.cj)")
+    ap.add_argument("--strict", action="store_true",
+                    help="fail on violations in non-enforced chains too (retained for compatibility)")
+    ap.add_argument("--verbose", action="store_true",
+                    help="also print OK lines for correct chains")
+    ap.add_argument("--selftest", action="store_true",
+                    help="run self-test assertions on in-memory code snippets")
+    args = ap.parse_args()
+
+    if args.selftest:
+        run_selftest()
+
+    text = open(args.path, encoding="utf-8").read()
+    violations, enforced_ok, missing = check_source(
+        text, filename=args.path, check_anchors=True, verbose=args.verbose
+    )
+
+    for v in violations:
+        print(v)
+
     if missing:
         print("FAIL: anchor missing or radius!=4: %s" % "; ".join(missing))
         sys.exit(2)
-    if failures:
-        print("check_border_radius: FAIL (%d failures, %d warnings)" % (failures, warnings))
+    if violations:
+        print("check_border_radius: FAIL (%d violations)" % len(violations))
         sys.exit(1)
-    print("check_border_radius: PASS (%d enforced chains ok, %d warnings)"
-          % (enforced_ok, warnings))
+    print("check_border_radius: PASS (%d enforced chains ok, 0 violations)"
+          % enforced_ok)
 
 
 if __name__ == "__main__":
