@@ -29,6 +29,7 @@
 # Template patches applied automatically:
 #   STEP C   xundian.cpp FindClass com/example -> com/yilu (Android)
 #   STEP C2  EntryEntryAbilityActivity system-back guard (Android)
+#   STEP C3  EntryEntryAbilityActivity setenv YILU_FILES_DIR (Android, progress save dir)
 #   STEP D   IPHONEOS_DEPLOYMENT_TARGET 12.0 -> 15.0 (iOS pbxproj)
 #   STEP D2  iOS host UIScene lifecycle patch (TN3187): scene manifest +
 #            SceneDelegate, window/root-VC moved out of AppDelegate
@@ -249,6 +250,21 @@ if ! grep -q "backPressed forward failed" "$ACT"; then
   exit 1
 fi
 echo "  Patched: onBackPressed guard -> forward-or-background."
+fi
+
+# ---------------------------------------------------------------------------
+# STEP C3: Patch EntryEntryAbilityActivity — export YILU_FILES_DIR (progress)
+#
+# Keels 0.2.2 has no Cangjie API to get the Android filesDir, so progress
+# save/load has no writable directory on Android. The host-side patch sets
+# YILU_FILES_DIR to the activity's filesDir before the runtime starts; the
+# Cangjie side (mobile/cjmp/lib/progress_io.cj makeProgressBackend) reads it
+# via std.env.getVariable and falls back to NullProgressBackend when absent.
+# ---------------------------------------------------------------------------
+echo "STEP C3: Patching EntryEntryAbilityActivity (YILU_FILES_DIR for progress save)"
+if ! "$PY" "$SCRIPT_DIR/patch_android_filesdir.py" patch "$ACT"; then
+  echo "ERROR: patch_android_filesdir.py patch failed (Keels template changed?)" >&2
+  exit 1
 fi
 
 # ---------------------------------------------------------------------------
