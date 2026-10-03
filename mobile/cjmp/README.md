@@ -68,6 +68,14 @@ SVG 图标（`icon-undo`、`icon-reset`）与字体的同步行为不变。
 
 可选中的字符集来自解析 `Text(...)` / `Button(...)` 及其后链式 `.fontFamily(...)`：静态字符串按其字面字符计入；含 `${...}` 插值或非字面量表达式则计入「动态数据字符集」（chapter.cj 全部字符串字面量 + levels.json 所有关卡 `name` + 数字 0-9 + 全部可打印 ASCII）。任何未被 `.fontFamily(...)` 覆盖的 `Text`/`Button` 视为错误（`NO_FAMILY` —— 全部文字必须使用内置字体，绝不允许系统字体）。
 
+## 进度存档
+
+- **当前状态**：纯逻辑已完成 —— `lib/progress.cj`（编解码、校验、`ProgressStore`、`ProgressBackend` 接口），`index.cj` 接线（启动时 `aboutToAppear` 读取、通关时写），selftest J23 覆盖。平台后端 `lib/progress_io.cj` 的 `makeProgressBackend()` 目前返回 `NullProgressBackend`（即暂不落盘），后续替换为 std.fs 文件实现：iOS 用 `std.env.getHomeDirectory()`，Android 目录由宿主补丁经环境变量 `YILU_FILES_DIR` 传入，读不到就用 Null 后端。（Mac 只读探测已确认 PersistentStorage 在 0.2.2 的 Android/iOS 库里不存在，故不用。）
+- **存档格式**：`{"v":1,"cleared":N}`；`cleared` = 已通关数（0..总关数，总关数取 `levels.size`，当前 100）；`v` 不为 1、JSON 损坏、负数、非整数、超长数字一律按 0；超过总关数则截断到总关数；写失败只打一行 `[progress] save failed: ...` 并降级为内存。
+- **已知问题**：后端未接通前重启会丢进度；Android 返回键补丁用 moveTaskToBack，进程存活，不能当「杀进程」；iOS HOME=数据容器、Android 目录来源待真机核实。
+- **清除办法**：Android `adb shell pm clear com.yilu.xundian`；iOS 模拟器 `xcrun simctl uninstall booted com.yilu.xundian`。不提供 App 内清除入口（PM 已定）。
+- **Mac 验证要点**：Android：安装→通几关→`adb shell am force-stop com.yilu.xundian`→重新启动→首页「已通 N」保持→`pm clear`→重启回到只开第一关；`adb logcat | grep '\[progress\]'`。iOS：`xcrun simctl terminate booted com.yilu.xundian`→`simctl launch`→同上；清除用 `simctl uninstall`。杀进程必须用 am force-stop / simctl terminate，不能用返回键。
+
 ## 已知问题与变通方案 (Workarounds)
 
 - **资源引用**：CJMP OpenSDK 0.2.2 暂不支持 `@r` 语法，图片与媒体资源统一通过 `resource://RAWFILE/` 协议路径加载。
