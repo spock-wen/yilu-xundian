@@ -627,3 +627,99 @@ public func footerCurrentLines(n: Int64, curName: String, dims: String, winW: Fl
     return [full]
 }
 
+/* 驿程全表行与章内驿程行几何与字号规格 (SPEC B3–B7, 06-levels, RULINGS_ABF56B0, render_cjmp_gaps_v1).
+   全表(global): h64, ringR 14, ringD 28, numFont 14(Serif Bold), nameFont 20(Serif Bold),
+     metaFont 12(Sans), padLeft 14, nameGap 16, statusRightInset 16, lockRight 28 (lockCx=W-48,
+     rowRight=W-20 -> (W-20)-(W-48)=28), badgeFont 12.
+     环心 x=48 (pageInset 20 + padLeft 14 + ringR 14 = 48), 驿名左缘 x=78 (48 + 14 + 16 = 78).
+   章内(chapter): h52, ringR 13, ringD 26, numFont 13(Serif Bold), nameFont 16(Serif Bold),
+     metaFont 11(Sans), padLeft 15, nameGap 13, statusRightInset 16, lockRight 18 (lockCx=W-38,
+     rowRight=W-20 -> (W-20)-(W-38)=18), badgeFont 11.
+     环心 x=48 (pageInset 20 + padLeft 15 + ringR 13 = 48), 驿名左缘 x=74 (48 + 13 + 13 = 74). */
+public class StationRowGeom {
+    public var rowH: Int64
+    public var ringR: Int64
+    public var numFont: Int64
+    public var nameFont: Int64
+    public var metaFont: Int64
+    public var padLeft: Int64
+    public var nameGap: Int64
+    public var statusRightInset: Int64
+    public var lockRight: Int64
+    public var lockCx: Int64
+    public var badgeFont: Int64
+
+    public init(
+        rowH: Int64,
+        ringR: Int64,
+        numFont: Int64,
+        nameFont: Int64,
+        metaFont: Int64,
+        padLeft: Int64,
+        nameGap: Int64,
+        statusRightInset: Int64,
+        lockRight: Int64,
+        badgeFont: Int64
+    ) {
+        this.rowH = rowH
+        this.ringR = ringR
+        this.numFont = numFont
+        this.nameFont = nameFont
+        this.metaFont = metaFont
+        this.padLeft = padLeft
+        this.nameGap = nameGap
+        this.statusRightInset = statusRightInset
+        this.lockRight = lockRight
+        this.lockCx = lockRight
+        this.badgeFont = badgeFont
+    }
+
+    public func ringD(): Int64 {
+        return this.ringR * 2
+    }
+
+    public func ringDiameter(): Int64 {
+        return this.ringR * 2
+    }
+
+    public static func global(): StationRowGeom {
+        return StationRowGeom(
+            64, 14, 14, 20, 12, 14, 16, 16, 28, 12
+        )
+    }
+
+    public static func chapter(): StationRowGeom {
+        return StationRowGeom(
+            52, 13, 13, 16, 11, 15, 13, 16, 18, 11
+        )
+    }
+
+    // Static constants for direct access
+    public static const globalRowH: Int64 = 64
+    public static const globalRingR: Int64 = 14
+    public static const globalRingD: Int64 = 28
+    public static const globalNumFont: Int64 = 14
+    public static const globalNameFont: Int64 = 20
+    public static const globalMetaFont: Int64 = 12
+    public static const globalPadLeft: Int64 = 14
+    public static const globalNameGap: Int64 = 16
+    public static const globalStatusRightInset: Int64 = 16
+    public static const globalLockRight: Int64 = 28
+    public static const globalLockCx: Int64 = 28
+    public static const globalBadgeFont: Int64 = 12
+
+    public static const chapterRowH: Int64 = 52
+    public static const chapterRingR: Int64 = 13
+    public static const chapterRingD: Int64 = 26
+    public static const chapterNumFont: Int64 = 13
+    public static const chapterNameFont: Int64 = 16
+    public static const chapterMetaFont: Int64 = 11
+    public static const chapterPadLeft: Int64 = 15
+    public static const chapterNameGap: Int64 = 13
+    public static const chapterStatusRightInset: Int64 = 16
+    public static const chapterLockRight: Int64 = 18
+    public static const chapterLockCx: Int64 = 18
+    public static const chapterBadgeFont: Int64 = 11
+}
+
+

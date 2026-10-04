@@ -273,10 +273,10 @@ class EntryView {
         .height(this.lockH())
     }
 
-    @Builder func dessertTag(state: Int64) {
+    @Builder func dessertTag(state: Int64, font: Int64) {
         if (state == 0) {
             Text("点心")
-                .fontSize(11)
+                .fontSize(font)
                 .fontColor(Theme.inkMuted)
                 .fontFamily(this.sansFamily())
                 .height(18)
@@ -287,7 +287,7 @@ class EntryView {
                 .borderRadius(3)
         } else if (state == 1) {
             Text("点心")
-                .fontSize(11)
+                .fontSize(font)
                 .fontColor(Theme.ink)
                 .fontFamily(this.sansFamily())
                 .height(18)
@@ -297,7 +297,7 @@ class EntryView {
                 .borderRadius(3)
         } else {
             Text("点心")
-                .fontSize(11)
+                .fontSize(font)
                 .fontColor(Theme.locked)
                 .fontFamily(this.sansFamily())
                 .height(18)
@@ -858,6 +858,13 @@ class EntryView {
         return 1.0
     }
 
+    func rowBg(index: Int64): Int64 {
+        if (index > this.cleared) {
+            return Theme.paper
+        }
+        return Theme.whitePaper
+    }
+
     func groupChapterId(index: Int64): Int64 {
         return ChapterCatalog.chapterIdForLevel(index)
     }
@@ -1108,92 +1115,97 @@ class EntryView {
                                     }
                                     Row {
                                         if (index < this.cleared) {
-                                            this.checkCircleIcon(36)
+                                            this.checkCircleIcon(StationRowGeom.globalRingD)
                                             Column {
                                                 Text(item.name)
-                                                    .fontSize(18)
+                                                    .fontSize(StationRowGeom.globalNameFont)
                                                     .fontColor(Theme.ink)
                                                     .fontFamily(this.serifBoldFamily())
                                                     .fontWeight(FontWeight.Bold)
+                                                    .maxLines(2)
                                                 Text("${item.cols}×${item.rows}")
-                                                    .fontSize(12)
+                                                    .fontSize(StationRowGeom.globalMetaFont)
                                                     .fontColor(Theme.inkMuted)
                                                     .fontFamily(this.sansFamily())
                                             }
-                                            .margin(left: 12)
+                                            .margin(left: StationRowGeom.globalNameGap)
                                             .alignItems(HorizontalAlign.Start)
                                             Blank()
                                             Row(space: 10) {
                                                 if (ChapterCatalog.isDessert(item.id)) {
-                                                    this.dessertTag(0)
+                                                    this.dessertTag(0, StationRowGeom.globalBadgeFont)
                                                 }
                                                 Text("已通")
-                                                    .fontSize(14)
+                                                    .fontSize(StationRowGeom.globalMetaFont)
                                                     .fontColor(Theme.success)
                                                     .fontFamily(this.sansFamily())
                                             }
                                             .alignItems(VerticalAlign.Center)
                                         } else if (index == this.cleared) {
                                             Text("${index + 1}")
-                                                .fontSize(16)
+                                                .fontSize(StationRowGeom.globalNumFont)
                                                 .fontColor(Theme.whitePaper)
-                                                .fontFamily(this.serifFamily())
-                                                .width(36)
-                                                .height(36)
+                                                .fontFamily(this.serifBoldFamily())
+                                                .fontWeight(FontWeight.Bold)
+                                                .width(StationRowGeom.globalRingD)
+                                                .height(StationRowGeom.globalRingD)
                                                 .backgroundColor(Theme.ink)
-                                                .borderRadius(18)
+                                                .borderRadius(StationRowGeom.globalRingR)
                                                 .textAlign(TextAlign.Center)
                                             Column {
                                                 Text(item.name)
-                                                    .fontSize(18)
+                                                    .fontSize(StationRowGeom.globalNameFont)
                                                     .fontColor(Theme.ink)
                                                     .fontFamily(this.serifBoldFamily())
                                                     .fontWeight(FontWeight.Bold)
+                                                    .maxLines(2)
                                                 Text("${item.cols}×${item.rows}")
-                                                    .fontSize(12)
+                                                    .fontSize(StationRowGeom.globalMetaFont)
                                                     .fontColor(Theme.inkMuted)
                                                     .fontFamily(this.sansFamily())
                                             }
-                                            .margin(left: 12)
+                                            .margin(left: StationRowGeom.globalNameGap)
                                             .alignItems(HorizontalAlign.Start)
                                             Blank()
                                             Row(space: 10) {
                                                 if (ChapterCatalog.isDessert(item.id)) {
-                                                    this.dessertTag(1)
+                                                    this.dessertTag(1, StationRowGeom.globalBadgeFont)
                                                 }
                                                 Text("当前")
-                                                    .fontSize(14)
+                                                    .fontSize(StationRowGeom.globalMetaFont)
                                                     .fontColor(Theme.ink)
                                                     .fontFamily(this.sansFamily())
                                             }
                                             .alignItems(VerticalAlign.Center)
                                         } else {
                                             Text("${index + 1}")
-                                                .fontSize(16)
+                                                .fontSize(StationRowGeom.globalNumFont)
                                                 .fontColor(Theme.locked)
-                                                .fontFamily(this.serifFamily())
-                                                .width(36)
-                                                .height(36)
+                                                .fontFamily(this.serifBoldFamily())
+                                                .fontWeight(FontWeight.Bold)
+                                                .width(StationRowGeom.globalRingD)
+                                                .height(StationRowGeom.globalRingD)
                                                 .border(width: 1, color: Theme.locked)
-                                                .borderRadius(18)
+                                                .borderRadius(StationRowGeom.globalRingR)
                                                 .textAlign(TextAlign.Center)
                                             Column {
                                                 Text(item.name)
-                                                    .fontSize(18)
+                                                    .fontSize(StationRowGeom.globalNameFont)
                                                     .fontColor(Theme.locked)
                                                     .fontFamily(this.serifBoldFamily())
                                                     .fontWeight(FontWeight.Bold)
+                                                    .maxLines(2)
                                                 Text("${item.cols}×${item.rows}")
-                                                    .fontSize(12)
+                                                    .fontSize(StationRowGeom.globalMetaFont)
                                                     .fontColor(Theme.locked)
                                                     .fontFamily(this.sansFamily())
                                             }
-                                            .margin(left: 12)
+                                            .margin(left: StationRowGeom.globalNameGap)
                                             .alignItems(HorizontalAlign.Start)
                                             Blank()
                                             Row(space: 17) {
                                                 if (ChapterCatalog.isDessert(item.id)) {
-                                                    this.dessertTag(2)
+                                                    this.dessertTag(2, StationRowGeom.globalBadgeFont)
                                                 }
                                                 this.lockIcon(Theme.locked)
                                             }
@@ -1201,9 +1213,9 @@ class EntryView {
                                         }
                                     }
                                     .width(100.percent)
-                                    .height(64)
-                                    .padding(left: 14, right: 16)
-                                    .backgroundColor(Theme.whitePaper)
+                                    .height(StationRowGeom.globalRowH)
+                                    .padding(left: StationRowGeom.globalPadLeft, right: StationRowGeom.globalStatusRightInset)
+                                    .backgroundColor(this.rowBg(index))
                                     .border(width: this.rowBorderW(index), color: this.rowBorder(index))
                                     .borderRadius(8)
                                     .onClick({event => this.openFromList(index)})
@@ -1490,92 +1502,97 @@ class EntryView {
                             itemGenerator: {item: LevelDef, index: Int64 =>
                                 Row {
                                     if (item.id < this.cleared) {
-                                        this.checkCircleIcon(32)
+                                        this.checkCircleIcon(StationRowGeom.chapterRingD)
                                         Column {
                                             Text(item.name)
-                                                .fontSize(16)
+                                                .fontSize(StationRowGeom.chapterNameFont)
                                                 .fontColor(Theme.ink)
                                                 .fontFamily(this.serifBoldFamily())
                                                 .fontWeight(FontWeight.Bold)
+                                                .maxLines(2)
                                             Text("${item.cols}×${item.rows}")
-                                                .fontSize(12)
+                                                .fontSize(StationRowGeom.chapterMetaFont)
                                                 .fontColor(Theme.inkMuted)
                                                 .fontFamily(this.sansFamily())
                                         }
-                                        .margin(left: 10)
+                                        .margin(left: StationRowGeom.chapterNameGap)
                                         .alignItems(HorizontalAlign.Start)
                                         Blank()
                                         Row(space: 10) {
                                             if (ChapterCatalog.isDessert(item.id)) {
-                                                this.dessertTag(0)
+                                                this.dessertTag(0, StationRowGeom.chapterBadgeFont)
                                             }
                                             Text("已通")
-                                                .fontSize(12)
+                                                .fontSize(StationRowGeom.chapterMetaFont)
                                                 .fontColor(Theme.success)
                                                 .fontFamily(this.sansFamily())
                                         }
                                         .alignItems(VerticalAlign.Center)
                                     } else if (item.id == this.cleared) {
                                         Text("${index + 1}")
-                                            .fontSize(14)
+                                            .fontSize(StationRowGeom.chapterNumFont)
                                             .fontColor(Theme.whitePaper)
-                                            .fontFamily(this.serifFamily())
-                                            .width(32)
-                                            .height(32)
+                                            .fontFamily(this.serifBoldFamily())
+                                            .fontWeight(FontWeight.Bold)
+                                            .width(StationRowGeom.chapterRingD)
+                                            .height(StationRowGeom.chapterRingD)
                                             .backgroundColor(Theme.ink)
-                                            .borderRadius(16)
+                                            .borderRadius(StationRowGeom.chapterRingR)
                                             .textAlign(TextAlign.Center)
                                         Column {
                                             Text(item.name)
-                                                .fontSize(16)
+                                                .fontSize(StationRowGeom.chapterNameFont)
                                                 .fontColor(Theme.ink)
                                                 .fontFamily(this.serifBoldFamily())
                                                 .fontWeight(FontWeight.Bold)
+                                                .maxLines(2)
                                             Text("${item.cols}×${item.rows}")
-                                                .fontSize(12)
+                                                .fontSize(StationRowGeom.chapterMetaFont)
                                                 .fontColor(Theme.inkMuted)
                                                 .fontFamily(this.sansFamily())
                                         }
-                                        .margin(left: 10)
+                                        .margin(left: StationRowGeom.chapterNameGap)
                                         .alignItems(HorizontalAlign.Start)
                                         Blank()
                                         Row(space: 10) {
                                             if (ChapterCatalog.isDessert(item.id)) {
-                                                this.dessertTag(1)
+                                                this.dessertTag(1, StationRowGeom.chapterBadgeFont)
                                             }
                                             Text("当前")
-                                                .fontSize(12)
+                                                .fontSize(StationRowGeom.chapterMetaFont)
                                                 .fontColor(Theme.ink)
                                                 .fontFamily(this.sansFamily())
                                         }
                                         .alignItems(VerticalAlign.Center)
                                     } else {
                                         Text("${index + 1}")
-                                            .fontSize(14)
+                                            .fontSize(StationRowGeom.chapterNumFont)
                                             .fontColor(Theme.locked)
-                                            .fontFamily(this.serifFamily())
-                                            .width(32)
-                                            .height(32)
+                                            .fontFamily(this.serifBoldFamily())
+                                            .fontWeight(FontWeight.Bold)
+                                            .width(StationRowGeom.chapterRingD)
+                                            .height(StationRowGeom.chapterRingD)
                                             .border(width: 1, color: Theme.locked)
-                                            .borderRadius(16)
+                                            .borderRadius(StationRowGeom.chapterRingR)
                                             .textAlign(TextAlign.Center)
                                         Column {
                                             Text(item.name)
-                                                .fontSize(16)
+                                                .fontSize(StationRowGeom.chapterNameFont)
                                                 .fontColor(Theme.locked)
                                                 .fontFamily(this.serifBoldFamily())
                                                 .fontWeight(FontWeight.Bold)
+                                                .maxLines(2)
                                             Text("${item.cols}×${item.rows}")
-                                                .fontSize(12)
+                                                .fontSize(StationRowGeom.chapterMetaFont)
                                                 .fontColor(Theme.locked)
                                                 .fontFamily(this.sansFamily())
                                         }
-                                        .margin(left: 10)
+                                        .margin(left: StationRowGeom.chapterNameGap)
                                         .alignItems(HorizontalAlign.Start)
                                         Blank()
                                         Row(space: 17) {
                                             if (ChapterCatalog.isDessert(item.id)) {
-                                                this.dessertTag(2)
+                                                this.dessertTag(2, StationRowGeom.chapterBadgeFont)
                                             }
                                             this.lockIcon(Theme.locked)
                                         }
@@ -1583,9 +1600,9 @@ class EntryView {
                                     }
                                 }
                                 .width(100.percent)
-                                .height(52)
-                                .padding(left: 12, right: 16)
-                                .backgroundColor(Theme.whitePaper)
+                                .height(StationRowGeom.chapterRowH)
+                                .padding(left: StationRowGeom.chapterPadLeft, right: StationRowGeom.chapterStatusRightInset)
+                                .backgroundColor(this.rowBg(item.id))
                                 .border(width: this.rowBorderW(item.id), color: this.rowBorder(item.id))
                                 .borderRadius(8)
                                 .onClick({event => this.openFromList(item.id)})

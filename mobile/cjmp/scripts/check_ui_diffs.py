@@ -22,6 +22,9 @@ Checks:
      Text(this.chapterListFooter()) removed
   k) (J18) Theme.sansBold / sansBoldFamily() in lib/*.cj only at home screen Text('章节')
      (exactly 1 .fontFamily(this.sansBoldFamily())), YiluSans-Bold.ttf sha256 prefix 7e46ee679e9d
+  l) (J19) index.cj footer Text width avail+1 and maxLines(1), chapter.cj footerSlack
+  m) (J20) StationRowGeom in chapter.cj; index.cj screen 3 references global constants,
+     screen 5 references chapter constants, old r18/18pt patterns removed, border order maintained
 """
 import argparse
 import hashlib
@@ -253,7 +256,9 @@ def check_f(index_cj_text):
 
     func_body = _extract_brace_body(index_cj_text, m.end())
 
-    for req in ("Theme.paperShade", ".height(18)", ".fontSize(11)", ".borderRadius(3)"):
+    # (J20) badge font is a per-kind parameter (StationRowGeom.globalBadgeFont 12 /
+    # chapterBadgeFont 11) passed by the call sites, no longer the fixed literal 11.
+    for req in ("Theme.paperShade", ".height(18)", ".fontSize(font)", ".borderRadius(3)"):
         if req not in func_body:
             return False, f"dessertTag body missing {req}"
 
@@ -525,6 +530,83 @@ def check_l(index_cj_text, chapter_cj_text):
     return True, "footer Text width avail+1 and maxLines(1) verified, chapter.cj has footerSlack"
 
 
+def check_m(index_cj_text, chapter_cj_text):
+    """m) (J20) StationRowGeom in chapter.cj; index.cj screen 3 references global constants,
+    screen 5 references chapter constants, old r18/18pt patterns removed, border before borderRadius."""
+    if "class StationRowGeom" not in chapter_cj_text:
+        return False, "chapter.cj missing 'class StationRowGeom'"
+
+    for geom_field in ("globalRowH", "globalRingR", "globalNameFont", "chapterRowH", "chapterRingR", "chapterNameFont"):
+        if geom_field not in chapter_cj_text:
+            return False, f"chapter.cj StationRowGeom missing '{geom_field}'"
+
+    # Build-block anchor: 'this.screen == N' also appears in onBackPress/playPaper helpers
+    # before the build(); search screen blocks from 'func build()' onward so the full row
+    # builders are inside the slice.
+    build_idx = index_cj_text.find("func build()")
+    if build_idx < 0:
+        return False, "index.cj missing 'func build()' (screen block anchor)"
+
+    # Screen 3 block (yicheng full list)
+    s3_idx = index_cj_text.find("this.screen == 3", build_idx)
+    if s3_idx < 0:
+        return False, "index.cj missing 'this.screen == 3' block after func build()"
+    s4_idx = index_cj_text.find("this.screen == 4", s3_idx)
+    if s4_idx < 0:
+        return False, "index.cj missing 'this.screen == 4' boundary"
+    s3_text = index_cj_text[s3_idx:s4_idx]
+
+    # Required StationRowGeom references in screen 3
+    for req in ("StationRowGeom.globalRingD", "StationRowGeom.globalNumFont", "StationRowGeom.globalNameFont",
+                "StationRowGeom.globalMetaFont", "StationRowGeom.globalRowH", "StationRowGeom.globalPadLeft",
+                "StationRowGeom.globalNameGap", "StationRowGeom.globalBadgeFont"):
+        if req not in s3_text:
+            return False, f"index.cj screen 3 missing '{req}'"
+
+    # Old r18/18pt forbidden patterns in screen 3
+    if "this.checkCircleIcon(36)" in s3_text:
+        return False, "index.cj screen 3 still contains old 'this.checkCircleIcon(36)' (expected globalRingD 28)"
+    if ".borderRadius(18)" in s3_text:
+        return False, "index.cj screen 3 still contains old '.borderRadius(18)' (expected globalRingR 14)"
+    if ".fontSize(18)" in s3_text:
+        return False, "index.cj screen 3 still contains old '.fontSize(18)' (expected globalNameFont 20)"
+    if ".margin(left: 12)" in s3_text:
+        return False, "index.cj screen 3 still contains old '.margin(left: 12)' (expected globalNameGap 16)"
+
+    # Screen 5 block (chapter levels)
+    s5_idx = index_cj_text.find("this.screen == 5", build_idx)
+    if s5_idx < 0:
+        return False, "index.cj missing 'this.screen == 5' block after func build()"
+    s6_idx = index_cj_text.find("this.screen == 6", s5_idx)
+    s5_end = s6_idx if s6_idx >= 0 else len(index_cj_text)
+    s5_text = index_cj_text[s5_idx:s5_end]
+
+    # Required StationRowGeom references in screen 5
+    for req in ("StationRowGeom.chapterRingD", "StationRowGeom.chapterNumFont", "StationRowGeom.chapterNameFont",
+                "StationRowGeom.chapterMetaFont", "StationRowGeom.chapterRowH", "StationRowGeom.chapterPadLeft",
+                "StationRowGeom.chapterNameGap", "StationRowGeom.chapterBadgeFont"):
+        if req not in s5_text:
+            return False, f"index.cj screen 5 missing '{req}'"
+
+    if "this.checkCircleIcon(32)" in s5_text:
+        return False, "index.cj screen 5 still contains old 'this.checkCircleIcon(32)' (expected chapterRingD 26)"
+    if ".borderRadius(16)" in s5_text:
+        return False, "index.cj screen 5 still contains old '.borderRadius(16)' (expected chapterRingR 13)"
+    if ".margin(left: 10)" in s5_text:
+        return False, "index.cj screen 5 still contains old '.margin(left: 10)' (expected chapterNameGap 13)"
+
+    # Check border before borderRadius in both screen blocks
+    for label, blk in (("screen 3", s3_text), ("screen 5", s5_text)):
+        for start, chain in split_chains(blk.splitlines()):
+            txt = "\n".join(chain)
+            b = txt.find(".border(")
+            r = txt.find(".borderRadius(")
+            if b >= 0 and r >= 0 and b > r:
+                return False, f"index.cj {label} chain has .borderRadius before .border:\n    {txt}"
+
+    return True, "index.cj references StationRowGeom global/chapter constants, old r18/18pt patterns removed, border order maintained"
+
+
 def selftest():
     # 1. Test check_a violation detection
     bad_a_lines = [
@@ -789,6 +871,70 @@ def selftest():
     ok_l_noblock, msg = check_l(bad_l_index_noblock, good_l_chapter)
     assert not ok_l_noblock and "chapterListFooterLines" in msg, f"selftest l: expected block failure, got {msg}"
 
+    # 8. Test check_m station row geometry wiring (J20)
+    good_m_chapter = (
+        "public class StationRowGeom {\n"
+        "    public static const globalRowH: Int64 = 64\n"
+        "    public static const globalRingR: Int64 = 14\n"
+        "    public static const globalNameFont: Int64 = 20\n"
+        "    public static const chapterRowH: Int64 = 52\n"
+        "    public static const chapterRingR: Int64 = 13\n"
+        "    public static const chapterNameFont: Int64 = 16\n"
+        "}\n"
+    )
+    good_m_index = (
+        "func build() {\n"
+        "    Column {\n"
+        "        if (this.screen == 3) {\n"
+        "            this.checkCircleIcon(StationRowGeom.globalRingD)\n"
+        "            Text(\"${index + 1}\").fontSize(StationRowGeom.globalNumFont)\n"
+        "            Text(item.name).fontSize(StationRowGeom.globalNameFont)\n"
+        "            Text(\"x\").fontSize(StationRowGeom.globalMetaFont)\n"
+        "            this.dessertTag(0, StationRowGeom.globalBadgeFont)\n"
+        "            .height(StationRowGeom.globalRowH)\n"
+        "            .padding(left: StationRowGeom.globalPadLeft, right: 16)\n"
+        "            .margin(left: StationRowGeom.globalNameGap)\n"
+        "        } else if (this.screen == 4) {\n"
+        "        } else if (this.screen == 5) {\n"
+        "            this.checkCircleIcon(StationRowGeom.chapterRingD)\n"
+        "            Text(\"${index + 1}\").fontSize(StationRowGeom.chapterNumFont)\n"
+        "            Text(item.name).fontSize(StationRowGeom.chapterNameFont)\n"
+        "            Text(\"x\").fontSize(StationRowGeom.chapterMetaFont)\n"
+        "            this.dessertTag(0, StationRowGeom.chapterBadgeFont)\n"
+        "            .height(StationRowGeom.chapterRowH)\n"
+        "            .padding(left: StationRowGeom.chapterPadLeft, right: 16)\n"
+        "            .margin(left: StationRowGeom.chapterNameGap)\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+    )
+
+    ok_m, msg = check_m(good_m_index, good_m_chapter)
+    assert ok_m, f"selftest m: expected pass, got {msg}"
+
+    # Negative 1: chapter.cj missing StationRowGeom class
+    ok_m_noclass, msg = check_m(good_m_index, "public func foo(): Int64 { return 1 }\n")
+    assert not ok_m_noclass and "StationRowGeom" in msg, f"selftest m: expected class failure, got {msg}"
+
+    # Negative 2: screen 3 reverts to old r18 ring (.borderRadius(18) literal)
+    bad_m_index_r18 = good_m_index.replace(
+        ".height(StationRowGeom.globalRowH)",
+        ".height(StationRowGeom.globalRowH).borderRadius(18)")
+    ok_m_r18, msg = check_m(bad_m_index_r18, good_m_chapter)
+    assert not ok_m_r18 and "borderRadius(18)" in msg, f"selftest m: expected r18 failure, got {msg}"
+
+    # Negative 3: screen 5 drops chapterNameGap reference (back to literal margin)
+    bad_m_index_gap = good_m_index.replace(".margin(left: StationRowGeom.chapterNameGap)", ".margin(left: 10)")
+    ok_m_gap, msg = check_m(bad_m_index_gap, good_m_chapter)
+    assert not ok_m_gap and "chapterNameGap" in msg, f"selftest m: expected nameGap failure, got {msg}"
+
+    # Negative 4: .borderRadius before .border inside screen 3 chain
+    bad_m_index_order = good_m_index.replace(
+        ".height(StationRowGeom.globalRowH)",
+        ".height(StationRowGeom.globalRowH).borderRadius(8).border(width: 1, color: Theme.paperLine)")
+    ok_m_order, msg = check_m(bad_m_index_order, good_m_chapter)
+    assert not ok_m_order and ".borderRadius before .border" in msg, f"selftest m: expected order failure, got {msg}"
+
     print("selftest OK")
     sys.exit(0)
 
@@ -837,6 +983,7 @@ def main():
         ("j) chapter_list_footer_lines", lambda: check_j(index_cj_text)),
         ("k) sans_bold_font_and_usage", lambda: check_k(lib_dir, fonts_dir)),
         ("l) footer_slack_and_avail_width", lambda: check_l(index_cj_text, chapter_cj_text)),
+        ("m) station_row_geom", lambda: check_m(index_cj_text, chapter_cj_text)),
     ]
 
     all_passed = True

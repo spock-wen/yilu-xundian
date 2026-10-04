@@ -2797,6 +2797,46 @@ func j25IconTests(ctx: Ctx): Unit {
         }
     }
 
+    // 2b. 全表行 r=14.0 缩放测试
+    let p14 = checkCircleIconPaths(14.0, 14.0, 14.0, 3.0)
+    ctx.ck(p14.size == 2, "J25 checkCircle r=14 size=${p14.size} want=2")
+    for (i in 0..p14.size) {
+        let p = p14[i]
+        ctx.ck(p.color == Theme.success, "J25 checkCircle r=14 path[${i}] color=${p.color}")
+        ctx.ck(p.stroke == Theme.success, "J25 checkCircle r=14 path[${i}] stroke=${p.stroke}")
+        let nums = j20CmdNums(p.commands, 3.0)
+        var j: Int64 = 0
+        while (j + 1 < nums.size) {
+            let x = nums[j]
+            let y = nums[j + 1]
+            ctx.ck(x >= 14.0 - 14.0 - 0.01 && x <= 14.0 + 14.0 + 0.01,
+                "J25 checkCircle r=14 path[${i}] x=${x}")
+            ctx.ck(y >= 14.0 - 14.0 - 0.01 && y <= 14.0 + 14.0 + 0.01,
+                "J25 checkCircle r=14 path[${i}] y=${y}")
+            j = j + 2
+        }
+    }
+
+    // 2c. 章内行 r=13.0 缩放测试
+    let p13 = checkCircleIconPaths(13.0, 13.0, 13.0, 3.0)
+    ctx.ck(p13.size == 2, "J25 checkCircle r=13 size=${p13.size} want=2")
+    for (i in 0..p13.size) {
+        let p = p13[i]
+        ctx.ck(p.color == Theme.success, "J25 checkCircle r=13 path[${i}] color=${p.color}")
+        ctx.ck(p.stroke == Theme.success, "J25 checkCircle r=13 path[${i}] stroke=${p.stroke}")
+        let nums = j20CmdNums(p.commands, 3.0)
+        var j: Int64 = 0
+        while (j + 1 < nums.size) {
+            let x = nums[j]
+            let y = nums[j + 1]
+            ctx.ck(x >= 13.0 - 13.0 - 0.01 && x <= 13.0 + 13.0 + 0.01,
+                "J25 checkCircle r=13 path[${i}] x=${x}")
+            ctx.ck(y >= 13.0 - 13.0 - 0.01 && y <= 13.0 + 13.0 + 0.01,
+                "J25 checkCircle r=13 path[${i}] y=${y}")
+            j = j + 2
+        }
+    }
+
     // 3. lockIconPaths(10.0, 10.0, 0.62, Theme.locked, 3.0)
     let (boxW, boxH) = lockIconBox(0.62)
     ctx.ck(absF(boxW - 16.0 * 0.62) < 1e-9, "J25 lockIconBox w=${boxW}")
@@ -3272,6 +3312,89 @@ func j30HomeLinkTests(ctx: Ctx): Unit {
     println("J30 home links done checks=${ctx.checks - c0}")
 }
 
+/* ===== J32 驿程行与全表行几何常量自测 (SPEC B3–B7 & render_cjmp_gaps_v1) ===== */
+func j32StationRowTests(ctx: Ctx): Unit {
+    let c0 = ctx.checks
+
+    let g = StationRowGeom.global()
+    let ch = StationRowGeom.chapter()
+
+    // 1. 断言全表 (global) 常量等于上表
+    ctx.ck(g.rowH == 64, "J32 global rowH=${g.rowH} want=64")
+    ctx.ck(g.ringR == 14, "J32 global ringR=${g.ringR} want=14")
+    ctx.ck(g.numFont == 14, "J32 global numFont=${g.numFont} want=14")
+    ctx.ck(g.nameFont == 20, "J32 global nameFont=${g.nameFont} want=20")
+    ctx.ck(g.metaFont == 12, "J32 global metaFont=${g.metaFont} want=12")
+    ctx.ck(g.padLeft == 14, "J32 global padLeft=${g.padLeft} want=14")
+    ctx.ck(g.nameGap == 16, "J32 global nameGap=${g.nameGap} want=16")
+    ctx.ck(g.statusRightInset == 16, "J32 global statusRightInset=${g.statusRightInset} want=16")
+    ctx.ck(g.lockRight == 28, "J32 global lockRight=${g.lockRight} want=28")
+    ctx.ck(g.lockCx == 28, "J32 global lockCx=${g.lockCx} want=28")
+    ctx.ck(g.badgeFont == 12, "J32 global badgeFont=${g.badgeFont} want=12")
+
+    // 2. 断言章内 (chapter) 常量等于上表
+    ctx.ck(ch.rowH == 52, "J32 chapter rowH=${ch.rowH} want=52")
+    ctx.ck(ch.ringR == 13, "J32 chapter ringR=${ch.ringR} want=13")
+    ctx.ck(ch.numFont == 13, "J32 chapter numFont=${ch.numFont} want=13")
+    ctx.ck(ch.nameFont == 16, "J32 chapter nameFont=${ch.nameFont} want=16")
+    ctx.ck(ch.metaFont == 11, "J32 chapter metaFont=${ch.metaFont} want=11")
+    ctx.ck(ch.padLeft == 15, "J32 chapter padLeft=${ch.padLeft} want=15")
+    ctx.ck(ch.nameGap == 13, "J32 chapter nameGap=${ch.nameGap} want=13")
+    ctx.ck(ch.statusRightInset == 16, "J32 chapter statusRightInset=${ch.statusRightInset} want=16")
+    ctx.ck(ch.lockRight == 18, "J32 chapter lockRight=${ch.lockRight} want=18")
+    ctx.ck(ch.lockCx == 18, "J32 chapter lockCx=${ch.lockCx} want=18")
+    ctx.ck(ch.badgeFont == 11, "J32 chapter badgeFont=${ch.badgeFont} want=11")
+
+    // 静态常量断言
+    ctx.ck(StationRowGeom.globalRowH == 64, "J32 StationRowGeom.globalRowH==64")
+    ctx.ck(StationRowGeom.globalRingR == 14, "J32 StationRowGeom.globalRingR==14")
+    ctx.ck(StationRowGeom.globalRingD == 28, "J32 StationRowGeom.globalRingD==28")
+    ctx.ck(StationRowGeom.globalNumFont == 14, "J32 StationRowGeom.globalNumFont==14")
+    ctx.ck(StationRowGeom.globalNameFont == 20, "J32 StationRowGeom.globalNameFont==20")
+    ctx.ck(StationRowGeom.globalMetaFont == 12, "J32 StationRowGeom.globalMetaFont==12")
+    ctx.ck(StationRowGeom.globalPadLeft == 14, "J32 StationRowGeom.globalPadLeft==14")
+    ctx.ck(StationRowGeom.globalNameGap == 16, "J32 StationRowGeom.globalNameGap==16")
+    ctx.ck(StationRowGeom.globalStatusRightInset == 16, "J32 StationRowGeom.globalStatusRightInset==16")
+    ctx.ck(StationRowGeom.globalLockRight == 28, "J32 StationRowGeom.globalLockRight==28")
+    ctx.ck(StationRowGeom.globalBadgeFont == 12, "J32 StationRowGeom.globalBadgeFont==12")
+
+    ctx.ck(StationRowGeom.chapterRowH == 52, "J32 StationRowGeom.chapterRowH==52")
+    ctx.ck(StationRowGeom.chapterRingR == 13, "J32 StationRowGeom.chapterRingR==13")
+    ctx.ck(StationRowGeom.chapterRingD == 26, "J32 StationRowGeom.chapterRingD==26")
+    ctx.ck(StationRowGeom.chapterNumFont == 13, "J32 StationRowGeom.chapterNumFont==13")
+    ctx.ck(StationRowGeom.chapterNameFont == 16, "J32 StationRowGeom.chapterNameFont==16")
+    ctx.ck(StationRowGeom.chapterMetaFont == 11, "J32 StationRowGeom.chapterMetaFont==11")
+    ctx.ck(StationRowGeom.chapterPadLeft == 15, "J32 StationRowGeom.chapterPadLeft==15")
+    ctx.ck(StationRowGeom.chapterNameGap == 13, "J32 StationRowGeom.chapterNameGap==13")
+    ctx.ck(StationRowGeom.chapterStatusRightInset == 16, "J32 StationRowGeom.chapterStatusRightInset==16")
+    ctx.ck(StationRowGeom.chapterLockRight == 18, "J32 StationRowGeom.chapterLockRight==18")
+    ctx.ck(StationRowGeom.chapterBadgeFont == 11, "J32 StationRowGeom.chapterBadgeFont==11")
+
+    // 3. 环直径 = 2 × ringR
+    ctx.ck(g.ringD() == 2 * g.ringR, "J32 global ringD=${g.ringD()} == 2*ringR")
+    ctx.ck(ch.ringD() == 2 * ch.ringR, "J32 chapter ringD=${ch.ringD()} == 2*ringR")
+    ctx.ck(g.ringDiameter() == 28, "J32 global ringDiameter==28")
+    ctx.ck(ch.ringDiameter() == 26, "J32 chapter ringDiameter==26")
+
+    // 4. padLeft + ringR == 28 (全表: 14 + 14 == 28) / (章内: 15 + 13 == 28)
+    ctx.ck(g.padLeft + g.ringR == 28, "J32 global padLeft + ringR == 28 (14 + 14 = ${g.padLeft + g.ringR})")
+    ctx.ck(ch.padLeft + ch.ringR == 28, "J32 chapter padLeft + ringR == 28 (15 + 13 = ${ch.padLeft + ch.ringR})")
+
+    // 5. 名字左缘 = 环右缘 + nameGap (78 / 74)
+    // 页面内边距 INSET = 20; 环右缘 = 20 + padLeft + 2*ringR
+    let gRingRight = 20 + g.padLeft + g.ringD()
+    let gNameLeft = gRingRight + g.nameGap
+    ctx.ck(gRingRight == 62, "J32 global ring right edge=${gRingRight} want=62")
+    ctx.ck(gNameLeft == 78, "J32 global name left=${gNameLeft} want=78")
+
+    let chRingRight = 20 + ch.padLeft + ch.ringD()
+    let chNameLeft = chRingRight + ch.nameGap
+    ctx.ck(chRingRight == 61, "J32 chapter ring right edge=${chRingRight} want=61")
+    ctx.ck(chNameLeft == 74, "J32 chapter name left=${chNameLeft} want=74")
+
+    println("J32 station rows done checks=${ctx.checks - c0}")
+}
+
 /* ===== P4 DUMP:按场景文件渲染 app 各板层 JSON(与设计稿 PNG 对拍,box-only) ===== */
 
 func dumpBool(v: Bool): String {
@@ -3722,6 +3845,8 @@ main(args: Array<String>): Int64 {
     j30HomeLinkTests(ctx)
     /* J31 footer slack (+0.5) and current-variant wrapping checks. */
     j31FooterSlackTests(levels, ctx)
+    /* J32 station rows geometry checks. */
+    j32StationRowTests(ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit} fallback=${ctx.toastFallback}")
     ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")
