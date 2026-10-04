@@ -3495,7 +3495,7 @@ func checkCardCenter(ctx: Ctx, h: Float64, st: Float64, sb: Float64): Unit {
 }
 
 /* ===== B-edge safe area / bottom margin / WinGeom 几何与边界检查 ===== */
-func bEdgeGeomTests(ctx: Ctx): Unit {
+func bEdgeGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     let c0 = ctx.checks
 
     // 1. parseHundredths: "6200"→6200、"0"→0、""→0、"12a"→0、"-5"→0、"+5"→0、" 5"→0、"3400"→3400、"123456789"→123456789、"1234567890"(10 位)→0、None→0
@@ -3595,6 +3595,45 @@ func bEdgeGeomTests(ctx: Ctx): Unit {
     ctx.ck(absF((WinGeom.sealLeft(393.0) + WinGeom.sealSize()) - (WinGeom.cardW(393.0) - 24.0)) < 1e-9, "WinGeom seal right edge 393")
     ctx.ck(absF((WinGeom.sealLeft(360.0) + WinGeom.sealSize()) - (WinGeom.cardW(360.0) - 24.0)) < 1e-9, "WinGeom seal right edge 360")
 
+    // B9: 朱印外框与内框常量、间空、内缘
+    ctx.ck(absF(WinGeom.sealOuterInset() - 6.0) < 1e-9, "WinGeom sealOuterInset == 6.0")
+    ctx.ck(absF(WinGeom.sealOuterStroke() - 6.0) < 1e-9, "WinGeom sealOuterStroke == 6.0")
+    ctx.ck(absF(WinGeom.sealOuterRadius() - 6.9) < 1e-9, "WinGeom sealOuterRadius == 6.9")
+    ctx.ck(absF(WinGeom.sealOuterSize() - 84.0) < 1e-9, "WinGeom sealOuterSize == 84.0")
+    ctx.ck(absF(WinGeom.sealOuterW() - 84.0) < 1e-9, "WinGeom sealOuterW == 84.0")
+
+    ctx.ck(absF(WinGeom.sealInnerInset() - 16.3) < 1e-9, "WinGeom sealInnerInset == 16.3")
+    ctx.ck(absF(WinGeom.sealInnerStroke() - 3.0) < 1e-9, "WinGeom sealInnerStroke == 3.0")
+    ctx.ck(absF(WinGeom.sealInnerRadius() - 4.8) < 1e-9, "WinGeom sealInnerRadius == 4.8")
+    ctx.ck(absF(WinGeom.sealInnerSize() - 63.4) < 1e-9, "WinGeom sealInnerSize == 63.4")
+    ctx.ck(absF(WinGeom.sealInnerW() - 63.4) < 1e-9, "WinGeom sealInnerW == 63.4")
+
+    // 两框间空 = 16.3 - (6.0 + 6.0) = 4.3
+    let sealFrameGap = WinGeom.sealInnerInset() - (WinGeom.sealOuterInset() + WinGeom.sealOuterStroke())
+    ctx.ck(absF(sealFrameGap - 4.3) < 1e-9, "WinGeom sealFrameGap == 4.3")
+
+    // 内框内缘 = 16.3 + 3.0 = 19.3
+    let sealInnerEdge = WinGeom.sealInnerInset() + WinGeom.sealInnerStroke()
+    ctx.ck(absF(sealInnerEdge - 19.3) < 1e-9, "WinGeom sealInnerEdge == 19.3")
+
+    // 印字字号 17.0、行距 19.0
+    ctx.ck(absF(WinGeom.sealGlyphFont() - 17.0) < 1e-9, "WinGeom sealGlyphFont == 17.0")
+    ctx.ck(absF(WinGeom.sealGlyphPitch() - 19.0) < 1e-9, "WinGeom sealGlyphPitch == 19.0")
+
+    // 中心 y: 29 / 48 / 67; sealGlyphY = 中心 - pitch/2: 19.5 / 38.5 / 57.5
+    ctx.ck(absF(WinGeom.sealGlyphCenterY(0) - 29.0) < 1e-9, "WinGeom sealGlyphCenterY(0) == 29.0")
+    ctx.ck(absF(WinGeom.sealGlyphCenterY(1) - 48.0) < 1e-9, "WinGeom sealGlyphCenterY(1) == 48.0")
+    ctx.ck(absF(WinGeom.sealGlyphCenterY(2) - 67.0) < 1e-9, "WinGeom sealGlyphCenterY(2) == 67.0")
+
+    ctx.ck(absF(WinGeom.sealGlyphY(0) - 19.5) < 1e-9, "WinGeom sealGlyphY(0) == 19.5")
+    ctx.ck(absF(WinGeom.sealGlyphY(1) - 38.5) < 1e-9, "WinGeom sealGlyphY(1) == 38.5")
+    ctx.ck(absF(WinGeom.sealGlyphY(2) - 57.5) < 1e-9, "WinGeom sealGlyphY(2) == 57.5")
+
+    // Theme 常量检查
+    ctx.ck(Theme.sealInk == 0xEB9B3A2F, "Theme.sealInk == 0xEB9B3A2F")
+    ctx.ck(Theme.vermillion == 0xFF9B3A2F, "Theme.vermillion == 0xFF9B3A2F")
+    ctx.ck(Theme.winScrim == 0x802C2A26, "Theme.winScrim == 0x802C2A26")
+
     // 10. 按钮: x=20、宽=卡宽−40、底距卡底 20 (btnTop+52+20==360)
     ctx.ck(absF(WinGeom.btnX() - 20.0) < 1e-9, "WinGeom btnX == 20")
     ctx.ck(absF(WinGeom.btnW(393.0) - (WinGeom.cardW(393.0) - 40.0)) < 1e-9, "WinGeom btnW(393) == cardW-40")
@@ -3608,6 +3647,30 @@ func bEdgeGeomTests(ctx: Ctx): Unit {
     ctx.ck(absF(WinGeom.goldLineCenterY() - 82.0) < 1e-9, "WinGeom goldLineCenterY == 82")
     ctx.ck(absF(WinGeom.roadDoneCenterY() - 124.0) < 1e-9, "WinGeom roadDoneCenterY == 124")
     ctx.ck(absF(WinGeom.docArriveCenterY() - 154.0) < 1e-9, "WinGeom docArriveCenterY == 154")
+
+    // B9: 关名实际排版宽度与金线
+    let wZhuo = WinGeom.roadTitleWidth("涿郡·范阳")
+    ctx.ck(absF(wZhuo - 95.37) < 0.05, "WinGeom.roadTitleWidth(涿郡·范阳) == 95.4 (got ${wZhuo})")
+
+    let wChibi = WinGeom.roadTitleWidth("赤壁·陆口·第 2 驿")
+    ctx.ck(absF(wChibi - 170.81) < 0.05, "WinGeom.roadTitleWidth(赤壁·陆口·第 2 驿) == 170.8 (got ${wChibi})")
+
+    // 100 关关名逐个断言: 0 < w <= cardW(393.0)-2.0 与 <= cardW(360.0)-2.0, 且不触发 min(goldLineWidth == roadTitleWidth)
+    let maxCard393 = WinGeom.cardW(393.0) - 2.0
+    let maxCard360 = WinGeom.cardW(360.0) - 2.0
+    for (lvl in levels) {
+        let lw = WinGeom.roadTitleWidth(lvl.name)
+        ctx.ck(lw > 0.0 && lw <= maxCard393, "roadTitleWidth ${lvl.name} in (0, cardW(393)-2]")
+        ctx.ck(lw <= maxCard360, "roadTitleWidth ${lvl.name} <= cardW(360)-2")
+        let gw393 = WinGeom.goldLineWidth(lvl.name, 393.0)
+        let gw360 = WinGeom.goldLineWidth(lvl.name, 360.0)
+        ctx.ck(absF(gw393 - lw) < 1e-9, "goldLineWidth 393 not clamped for ${lvl.name}")
+        ctx.ck(absF(gw360 - lw) < 1e-9, "goldLineWidth 360 not clamped for ${lvl.name}")
+    }
+
+    // 最长关名(涿郡·中山·第 2 驿)宽度值在 [150, 190]
+    let wLongest = WinGeom.roadTitleWidth("涿郡·中山·第 2 驿")
+    ctx.ck(wLongest >= 150.0 && wLongest <= 190.0, "longest level width in [150, 190], got ${wLongest}")
 
     println("B-edge geom done checks=${ctx.checks - c0}")
 }
@@ -4109,7 +4172,7 @@ main(args: Array<String>): Int64 {
     /* J33 yicheng full-list initial scroll offset checks. */
     j33YichengScrollTests(ctx)
     /* B-edge geom checks. */
-    bEdgeGeomTests(ctx)
+    bEdgeGeomTests(levels, ctx)
     /* J34 yicheng scroll geom ruling (780 cycle, 768 chapterH, 20 gap, 28 divider-to-ink). */
     j34YichengScrollGeomRulingTests(ctx)
     ctx.checks = ctx.checks + dStat.checks

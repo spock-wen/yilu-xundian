@@ -2331,32 +2331,60 @@ class EntryView {
                     .textAlign(TextAlign.Start)
                     .position(x: WinGeom.docArriveX(), y: WinGeom.docArriveY())
 
-                // 朱印「文书到」: 96×96 方, 旋转 -18°, vermillion 底, whitePaper 字, 三字竖排 Serif
-                Column {
+                // 朱印「文书到」: 96×96 方, 旋转 -18°, 透明底双框, sealInk 框与字, 三字竖排 Serif Bold
+                Stack(alignContent: Alignment.TopStart) {
+                    // 外框: 距印边 sealOuterInset, 线宽 sealOuterStroke, 圆角 sealOuterRadius
+                    Column() {}
+                        .width(WinGeom.sealOuterSize())
+                        .height(WinGeom.sealOuterSize())
+                        .border(width: WinGeom.sealOuterStroke(), color: Theme.sealInk)
+                        .borderRadius(WinGeom.sealOuterRadius())
+                        .position(x: WinGeom.sealOuterInset(), y: WinGeom.sealOuterInset())
+
+                    // 内框: 距印边 sealInnerInset, 线宽 sealInnerStroke, 圆角 sealInnerRadius
+                    Column() {}
+                        .width(WinGeom.sealInnerSize())
+                        .height(WinGeom.sealInnerSize())
+                        .border(width: WinGeom.sealInnerStroke(), color: Theme.sealInk)
+                        .borderRadius(WinGeom.sealInnerRadius())
+                        .position(x: WinGeom.sealInnerInset(), y: WinGeom.sealInnerInset())
+
+                    // 印字三字竖排, 居中于内框
                     Text("文")
-                        .fontSize(WinGeom.sealFont())
-                        .fontColor(Theme.whitePaper)
-                        .fontFamily(this.serifFamily())
-                        .height(WinGeom.sealCharH())
-                        .lineHeight(WinGeom.sealCharH())
+                        .fontSize(WinGeom.sealGlyphFont())
+                        .fontColor(Theme.sealInk)
+                        .fontFamily(this.serifBoldFamily())
+                        .fontWeight(FontWeight.Bold)
+                        .width(WinGeom.sealSize())
+                        .height(WinGeom.sealGlyphPitch())
+                        .lineHeight(WinGeom.sealGlyphPitch())
+                        .textAlign(TextAlign.Center)
+                        .position(x: 0.0, y: WinGeom.sealGlyphY(0))
+
                     Text("书")
-                        .fontSize(WinGeom.sealFont())
-                        .fontColor(Theme.whitePaper)
-                        .fontFamily(this.serifFamily())
-                        .height(WinGeom.sealCharH())
-                        .lineHeight(WinGeom.sealCharH())
+                        .fontSize(WinGeom.sealGlyphFont())
+                        .fontColor(Theme.sealInk)
+                        .fontFamily(this.serifBoldFamily())
+                        .fontWeight(FontWeight.Bold)
+                        .width(WinGeom.sealSize())
+                        .height(WinGeom.sealGlyphPitch())
+                        .lineHeight(WinGeom.sealGlyphPitch())
+                        .textAlign(TextAlign.Center)
+                        .position(x: 0.0, y: WinGeom.sealGlyphY(1))
+
                     Text("到")
-                        .fontSize(WinGeom.sealFont())
-                        .fontColor(Theme.whitePaper)
-                        .fontFamily(this.serifFamily())
-                        .height(WinGeom.sealCharH())
-                        .lineHeight(WinGeom.sealCharH())
+                        .fontSize(WinGeom.sealGlyphFont())
+                        .fontColor(Theme.sealInk)
+                        .fontFamily(this.serifBoldFamily())
+                        .fontWeight(FontWeight.Bold)
+                        .width(WinGeom.sealSize())
+                        .height(WinGeom.sealGlyphPitch())
+                        .lineHeight(WinGeom.sealGlyphPitch())
+                        .textAlign(TextAlign.Center)
+                        .position(x: 0.0, y: WinGeom.sealGlyphY(2))
                 }
                 .width(WinGeom.sealSize())
                 .height(WinGeom.sealSize())
-                .backgroundColor(Theme.vermillion)
-                .justifyContent(FlexAlign.Center)
-                .alignItems(HorizontalAlign.Center)
                 .rotate(angle: Float32(WinGeom.sealAngle()))
                 .position(x: WinGeom.sealLeft(this.winW), y: WinGeom.sealTop())
 

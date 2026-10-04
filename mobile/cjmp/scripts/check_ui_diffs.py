@@ -1092,17 +1092,22 @@ def check_s(index_cj_text, theme_cj_text=None):
 
 
 def check_t(index_cj_text, theme_cj_text):
-    """t) Win popup scrim/card layers and styling: theme.cj contains winScrim (0x802C2A26);
-    screen == 2 branch removed from root Column; outer Stack order: root Column -> mask (winScrim, maskTop)
-    -> shadow (paperShade, dx/dy) -> card (Stack, WinGeom geometry, border before borderRadius(4))
-    -> hairline overlay; mask has NO onClick; board Column visibility contains screen == 1 || screen == 2;
-    leaveBoard() intact; card uses WinGeom.* (no bare magic numbers 28/360/62/124/154/288 in code);
-    shadow avoids .shadow(); seal rotate explicit Float32; 下一驿 uses sansBoldFamily."""
+    """t) Win popup scrim/card layers and styling: theme.cj contains winScrim (0x802C2A26)
+    and sealInk (0xEB9B3A2F); screen == 2 branch removed from root Column; outer Stack order:
+    root Column -> mask (winScrim, maskTop) -> shadow (paperShade, dx/dy) -> card (Stack, WinGeom
+    geometry, border before borderRadius(4)) -> hairline overlay; mask has NO onClick; board Column
+    visibility contains screen == 1 || screen == 2; leaveBoard() intact; gold line width comes from
+    WinGeom.roadTitleWidth; seal has transparent background (no Theme.vermillion), double frames with
+    WinGeom outer/inner constants and border before borderRadius, sealInk, sealGlyphFont(),
+    sealGlyphPitch(); card uses WinGeom.* (no bare magic numbers 28/360/62/124/154/288/17/19/6.9/16.3/4.8/29/48/67/0.55
+    in code); shadow avoids .shadow(); seal rotate explicit Float32; 下一驿 uses sansBoldFamily."""
     errors = []
 
-    # 1. theme.cj winScrim
+    # 1. theme.cj winScrim and sealInk
     if not re.search(r'winScrim\s*:\s*Int64\s*=\s*0x802C2A26\b', theme_cj_text):
         errors.append("theme.cj missing winScrim = 0x802C2A26")
+    if not re.search(r'sealInk\s*:\s*Int64\s*=\s*0xEB9B3A2F\b', theme_cj_text):
+        errors.append("theme.cj missing sealInk = 0xEB9B3A2F")
 
     # 2. index.cj build() root Column vs win block
     m_build = re.search(r'func\s+build\s*\(\s*\)', index_cj_text)
@@ -1171,6 +1176,10 @@ def check_t(index_cj_text, theme_cj_text):
     if "this.leaveBoard()" not in index_cj_text:
         errors.append("board topbar back button missing this.leaveBoard()")
 
+    # Gold line width comes from WinGeom.roadTitleWidth(
+    if "WinGeom.roadTitleWidth(" not in win_body:
+        errors.append("gold line width must come from WinGeom.roadTitleWidth(...)")
+
     # Card border before borderRadius(4)
     idx_card_w = win_body.find(".width(WinGeom.cardW(this.winW))\n            .height(WinGeom.cardH())\n            .backgroundColor(Theme.whitePaper)")
     if idx_card_w < 0:
@@ -1184,6 +1193,33 @@ def check_t(index_cj_text, theme_cj_text):
     else:
         errors.append("card modifier chain not identified in win body")
 
+    # Seal transparent background: must NOT have backgroundColor(Theme.vermillion)
+    if "backgroundColor(Theme.vermillion)" in win_body:
+        errors.append("seal must have transparent background, found backgroundColor(Theme.vermillion)")
+
+    # Seal outer and inner frames WinGeom constants and border before borderRadius
+    if "WinGeom.sealOuterStroke" not in win_body or "WinGeom.sealOuterRadius" not in win_body:
+        errors.append("seal missing outer frame WinGeom.sealOuterStroke/sealOuterRadius")
+    if "WinGeom.sealInnerStroke" not in win_body or "WinGeom.sealInnerRadius" not in win_body:
+        errors.append("seal missing inner frame WinGeom.sealInnerStroke/sealInnerRadius")
+
+    for stroke_call, radius_call in [
+        ("WinGeom.sealOuterStroke", "WinGeom.sealOuterRadius"),
+        ("WinGeom.sealInnerStroke", "WinGeom.sealInnerRadius"),
+    ]:
+        pos_s = win_body.find(stroke_call)
+        pos_r = win_body.find(radius_call)
+        if pos_s >= 0 and pos_r >= 0 and pos_s > pos_r:
+            errors.append(f"seal frame with {stroke_call} must place .border before .borderRadius")
+
+    # Seal glyphs font, pitch, color
+    if "WinGeom.sealGlyphFont()" not in win_body:
+        errors.append("seal glyphs missing WinGeom.sealGlyphFont()")
+    if "WinGeom.sealGlyphPitch()" not in win_body:
+        errors.append("seal glyphs missing WinGeom.sealGlyphPitch()")
+    if "Theme.sealInk" not in win_body:
+        errors.append("seal missing Theme.sealInk")
+
     # Seal explicit Float32
     if not re.search(r'\.rotate\s*\(\s*angle\s*:\s*Float32\s*\(\s*WinGeom\.sealAngle\(\)\s*\)\s*\)', win_body):
         errors.append("seal rotate angle missing explicit Float32(WinGeom.sealAngle())")
@@ -1195,7 +1231,7 @@ def check_t(index_cj_text, theme_cj_text):
     # Magic numbers in win block (excluding comments)
     win_code = "\n".join(l.split("//")[0] for l in win_body.splitlines())
     win_code = re.sub(r'/\*[\s\S]*?\*/', "", win_code)
-    m_magic = re.findall(r'\b(28|360|62|124|154|288)\b', win_code)
+    m_magic = re.findall(r'\b(28|360|62|124|154|288|17|19|29|48|67|6\.9|16\.3|4\.8|0\.55)\b', win_code)
     if m_magic:
         errors.append(f"magic numbers {m_magic} found in win block code")
 
@@ -2121,7 +2157,10 @@ def selftest():
     assert not ok_s_nr and "bottomMarginOrLegacy" in msg, f"selftest s: expected missing routing failure, got {msg}"
 
     # 20. Test check_t: win popup scrim/card
-    good_t_theme = "public static const winScrim: Int64 = 0x802C2A26\n"
+    good_t_theme = (
+        "public static const winScrim: Int64 = 0x802C2A26\n"
+        "public static const sealInk: Int64 = 0xEB9B3A2F\n"
+    )
     good_t_index = (
         'func build() {\n'
         '    Stack(alignContent: Alignment.TopStart) {\n'
@@ -2141,7 +2180,20 @@ def selftest():
         '                .position(x: WinGeom.cardX() + WinGeom.cardShadowDx(), y: WinGeom.cardTop(currentH, this.padTop, this.padBottom) + WinGeom.cardShadowDy())\n'
         '            Stack(alignContent: Alignment.TopStart) {\n'
         '                Column() {}\n'
-        '                    .rotate(angle: Float32(WinGeom.sealAngle()))\n'
+        '                    .width(WinGeom.roadTitleWidth(this.roadTitle()))\n'
+        '                Stack(alignContent: Alignment.TopStart) {\n'
+        '                    Column() {}\n'
+        '                        .border(width: WinGeom.sealOuterStroke(), color: Theme.sealInk)\n'
+        '                        .borderRadius(WinGeom.sealOuterRadius())\n'
+        '                    Column() {}\n'
+        '                        .border(width: WinGeom.sealInnerStroke(), color: Theme.sealInk)\n'
+        '                        .borderRadius(WinGeom.sealInnerRadius())\n'
+        '                    Text("文")\n'
+        '                        .fontSize(WinGeom.sealGlyphFont())\n'
+        '                        .height(WinGeom.sealGlyphPitch())\n'
+        '                        .fontColor(Theme.sealInk)\n'
+        '                }\n'
+        '                .rotate(angle: Float32(WinGeom.sealAngle()))\n'
         '                Row {\n'
         '                    Text("下一驿")\n'
         '                        .fontFamily(this.sansBoldFamily())\n'
@@ -2183,9 +2235,31 @@ def selftest():
     ok_t_click, msg = check_t(bad_t_onclick, good_t_theme)
     assert not ok_t_click and ".onClick" in msg, f"selftest t: expected mask onClick failure, got {msg}"
 
-    bad_t_theme = "public static const winScrim: Int64 = 0xFF000000\n"
+    bad_t_theme = "public static const winScrim: Int64 = 0xFF000000\npublic static const sealInk: Int64 = 0xEB9B3A2F\n"
     ok_t_theme, msg = check_t(good_t_index, bad_t_theme)
     assert not ok_t_theme and "winScrim = 0x802C2A26" in msg, f"selftest t: expected winScrim failure, got {msg}"
+
+    bad_t_noseal = "public static const winScrim: Int64 = 0x802C2A26\n"
+    ok_t_noseal, msg = check_t(good_t_index, bad_t_noseal)
+    assert not ok_t_noseal and "sealInk = 0xEB9B3A2F" in msg, f"selftest t: expected sealInk failure, got {msg}"
+
+    bad_t_vermillion = good_t_index.replace(
+        "Stack(alignContent: Alignment.TopStart) {\n                    Column() {}",
+        "Stack(alignContent: Alignment.TopStart) {\n                    Column() {}\n                        .backgroundColor(Theme.vermillion)"
+    )
+    ok_t_verm, msg = check_t(bad_t_vermillion, good_t_theme)
+    assert not ok_t_verm and "backgroundColor(Theme.vermillion)" in msg, f"selftest t: expected vermillion failure, got {msg}"
+
+    bad_t_const_gold = good_t_index.replace(
+        ".width(WinGeom.roadTitleWidth(this.roadTitle()))",
+        ".width(95.4)"
+    )
+    ok_t_gold, msg = check_t(bad_t_const_gold, good_t_theme)
+    assert not ok_t_gold and "WinGeom.roadTitleWidth" in msg, f"selftest t: expected const gold width failure, got {msg}"
+
+    bad_t_magic = good_t_index.replace('Text("下一驿")', 'Text("下一驿")\n                    .fontSize(17)')
+    ok_t_magic, msg = check_t(bad_t_magic, good_t_theme)
+    assert not ok_t_magic and "magic numbers" in msg, f"selftest t: expected magic number failure, got {msg}"
 
     # 21. Test check_u: safeTop/safeBottom implementation
     good_u_theme = (

@@ -93,6 +93,8 @@ public class Theme {
     public static const whitePaper: Int64 = 0xFFFBF6EC
     /* B4: 胜利(通关)页顶栏以下遮罩色, 纯色 50% ink (0x802C2A26) */
     public static const winScrim: Int64 = 0x802C2A26
+    /* B9: 通关卡朱印「文书到」双框与字墨色 (#9B3A2F @ 不透明度 235/255, 0xEB9B3A2F; 验收遮罩色 143,137,126) */
+    public static const sealInk: Int64 = 0xEB9B3A2F
     /* 泽地(滑行)填色, hard-fx-skin.md ze */
     public static const ze: Int64 = 0xFFC4D2D6
     /* Parity step limit warning threshold (mock warn state is N=3; applies to 3,2,1,0). */
@@ -327,17 +329,64 @@ public class WinGeom {
         return WinGeom.goldLineCenterY() - WinGeom.goldLineH() / 2.0
     }
 
-    /* 关名字宽估算: CJK 每字 22.0(字号 22), ASCII/数字 0.55 * 22.0 = 12.1 */
+    /* YiluSerif-Bold 22u 实测字宽(advance × 22 / 1000):
+     * 汉字=22.0, ·=7.37, 空格=5.5, -=8.14,
+     * 数字: 0=13.046, 1=10.252, 2=13.068, 3=13.046, 4=13.046,
+     *       5=13.068, 6=13.068, 7=12.936, 8=13.068, 9=13.112.
+     * 未列 CJK(>= \u{2E80}) 保守回退 22.0; 其余未列 ASCII 保守回退 13.0。
+     * 禁用 Int64.toString / Int64.parse。 */
+    public static func serifBoldAdvance22(r: Rune): Float64 {
+        if (r == r'·') {
+            return 7.37
+        } else if (r == r' ') {
+            return 5.5
+        } else if (r == r'-') {
+            return 8.14
+        } else if (r == r'0') {
+            return 13.046
+        } else if (r == r'1') {
+            return 10.252
+        } else if (r == r'2') {
+            return 13.068
+        } else if (r == r'3') {
+            return 13.046
+        } else if (r == r'4') {
+            return 13.046
+        } else if (r == r'5') {
+            return 13.068
+        } else if (r == r'6') {
+            return 13.068
+        } else if (r == r'7') {
+            return 12.936
+        } else if (r == r'8') {
+            return 13.068
+        } else if (r == r'9') {
+            return 13.112
+        } else if (r >= r'\u{2E80}') {
+            return 22.0
+        } else {
+            return 13.0
+        }
+    }
+
+    /* 关名实际排版宽度: 逐字符按 YiluSerif-Bold 22u 实测表求和 */
     public static func roadTitleWidth(title: String): Float64 {
         var w: Float64 = 0.0
         for (r in title.toRuneArray()) {
-            if (r < r'\u{0080}') {
-                w += 0.55 * 22.0
-            } else {
-                w += 22.0
-            }
+            w += WinGeom.serifBoldAdvance22(r)
         }
         return w
+    }
+
+    /* 金线宽度上限截断: 若宽 > 卡内宽(cardW - 2.0) 则 min(宽, cardW - 2.0) */
+    public static func goldLineWidth(title: String, w: Float64): Float64 {
+        let tw = WinGeom.roadTitleWidth(title)
+        let maxW = WinGeom.cardW(w) - 2.0
+        if (tw > maxW) {
+            return maxW
+        } else {
+            return tw
+        }
     }
 
     public static func goldLineX(w: Float64, titleW: Float64): Float64 {
@@ -385,12 +434,73 @@ public class WinGeom {
         return 100.0
     }
 
-    public static func sealFont(): Float64 {
-        return 24.0
+    /* 外框: 距印边 6.0, 线宽 6.0, 圆角 6.9 */
+    public static func sealOuterInset(): Float64 {
+        return 6.0
     }
 
-    public static func sealCharH(): Float64 {
-        return 32.0 // 96 / 3 均分行高
+    public static func sealOuterStroke(): Float64 {
+        return 6.0
+    }
+
+    public static func sealOuterRadius(): Float64 {
+        return 6.9
+    }
+
+    public static func sealOuterSize(): Float64 {
+        return WinGeom.sealSize() - 2.0 * WinGeom.sealOuterInset()
+    }
+
+    public static func sealOuterW(): Float64 {
+        return WinGeom.sealOuterSize()
+    }
+
+    /* 内框: 距印边 16.3, 线宽 3.0 (内缘 19.3), 圆角 4.8 */
+    public static func sealInnerInset(): Float64 {
+        return 16.3
+    }
+
+    public static func sealInnerStroke(): Float64 {
+        return 3.0
+    }
+
+    public static func sealInnerRadius(): Float64 {
+        return 4.8
+    }
+
+    public static func sealInnerSize(): Float64 {
+        return WinGeom.sealSize() - 2.0 * WinGeom.sealInnerInset()
+    }
+
+    public static func sealInnerW(): Float64 {
+        return WinGeom.sealInnerSize()
+    }
+
+    /* 印字: 3 个 Text「文」「书」「到」, 字号 17.0, 行距 19.0 */
+    public static func sealGlyphFont(): Float64 {
+        return 17.0
+    }
+
+    public static func sealGlyphPitch(): Float64 {
+        return 19.0
+    }
+
+    /* 中心 y: 29 / 48 / 67 (整体居中于内框内缘) */
+    public static func sealGlyphCenterY(i: Int64): Float64 {
+        if (i == 0) {
+            return 29.0
+        } else if (i == 1) {
+            return 48.0
+        } else if (i == 2) {
+            return 67.0
+        } else {
+            return 48.0 + Float64(i - 1) * WinGeom.sealGlyphPitch()
+        }
+    }
+
+    /* y 坐标 = 中心 - pitch / 2.0 (19.5 / 38.5 / 57.5) */
+    public static func sealGlyphY(i: Int64): Float64 {
+        return WinGeom.sealGlyphCenterY(i) - WinGeom.sealGlyphPitch() / 2.0
     }
 
     /* 「下一驿」按钮几何 */
