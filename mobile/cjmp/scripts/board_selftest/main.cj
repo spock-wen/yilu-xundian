@@ -1946,6 +1946,44 @@ func j27ReplayScenario(levels: ArrayList<LevelDef>, id: Int64, cells: Array<(Int
     }
 }
 
+/* J10s: 测试方 reject_plans.json 真实拒绝脚本回放(tap 为 (c,r)=Cell(x,y),最后一步被拒)。
+   w=320 打印 rejectCode/text/shown/step/x/y;裁决要求 320 必出 toast 且必走兜底 (e)。 */
+func j27QaRejectCase(levels: ArrayList<LevelDef>, name: String, id: Int64, cells: Array<(Int64, Int64)>, ctx: Ctx): Unit {
+    match (j27ReplayScenario(levels, id, cells, ctx)) {
+        case None => ()
+        case Some(game) =>
+            let code = game.lastReject
+            let txt = mechToastText(game)
+            ctx.ck(rejectShouldFlash(game), "J27 ${name} flash=false")
+            ctx.ck(txt.size > 0, "J27 ${name} toast text empty")
+            match (j21Check(game, 320.0, "J27 ${name} w=320", ctx)) {
+                case Some(p) =>
+                    println("J27 ${name} w=320 rejectCode=${code} text=${txt} shown=${p.shown} step=${p.step} x=${p.x} y=${p.y}")
+                    ctx.ck(p.shown, "J27 ${name} w=320 shown want true")
+                    ctx.ck(p.step == 4, "J27 ${name} w=320 step=${p.step} want=4 (fallback e)")
+                    if (p.step == 4) {
+                        let geom = boardGeomFor(game.level.cols, game.level.rows, 320.0)
+                        let tw = mechToastWidth(txt)
+                        let trayW = geom.trayW()
+                        ctx.ck(absF(p.x - (trayW - tw) / 2.0) < 1e-6, "J27 ${name} x=${p.x} want fallback")
+                        ctx.ck(absF(p.y - (-34.0)) < 1e-6, "J27 ${name} y=${p.y} want -34")
+                    }
+                case None =>
+                    ctx.ck(false, "J27 ${name} w=320 returned None")
+            }
+            let ws: Array<Float64> = [411.0, 360.0]
+            for (w in ws) {
+                match (j21Check(game, w, "J27 ${name} w=${w}", ctx)) {
+                    case Some(p) =>
+                        println("J27 ${name} w=${w} shown=${p.shown} step=${p.step} x=${p.x} y=${p.y}")
+                        ctx.ck(p.shown, "J27 ${name} w=${w} shown want true")
+                    case None =>
+                        ctx.ck(false, "J27 ${name} w=${w} returned None")
+                }
+            }
+    }
+}
+
 /* J27: 320 toast fallback (e) validation. */
 func j27ToastFallbackTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     let c0 = ctx.checks
@@ -2007,6 +2045,16 @@ func j27ToastFallbackTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
             }
         case None => ()
     }
+
+    /* 2b. J10s: 测试方 reject_plans.json 的真实拒绝脚本('90' p1 / '93' p0) */
+    let qa90: Array<(Int64, Int64)> = [
+        (6,6),(5,6),(4,6),(4,5),(4,4),(3,4),(3,3),(3,2),(3,1),(3,0)
+    ]
+    let qa93: Array<(Int64, Int64)> = [
+        (4,2),(4,1),(5,1),(5,2),(5,3),(5,4),(5,5)
+    ]
+    j27QaRejectCase(levels, "qa_L90_p1", 90, qa90, ctx)
+    j27QaRejectCase(levels, "qa_L93_p0", 93, qa93, ctx)
 
     /* 3. 100 levels sweep fallback stats */
     let idsSb = StringBuilder()
