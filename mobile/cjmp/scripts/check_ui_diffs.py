@@ -36,6 +36,9 @@ Checks:
      states, per B5/B7 previews' vp_top = topbar + 12); summary card keeps only the bottom margin
      gapBelow()-8.0 (card bottom to first group header = 12 with parent Column(space: 8));
      YichengScrollGeom.contentTopPad documents that the scroll offset formula is unchanged
+  w) build_body_no_let_var: func build() body has no let/var before root container
+     or at top level (depth 1), modifier closures permitted; verified against
+     cec0712 (PASS) and efb4503 (FAIL)
 """
 import argparse
 import hashlib
@@ -1263,6 +1266,97 @@ def check_v(index_cj_text):
     return True, "playPaper() uses Theme.paperOf only for screen 6, paperOf() called exactly once in index.cj"
 
 
+def check_w(index_cj_text):
+    """w) build_body_no_let_var: func build() body contains no let/var before root container
+    and no let/var at top level (depth 1, outside component braces/modifier closures)."""
+    m_build = re.search(r'\bfunc\s+build\s*\(\s*\)', index_cj_text)
+    if not m_build:
+        return False, "func build() not found in index.cj"
+
+    s = index_cj_text
+    n = len(s)
+    build_start = m_build.end()
+
+    # Strip comments and strings while preserving offsets and newlines
+    chars = []
+    i = 0
+    while i < n:
+        if s[i:i+2] == "//":
+            chars.append("  ")
+            i += 2
+            while i < n and s[i] != "\n":
+                chars.append(" ")
+                i += 1
+        elif s[i:i+2] == "/*":
+            chars.append("  ")
+            i += 2
+            while i < n and s[i:i+2] != "*/":
+                chars.append("\n" if s[i] == "\n" else " ")
+                i += 1
+            if i < n:
+                chars.append("  ")
+                i += 2
+        elif s[i] == '"':
+            chars.append(" ")
+            i += 1
+            while i < n and s[i] != '"':
+                if s[i] == "\\":
+                    chars.append("  ")
+                    i += 2
+                else:
+                    chars.append("\n" if s[i] == "\n" else " ")
+                    i += 1
+            if i < n:
+                chars.append(" ")
+                i += 1
+        else:
+            chars.append(s[i])
+            i += 1
+    cleaned = "".join(chars)
+
+    open_brace_idx = cleaned.find("{", build_start)
+    if open_brace_idx < 0:
+        return False, "opening brace of func build() not found"
+
+    body_start = open_brace_idx + 1
+    i = body_start
+    depth = 1
+    paren_depth = 0
+    violations = []
+
+    while i < n and depth > 0:
+        ch = cleaned[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        elif ch == "(":
+            paren_depth += 1
+        elif ch == ")":
+            paren_depth = max(0, paren_depth - 1)
+
+        # Depth 1: top-level of build(), outside any component container or modifier closure
+        if depth == 1 and paren_depth == 0:
+            for kw in ("let", "var"):
+                klen = len(kw)
+                if cleaned[i:i+klen] == kw:
+                    prev_c = cleaned[i-1] if i > 0 else "\n"
+                    next_c = cleaned[i+klen] if i + klen < n else "\n"
+                    if not (prev_c.isalnum() or prev_c == "_") and not (next_c.isalnum() or next_c == "_"):
+                        ls = s.rfind("\n", 0, i) + 1
+                        le = s.find("\n", i)
+                        line = s[ls:le].strip() if le >= 0 else s[ls:].strip()
+                        violations.append(f"top-level {kw} in build(): {line}")
+        i += 1
+
+    if violations:
+        return False, f"build() contains {len(violations)} forbidden let/var statement(s):\n    " + "\n    ".join(violations)
+
+    return True, "func build() body contains no let/var at top level or before root container"
+
+
 def selftest():
     # 1. Test check_a violation detection
     bad_a_lines = [
@@ -2169,7 +2263,46 @@ def selftest():
     ok_v_ext, msg = check_v(bad_v_extra)
     assert not ok_v_ext and "expected exactly 1" in msg, f"selftest v: expected extra call failure, got {msg}"
 
-    # 23. Baseline regression assertions: cec0712 must fail at least (r), (s), (t), (v)
+    # 24. Test check_w: build_body_no_let_var
+    good_w_index = (
+        'func build() {\n'
+        '    Stack(alignContent: Alignment.TopStart) {\n'
+        '        Column {\n'
+        '            Text("hello")\n'
+        '        }\n'
+        '        .onAreaChange({ old, new =>\n'
+        '            let h = new.height.value\n'
+        '            var targetH = 800.0\n'
+        '        })\n'
+        '    }\n'
+        '}\n'
+    )
+    ok_w_good, msg = check_w(good_w_index)
+    assert ok_w_good, f"selftest w: expected pass, got {msg}"
+
+    bad_w_top = (
+        'func build() {\n'
+        '    let x = 1\n'
+        '    Column {\n'
+        '        Text("hello")\n'
+        '    }\n'
+        '}\n'
+    )
+    ok_w_bad, msg = check_w(bad_w_top)
+    assert not ok_w_bad and "let" in msg, f"selftest w: expected top-level let failure, got {msg}"
+
+    bad_w_var = (
+        'func build() {\n'
+        '    var y = 2\n'
+        '    Column {\n'
+        '        Text("hello")\n'
+        '    }\n'
+        '}\n'
+    )
+    ok_w_var, msg = check_w(bad_w_var)
+    assert not ok_w_var and "var" in msg, f"selftest w: expected top-level var failure, got {msg}"
+
+    # 25. Baseline regression assertions: cec0712 must fail (r), (s), (t), (v) and pass (w); efb4503 must fail (w)
     try:
         cec_text = subprocess.check_output(
             ["git", "-C", REPO_ROOT, "show", "cec0712:mobile/cjmp/lib/index.cj"],
@@ -2188,8 +2321,25 @@ def selftest():
         assert not t_pass, f"selftest regression: cec0712 must fail check_t, but passed: {t_err}"
         v_pass, v_err = check_v(cec_text)
         assert not v_pass, f"selftest regression: cec0712 must fail check_v, but passed: {v_err}"
+        w_pass, w_msg = check_w(cec_text)
+        assert w_pass, f"selftest regression: cec0712 must pass check_w, but failed: {w_msg}"
     else:
         print("SKIP baseline regression check (cannot read cec0712)")
+
+    try:
+        efb_text = subprocess.check_output(
+            ["git", "-C", REPO_ROOT, "show", "efb4503:mobile/cjmp/lib/index.cj"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except Exception:
+        efb_text = None
+
+    if efb_text is not None:
+        w_efb_pass, w_efb_msg = check_w(efb_text)
+        assert not w_efb_pass, f"selftest regression: efb4503 must fail check_w, but passed: {w_efb_msg}"
+    else:
+        print("SKIP efb4503 regression check (cannot read efb4503)")
 
     print("selftest OK")
     sys.exit(0)
@@ -2255,6 +2405,7 @@ def main():
         ("t) win_scrim_and_card_stack", lambda: check_t(index_cj_text, theme_cj_text)),
         ("u) safe_area_implementation", lambda: check_u(theme_cj_text, lib_dir)),
         ("v) play_paper_colors", lambda: check_v(index_cj_text)),
+        ("w) build_body_no_let_var", lambda: check_w(index_cj_text)),
     ]
 
     all_passed = True

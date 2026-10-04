@@ -921,8 +921,15 @@ class EntryView {
         return Theme.paperLine
     }
 
+    func currentH(): Float64 {
+        if (this.winH > 0.0) {
+            return this.winH
+        } else {
+            return 800.0
+        }
+    }
+
     func build() {
-        let currentH = if (this.winH > 0.0) { this.winH } else { 800.0 } // H 未测到(<=0)时用 800.0 兜底
         Stack(alignContent: Alignment.TopStart) {
             Column {
                 if (this.screen == 0) {
@@ -2257,7 +2264,7 @@ class EntryView {
             // 1. 遮罩: 纯色 winScrim(0x802C2A26), 从 hairline 上缘盖到屏幕最底
             Column() {}
                 .width(100.percent)
-                .height(WinGeom.maskHeight(currentH, this.padTop))
+                .height(WinGeom.maskHeight(this.currentH(), this.padTop))
                 .backgroundColor(Theme.winScrim)
                 .position(x: 0.0, y: WinGeom.maskTop(this.padTop))
 
@@ -2269,7 +2276,7 @@ class EntryView {
                 .borderRadius(4)
                 .position(
                     x: WinGeom.cardX() + WinGeom.cardShadowDx(),
-                    y: WinGeom.cardTop(currentH, this.padTop, this.padBottom) + WinGeom.cardShadowDy()
+                    y: WinGeom.cardTop(this.currentH(), this.padTop, this.padBottom) + WinGeom.cardShadowDy()
                 )
 
             // 3. 通关卡主体: Stack, 相对 sy=cardTop 垂直居中于 hairline 到 H-safeBottom
@@ -2374,7 +2381,7 @@ class EntryView {
             .backgroundColor(Theme.whitePaper)
             .border(width: 1, color: Theme.paperLine)
             .borderRadius(4)
-            .position(x: WinGeom.cardX(), y: WinGeom.cardTop(currentH, this.padTop, this.padBottom))
+            .position(x: WinGeom.cardX(), y: WinGeom.cardTop(this.currentH(), this.padTop, this.padBottom))
 
             // 4. 顶栏 hairline 覆盖层: 重画在遮罩之上
             Column() {}
