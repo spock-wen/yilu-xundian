@@ -301,6 +301,75 @@ class EntryView {
         }
     }
 
+    /* 驿程全表百驿全通总结卡(B7):文案只经 SummaryCopy、几何只经 SummaryGeom(chapter.cj),
+       朱印按 render_cjmp_gaps_v1.make_seal(size=56) 公式纯布局绘制(不用 Image);不可点击。 */
+    @Builder func summaryCard() {
+        Row {
+            Column {
+                Text(SummaryCopy.title())
+                    .fontSize(SummaryGeom.titleFont())
+                    .fontColor(Theme.ink)
+                    .fontFamily(this.serifBoldFamily())
+                    .fontWeight(FontWeight.Bold)
+                    .height(28)
+                    .margin(top: 16) // 中心距卡顶 30=SummaryGeom.titleCenterY():16+28/2
+                Text(SummaryCopy.subtitle(this.levels.size))
+                    .fontSize(SummaryGeom.lineFont())
+                    .fontColor(Theme.inkMuted)
+                    .fontFamily(this.sansFamily())
+                    .height(18)
+                    .margin(top: 5) // 顶部 49(16+28+5),中心 58=SummaryGeom.lineCenterY()
+            }
+            .alignItems(HorizontalAlign.Start)
+            Blank()
+            // 朱印 make_seal(size=56):外层 56×56 留白(sealFrameInset 由内层 50×50 实现)
+            Column {
+                Column {
+                    Column {
+                        ForEach(
+                            SummaryCopy.sealChars(),
+                            itemGenerator: {ch: String, index: Int64 =>
+                                Text(ch)
+                                    .fontSize(SummaryGeom.sealFont())
+                                    .fontColor(Theme.vermillion)
+                                    .fontFamily(this.serifBoldFamily())
+                                    .fontWeight(FontWeight.Bold)
+                                    .lineHeight(SummaryGeom.sealFont() * SummaryGeom.sealLineStep())
+                            }
+                        )
+                    }
+                    .width(SummaryGeom.sealSize() - 2.0 * SummaryGeom.sealInnerInset())
+                    .height(SummaryGeom.sealSize() - 2.0 * SummaryGeom.sealInnerInset())
+                    .justifyContent(FlexAlign.Center)
+                    .alignItems(HorizontalAlign.Center)
+                    .border(width: SummaryGeom.sealInnerW(), color: Theme.vermillion)
+                    .borderRadius(SummaryGeom.sealInnerR())
+                }
+                .width(SummaryGeom.sealSize() - 2.0 * SummaryGeom.sealFrameInset())
+                .height(SummaryGeom.sealSize() - 2.0 * SummaryGeom.sealFrameInset())
+                .justifyContent(FlexAlign.Center)
+                .alignItems(HorizontalAlign.Center)
+                .border(width: SummaryGeom.sealFrameW(), color: Theme.vermillion)
+                .borderRadius(SummaryGeom.sealFrameR())
+            }
+            .width(SummaryGeom.sealSize())
+            .height(SummaryGeom.sealSize())
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+            .rotate(angle: SummaryGeom.sealAngle())
+            .opacity(SummaryGeom.sealAlpha())
+        }
+        .alignItems(VerticalAlign.Center)
+        .width(100.percent)
+        .height(SummaryGeom.cardH())
+        .padding(left: SummaryGeom.padLeft(), right: SummaryGeom.padRight())
+        .backgroundColor(Theme.whitePaper)
+        .border(width: 1, color: Theme.paperLine)
+        .borderRadius(SummaryGeom.radius())
+        // 列表父 Column space=8,补 margin 4 使卡下总间距=12(SummaryGeom.gapBelow)
+        .margin(bottom: SummaryGeom.gapBelow() - 8.0)
+    }
+
     // Android system back override (Keels CustomView page-level back)
     protected override func onBackPress(): Bool {
         if (this.screen == 0) {
@@ -966,6 +1035,10 @@ class EntryView {
                 Column() {}.width(100.percent).height(1).backgroundColor(Theme.paperLine)
                 Scroll {
                     Column(space: 8) {
+                        // 百驿全通总结卡(B7):与分组头同属 Scroll 内容,置于第1章分组头之前
+                        if (SummaryCopy.summaryVisible(this.cleared, this.levels.size)) {
+                            this.summaryCard()
+                        }
                         ForEach(
                             this.levels,
                             itemGenerator: {item: LevelDef, index: Int64 =>

@@ -15,6 +15,9 @@ Checks:
      doUndo/doClear r8 with border width 1.2
   h) (e) fallback toast: index.cj references toastIsOutsideTray / rejectPlace.step == 4 and the
      '// toast fallback (e)' Text appears before the board Scroll (border before borderRadius)
+  i) (B7) summary card: @Builder summaryCard wired via SummaryCopy.summaryVisible, copy routed
+     through SummaryCopy (no 驿路全通/十章皆通/Text("全通") literals in index.cj), geometry via
+     SummaryGeom, border before borderRadius inside the builder
 """
 import argparse
 import json
@@ -159,8 +162,8 @@ def check_c(lib_dir, board_selftest_main_path, chapter_cj_path=None, index_cj_pa
     if "已通 100 · 驿路全通" not in selftest_content:
         return False, "board_selftest/main.cj missing literal '已通 100 · 驿路全通'"
 
-    # index.cj literal ban: only enforced once the summary card is wired into index.cj
-    # (references SummaryCopy); until J12b lands, index.cj has none of these literals anyway.
+    # index.cj literal ban: enforced once the summary card is wired into index.cj
+    # (J12b landed: index.cj references SummaryCopy, so the ban is active).
     if index_cj_path and os.path.exists(index_cj_path):
         with open(index_cj_path, "r", encoding="utf-8") as f:
             index_content = f.read()
@@ -288,8 +291,10 @@ def check_g(lines):
         if "cardBorderW(" in txt:
             card_chains.append((start, rad, txt))
 
-        # 4. Theme.vermillion border toast
-        if re.search(r'\.border\s*\([^)]*Theme\.vermillion', txt):
+        # 4. Theme.vermillion border toast (the summary-card seal borders use SummaryGeom
+        #    seal widths and radii 4/2 by design — their order is checked in i), not g)
+        if re.search(r'\.border\s*\([^)]*Theme\.vermillion', txt) and \
+                not re.search(r'SummaryGeom\.seal(Frame|Inner)W', txt):
             toast_chains.append((start, rad, txt))
 
         # 5. doUndo() / doClear()
@@ -380,6 +385,45 @@ def check_h(index_cj_text):
         return False, "fallback toast chain must have .border( before .borderRadius("
 
     return True, "toastIsOutsideTray referenced, fallback (e) toast before board Scroll, border before borderRadius"
+
+
+def check_i(index_cj_text):
+    """i) (B7) summary card wired: summaryCard builder, SummaryCopy/SummaryGeom routing, order."""
+    if "SummaryCopy.summaryVisible" not in index_cj_text:
+        return False, "index.cj must gate the summary card with SummaryCopy.summaryVisible"
+    if not re.search(r'@Builder\s+func\s+summaryCard\s*\(', index_cj_text):
+        return False, "@Builder func summaryCard() not found in index.cj"
+
+    m = re.search(r'@Builder\s+func\s+summaryCard\s*\([^)]*\)', index_cj_text)
+    body = _extract_brace_body(index_cj_text, m.end())
+
+    for req in (
+        "SummaryCopy.title()",
+        "SummaryCopy.subtitle(",
+        "SummaryCopy.sealChars()",
+        "SummaryGeom.cardH()",
+        "SummaryGeom.sealSize()",
+        "SummaryGeom.sealAngle()",
+        "SummaryGeom.sealAlpha()",
+    ):
+        if req not in body:
+            return False, f"summaryCard body missing {req}"
+
+    for lit in ("驿路全通", "十章皆通"):
+        if lit in index_cj_text:
+            return False, f"index.cj contains literal '{lit}' (copy must live in SummaryCopy)"
+    if 'Text("全通")' in index_cj_text:
+        return False, 'index.cj contains Text("全通")'
+
+    # border before borderRadius in every modifier chain inside the builder
+    for start, chain in split_chains(body.splitlines()):
+        txt = "\n".join(chain)
+        b = txt.find(".border(")
+        r = txt.find(".borderRadius(")
+        if b >= 0 and r >= 0 and b > r:
+            return False, f"summaryCard chain (line ~{start}) has .borderRadius before .border"
+
+    return True, "summaryCard wired via SummaryCopy.summaryVisible, copy/geometry centralized, border before borderRadius"
 
 
 def selftest():
@@ -488,6 +532,43 @@ def selftest():
     ok_h_no_ref, msg = check_h(good_h.replace("toastIsOutsideTray(p)", "foo(p)"))
     assert not ok_h_no_ref and "toastIsOutsideTray" in msg, f"selftest h: expected reference failure, got {msg}"
 
+    # 4. Test check_i summary card wiring
+    good_i = (
+        "if (SummaryCopy.summaryVisible(this.cleared, this.levels.size)) {\n"
+        "    this.summaryCard()\n"
+        "}\n"
+        "@Builder func summaryCard() {\n"
+        "    Column {\n"
+        "        Text(SummaryCopy.title())\n"
+        "        Text(SummaryCopy.subtitle(this.levels.size))\n"
+        "        ForEach(SummaryCopy.sealChars(), itemGenerator: {ch: String, index: Int64 => Text(ch) })\n"
+        "    }\n"
+        "    .height(SummaryGeom.cardH())\n"
+        "    .width(SummaryGeom.sealSize())\n"
+        "    .border(width: 1, color: Theme.paperLine)\n"
+        "    .borderRadius(SummaryGeom.radius())\n"
+        "    .rotate(angle: SummaryGeom.sealAngle())\n"
+        "    .opacity(SummaryGeom.sealAlpha())\n"
+        "}\n"
+    )
+    ok_i_good, msg = check_i(good_i)
+    assert ok_i_good, f"selftest i: expected pass, got {msg}"
+
+    ok_i_no_vis, msg = check_i(good_i.replace("SummaryCopy.summaryVisible", "foo"))
+    assert not ok_i_no_vis and "summaryVisible" in msg, f"selftest i: expected gate failure, got {msg}"
+
+    ok_i_lit, msg = check_i(good_i + '\nText("驿路全通")\n')
+    assert not ok_i_lit and "驿路全通" in msg, f"selftest i: expected literal failure, got {msg}"
+
+    ok_i_missing, msg = check_i(good_i.replace("SummaryGeom.sealAlpha()", "0.9"))
+    assert not ok_i_missing and "SummaryGeom.sealAlpha()" in msg, f"selftest i: expected geometry failure, got {msg}"
+
+    ok_i_order, msg = check_i(good_i.replace(
+        ".border(width: 1, color: Theme.paperLine)\n    .borderRadius(SummaryGeom.radius())",
+        ".borderRadius(SummaryGeom.radius())\n    .border(width: 1, color: Theme.paperLine)",
+    ))
+    assert not ok_i_order and "before" in msg, f"selftest i: expected order failure, got {msg}"
+
     print("selftest OK")
     sys.exit(0)
 
@@ -531,6 +612,7 @@ def main():
         ("f) dessert_tag_builder", lambda: check_f(index_cj_text)),
         ("g) border_radius_values", lambda: check_g(index_cj_lines)),
         ("h) toast_fallback_outside_scroll", lambda: check_h(index_cj_text)),
+        ("i) summary_card_wiring", lambda: check_i(index_cj_text)),
     ]
 
     all_passed = True
