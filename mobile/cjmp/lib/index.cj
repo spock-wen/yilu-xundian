@@ -376,7 +376,9 @@ class EntryView {
         .backgroundColor(Theme.whitePaper)
         .border(width: 1, color: Theme.paperLine)
         .borderRadius(SummaryGeom.radius())
-        // 列表父 Column space=8,补 margin 4 使卡下总间距=12(SummaryGeom.gapBelow)
+        // 列表父 Column space=8,补 margin 4 使卡下总间距=12(SummaryGeom.gapBelow)。
+        // 卡顶到分隔线的 12u 留白不写在卡上,由 Scroll 内容容器的 padding(top: gapAbove)
+        // 统一提供(J26b,见 Column(space: 8) 处注释),对未全通态同样生效。
         .margin(bottom: SummaryGeom.gapBelow() - 8.0)
     }
 
@@ -1020,14 +1022,20 @@ class EntryView {
                 .height(140)
                 .opacity(0.18)
                 Blank()
-                Button("开始传书")
+                // J26 缺陷3:Button 自带胶囊形(默认 ButtonType.Capsule),.borderRadius(8) 对其无效;
+                // 换成已验证的点击容器写法(同「章节 · 驿程」Row)以落实规格 r8 / 高 52 (RULINGS §3/§4)
+                Row {
+                    Text("开始传书")
+                        .fontSize(16)
+                        .fontColor(Theme.whitePaper)
+                        .fontFamily(this.sansMediumFamily())
+                }
                     .width(100.percent)
                     .height(Theme.primaryH)
                     .backgroundColor(Theme.qingDeep)
                     .borderRadius(8)
-                    .fontColor(Theme.whitePaper)
-                    .fontSize(16)
-                    .fontFamily(this.sansMediumFamily())
+                    .justifyContent(FlexAlign.Center)
+                    .alignItems(VerticalAlign.Center)
                     .onClick({event => this.startPlay()})
                 // 首页底部：「章节 · 驿程」文字链与点击区 (SPEC_A1_ADDENDUM §3.3 & RULINGS_ABF56B0)
                 // 几何推导 (相对屏幕中线 x=0):
@@ -1258,6 +1266,15 @@ class EntryView {
                         )
                     }
                     .width(100.percent)
+                    // J26b(裁决:预览对,实现错):驿程滚动内容顶部缺 12u 留白——设计预览的滚动
+                    // 视口顶=topbar 下沿+12(B5 未全通/B6 滚动/B7 全通一致,render_cjmp_gaps_v1
+                    // scr_yicheng 的 vp_top),实机原为 0u。统一以内容容器 padding(top: 12) 补齐:
+                    // ①百驿全通:总结卡顶距分隔线 12(B7 预览 11.4u≈12);②卡底到首个分组头仍 12
+                    // (卡 margin bottom 4 + 本 Column space 8);③未全通:首屏分组头/滚动对齐的
+                    // 当前章头均落在视口顶+12(与 B5 一致)。滚动偏移公式(yichengScrollOffset)
+                    // 不需要改:章头内容坐标 = 12 + (k-1)*周期,scrollTo 偏移 = (k-1)*周期,
+                    // 对齐后章头恰在视口顶+12;cleared>=total 停顶时卡顶=视口顶+12。
+                    .padding(top: SummaryGeom.gapAbove())
                 }
                 .width(100.percent)
                 .layoutWeight(1)
@@ -1784,13 +1801,20 @@ class EntryView {
                     }
                     .width(100.percent)
                     .margin(bottom: 24)
-                    Button("下一驿")
+                    // J26 缺陷3 同类:胜利弹窗主按钮同为 button token(浮层操作,tokens radius.button=8),
+                    // 裸 Button 默认胶囊,换成与「开始传书」一致的容器写法
+                    Row {
+                        Text("下一驿")
+                            .fontSize(16)
+                            .fontColor(Theme.whitePaper)
+                            .fontFamily(this.sansMediumFamily())
+                    }
                         .width(100.percent)
                         .height(Theme.primaryH)
                         .backgroundColor(Theme.qingDeep)
-                        .fontColor(Theme.whitePaper)
-                        .fontSize(16)
-                        .fontFamily(this.sansMediumFamily())
+                        .borderRadius(8)
+                        .justifyContent(FlexAlign.Center)
+                        .alignItems(VerticalAlign.Center)
                         .onClick({event => this.nextLevel()})
                 }
                 .width(86.percent)

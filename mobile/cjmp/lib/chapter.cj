@@ -518,6 +518,12 @@ public class SummaryGeom {
     public static func titleFont(): Float64 { return 20.0 }
     public static func lineFont(): Float64 { return 12.0 }
     public static func gapBelow(): Float64 { return 12.0 }
+    /* J26b: 驿程滚动内容顶到分隔线(顶栏下 hairline)的留白,以 Scroll 内容容器
+       padding(top:) 应用(未全通/全通两态同源)。依据:设计预览滚动视口顶=topbar 下沿+12
+       (render_cjmp_gaps_v1 scr_yicheng 的 vp_top,B5/B6/B7 一致);B7 实测(seal-card-previews/
+       android-320x700-B7.png / b7_measured.json)分隔线 rows 274–276px、卡顶 306–308px,
+       间距 30px @ 2.625px/u ≈ 11.4u,取整 12 与 gapBelow 一致(设计师裁决:预览对,实现错)。 */
+    public static func gapAbove(): Float64 { return 12.0 }
     public static func sealSize(): Float64 { return 56.0 }
     public static func sealAngle(): Float64 { return -8.0 } /* rotate(-8) */
 
@@ -772,8 +778,12 @@ public class StationRowGeom {
    - 组间距 groupGap = rowGap 8 + headerTopMargin 4 = 12(上一章末行 -> 下一章分组头顶)
    - 行 .height(StationRowGeom.globalRowH)=64 -> rowH 64
    - 总结卡 SummaryGeom.cardH()=88,其后与第 1 章分组头块之间隔 Column space 8
-     -> summaryBlockH 96(仅百驿全通时存在,此时 offset 恒 0,不参与偏移计算,仅对账) */
+     -> summaryBlockH 96(仅百驿全通时存在,此时 offset 恒 0,不参与偏移计算,仅对账);
+     内容顶部另有 padding top 12(SummaryGeom.gapAbove, J26b),两态同源、在所有
+     内容坐标之前,不改变 yichengScrollOffset:章头内容坐标 = contentTopPad +
+     (k-1)*周期,scrollTo 偏移 = (k-1)*周期,对齐后章头仍在视口顶+contentTopPad */
 public class YichengScrollGeom {
+    public static func contentTopPad(): Float64 { return SummaryGeom.gapAbove() }
     public static func headerH(): Float64 { return 40.0 }
     public static func rowH(): Float64 { return Float64(StationRowGeom.globalRowH) }
     public static func rowGap(): Float64 { return 8.0 }

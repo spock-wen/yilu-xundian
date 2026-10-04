@@ -3079,6 +3079,27 @@ func j28SummaryTests(ctx: Ctx): Unit {
     // 4. 几何常量(容差 1e-6)
     ctx.ck(absF(SummaryGeom.cardH() - 88.0) < 1e-6, "J28 cardH=${SummaryGeom.cardH()} want=88")
     ctx.ck(absF(SummaryGeom.padLeft() - 16.0) < 1e-6, "J28 padLeft=${SummaryGeom.padLeft()} want=16")
+    // J26b: 总结卡几何裁决——卡顶留白(到驿程分隔线)12、卡高 88、卡底到首个分组头 12
+    // (父 Column space 8 + 卡 margin bottom 4);三项占位合计 12+88+12=112
+    ctx.ck(absF(SummaryGeom.gapAbove() - 12.0) < 1e-6, "J26b gapAbove=${SummaryGeom.gapAbove()} want=12")
+    ctx.ck(absF(SummaryGeom.gapBelow() - 12.0) < 1e-6, "J26b gapBelow=${SummaryGeom.gapBelow()} want=12")
+    ctx.ck(absF(SummaryGeom.gapAbove() + SummaryGeom.cardH() + SummaryGeom.gapBelow() - 112.0) < 1e-6,
+        "J26b summary occupancy gapAbove(12)+cardH(88)+gapBelow(12)=112 (got ${SummaryGeom.gapAbove() + SummaryGeom.cardH() + SummaryGeom.gapBelow()})")
+    // J26b: 内容顶部留白以 Scroll 内容容器 padding(top: gapAbove) 落实,两态同源;
+    // 滚动偏移公式不变——章头内容坐标 = contentTopPad + (k-1)*周期,offset = (k-1)*周期,
+    // 对齐后章头距视口顶恰 contentTopPad(与 B5 预览 vp_top=topbar+12 一致)
+    ctx.ck(YichengScrollGeom.contentTopPad() == SummaryGeom.gapAbove(), "J26b contentTopPad==gapAbove")
+    ctx.ck(YichengScrollGeom.contentTopPad() == 12.0, "J26b contentTopPad=${YichengScrollGeom.contentTopPad()} want=12")
+    var k26b: Int64 = 1
+    while (k26b <= 10) {
+        let cleared26b = (k26b - 1) * 10
+        let off26b = ChapterCatalog.yichengScrollOffset(ChapterCatalog.chapterIdForLevel(cleared26b), cleared26b, 100)
+        let hdrContentY26b = YichengScrollGeom.contentTopPad() + Float64(k26b - 1) *
+            (YichengScrollGeom.chapterH(10) + YichengScrollGeom.groupGap())
+        ctx.ck(absF(hdrContentY26b - off26b - YichengScrollGeom.contentTopPad()) < 1e-9,
+            "J26b ch${k26b} aligned header sits at viewport-top + contentTopPad (off=${off26b} hdrY=${hdrContentY26b})")
+        k26b = k26b + 1
+    }
     ctx.ck(absF(SummaryGeom.sealSize() - 56.0) < 1e-6, "J28 sealSize=${SummaryGeom.sealSize()} want=56")
     ctx.ck(absF(SummaryGeom.sealAngle() - (-8.0)) < 1e-6, "J28 sealAngle=${SummaryGeom.sealAngle()} want=-8")
     ctx.ck(absF(SummaryGeom.sealFrameW() - (9.0 / 2.625)) < 1e-6, "J28 sealFrameW=${SummaryGeom.sealFrameW()} want=9/2.625")

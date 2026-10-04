@@ -26,6 +26,16 @@ Checks:
   m) (J20) StationRowGeom in chapter.cj; index.cj screen 3 references global constants,
      screen 5 references chapter constants, old r18/18pt patterns removed, border order maintained;
      (J22) locked rows place the lock icon via StationRowGeom.lockPadRight
+  o) (J26) r8 primary buttons (开始传书 home / 下一驿 win popup): rendered as container rows
+     (Row { Text(...) } with .borderRadius(8), Theme.primaryH, .onClick), never bare Button(
+     without .type(ButtonType.Normal) — Button defaults to a capsule shape that ignores
+     .borderRadius; likewise any Button( chain carrying .borderRadius( without
+     .type(ButtonType.Normal) is a violation
+  p) (J26b) yicheng scroll content top whitespace: SummaryGeom.gapAbove()==12 applied as the
+     Scroll content Column's .padding(top: SummaryGeom.gapAbove()) (both all-clear and non-cleared
+     states, per B5/B7 previews' vp_top = topbar + 12); summary card keeps only the bottom margin
+     gapBelow()-8.0 (card bottom to first group header = 12 with parent Column(space: 8));
+     YichengScrollGeom.contentTopPad documents that the scroll offset formula is unchanged
 """
 import argparse
 import hashlib
@@ -672,6 +682,147 @@ def check_n(index_cj_text, chapter_cj_text):
     return True, "yicheng scroll-to-current-chapter wired via Scroller/scrollTo, geometry in YichengScrollGeom/yichengScrollOffset"
 
 
+def _button_chain(lines, i):
+    """Lines of the Button( at index i plus its modifier chain (dot lines)."""
+    chain = [lines[i]]
+    j = i + 1
+    while j < len(lines) and lines[j].strip().startswith("."):
+        chain.append(lines[j])
+        j += 1
+    return chain, j
+
+
+def _container_chain_after(index_cj_text, anchor):
+    """Return the modifier chain (dot lines) of the container whose body closes right after
+    the first `}` line following anchor (the container's own chain, not the anchor Text's)."""
+    lines = index_cj_text[index_cj_text.find(anchor):].splitlines()[1:]
+    chain = []
+    seen_close = False
+    for ln in lines:
+        s = ln.strip()
+        if not seen_close:
+            if s == "}":
+                seen_close = True
+            continue
+        if s.startswith("."):
+            chain.append(s)
+        else:
+            break
+    return "\n".join(chain)
+
+
+def check_o(index_cj_text):
+    """o) (J26) r8 primary buttons must not be bare Button( (capsule ignores .borderRadius)."""
+    errors = []
+    lines = index_cj_text.splitlines()
+
+    # General rule: any Button( whose modifier chain has .borderRadius( but no
+    # .type(ButtonType.Normal) — borderRadius has no effect on Button's capsule shape.
+    # For the two r8 primary buttons even a bare Button( without .borderRadius( is a
+    # violation (spec r8; they must use the container form asserted below).
+    primary_labels = {"开始传书", "下一驿"}
+    i = 0
+    while i < len(lines):
+        if lines[i].strip().startswith("Button("):
+            chain, j = _button_chain(lines, i)
+            txt = "\n".join(chain)
+            has_type = ".type(ButtonType.Normal)" in txt
+            m = re.match(r'Button\("([^"]+)"\)', lines[i].strip())
+            is_primary = bool(m and m.group(1) in primary_labels)
+            if ".borderRadius(" in txt and not has_type:
+                errors.append(f"line {i + 1}: Button(...) chain has .borderRadius( but no "
+                              f".type(ButtonType.Normal) — borderRadius is ineffective on Button "
+                              f"(default capsule):\n    {txt}")
+            elif is_primary and not has_type:
+                errors.append(f'line {i + 1}: bare Button("{m.group(1)}") — Button renders a '
+                              f"capsule by default, spec requires r8 container form")
+            i = j
+        else:
+            i += 1
+
+    # Specific rule: the two r8 primary buttons use the verified container form.
+    for label, onclick in (("开始传书", "this.startPlay()"), ("下一驿", "this.nextLevel()")):
+        if f'Text("{label}")' not in index_cj_text:
+            errors.append(f'Text("{label}") not found (expected container-row button form)')
+            continue
+        chain_txt = _container_chain_after(index_cj_text, f'Text("{label}")')
+        for req in (".width(100.percent)", ".height(Theme.primaryH)",
+                    ".backgroundColor(Theme.qingDeep)", ".borderRadius(8)",
+                    ".justifyContent(FlexAlign.Center)", f".onClick({{event => {onclick}}}"):
+            if req not in chain_txt:
+                errors.append(f'"{label}" container chain missing {req}')
+
+    if errors:
+        return False, "\n    ".join(errors)
+    return True, ("r8 primary buttons (开始传书/下一驿) are container rows with .borderRadius(8); "
+                  "no Button(...) with .borderRadius( and no .type(ButtonType.Normal)")
+
+
+def _summary_geom_value(chapter_cj_text, func_name):
+    """Return the Float64 literal returned by SummaryGeom.<func_name>(), or None."""
+    m = re.search(r'class\s+SummaryGeom\b(?!\s*\w)', chapter_cj_text)
+    if not m:
+        return None
+    body = _extract_brace_body(chapter_cj_text, m.end())
+    fm = re.search(r'func\s+' + func_name + r'\(\)\s*:\s*Float64\s*\{\s*return\s+([0-9.]+)', body)
+    return float(fm.group(1)) if fm else None
+
+
+def check_p(index_cj_text, chapter_cj_text):
+    """p) (J26b) yicheng scroll content top whitespace 12u to the divider (SummaryGeom.gapAbove,
+    applied as padding(top:) on the Scroll content Column so both the all-clear summary card and
+    the non-cleared first group header sit 12u below the divider, per B5/B7 previews); card bottom
+    to the first group header stays 12 (gapBelow, parent Column(space: 8) + margin bottom
+    gapBelow()-8.0); scroll offset formula unchanged (YichengScrollGeom.contentTopPad)."""
+    errors = []
+
+    # chapter.cj: gapAbove (top whitespace) and gapBelow (card -> first group header) both 12
+    for name in ("gapAbove", "gapBelow"):
+        v = _summary_geom_value(chapter_cj_text, name)
+        if v is None:
+            errors.append(f"chapter.cj SummaryGeom missing 'func {name}(): Float64' with a literal return")
+        elif abs(v - 12.0) > 1e-9:
+            errors.append(f"chapter.cj SummaryGeom.{name}() = {v}, expected 12.0")
+    if "func contentTopPad(): Float64 { return SummaryGeom.gapAbove() }" not in chapter_cj_text:
+        errors.append("chapter.cj YichengScrollGeom missing 'contentTopPad(): Float64 { return SummaryGeom.gapAbove() }'")
+
+    # index.cj screen 3: the Scroll content Column carries the 12u top padding
+    build_idx = index_cj_text.find("func build()")
+    s3_idx = index_cj_text.find("this.screen == 3", build_idx if build_idx >= 0 else 0)
+    s4_idx = index_cj_text.find("this.screen == 4", s3_idx)
+    s3_text = index_cj_text[s3_idx:s4_idx if s4_idx > 0 else len(index_cj_text)] if s3_idx >= 0 else ""
+    pad = ".padding(top: SummaryGeom.gapAbove())"
+    n_pad = s3_text.count(pad)
+    if n_pad != 1:
+        errors.append(f"index.cj screen 3 must carry the top whitespace exactly once as '{pad}' "
+                      f"on the Scroll content Column (found {n_pad})")
+    if "Column(space: 8)" not in s3_text:
+        errors.append("yicheng Scroll content is not 'Column(space: 8)' — "
+                      "margin bottom gapBelow()-8.0 would not total 12")
+
+    # summaryCard: card keeps the bottom margin only (the 12u above comes from the content padding)
+    m = re.search(r'@Builder\s+func\s+summaryCard\s*\(', index_cj_text)
+    if not m:
+        errors.append("@Builder func summaryCard() not found in index.cj")
+    else:
+        body = _extract_brace_body(index_cj_text, m.end())
+        if ".margin(bottom: SummaryGeom.gapBelow() - 8.0)" not in body:
+            errors.append("summaryCard body missing '.margin(bottom: SummaryGeom.gapBelow() - 8.0)' "
+                          "(card bottom to first group header = 8 Column space + 4 margin = 12)")
+        body_code = "\n".join(ln for ln in body.splitlines() if not ln.strip().startswith("//"))
+        if "gapAbove" in body_code:
+            errors.append("summaryCard body must not reference gapAbove — the 12u top whitespace "
+                          "lives on the Scroll content Column padding, not on the card (would double to 24)")
+        if ".height(SummaryGeom.cardH())" not in body:
+            errors.append("summaryCard body missing '.height(SummaryGeom.cardH())'")
+
+    if errors:
+        return False, "\n    ".join(errors)
+    return True, ("yicheng scroll content top whitespace 12 (gapAbove, content Column padding, both states); "
+                  "summary card bottom to first group header stays 12 (gapBelow, Column space 8 + margin 4); "
+                  "offset formula unchanged via YichengScrollGeom.contentTopPad")
+
+
 def selftest():
     # 1. Test check_a violation detection
     bad_a_lines = [
@@ -1085,6 +1236,119 @@ def selftest():
     ok_n_noscrollto, msg = check_n(bad_n_index_noscrollto, good_n_chapter)
     assert not ok_n_noscrollto and "scrollTo" in msg, f"selftest n: expected scrollTo failure, got {msg}"
 
+    # 15. Test check_o: bare Button + borderRadius(8) is detected, container form passes
+    def _o_button(label, onclick):
+        return (f'Button("{label}")\n'
+                '    .width(100.percent)\n'
+                '    .height(Theme.primaryH)\n'
+                '    .backgroundColor(Theme.qingDeep)\n'
+                '    .borderRadius(8)\n'
+                f'    .onClick({{event => {onclick}}})\n')
+
+    def _o_container(label, onclick):
+        return (f'Row {{\n'
+                f'    Text("{label}")\n'
+                '        .fontSize(16)\n'
+                '        .fontColor(Theme.whitePaper)\n'
+                '        .fontFamily(this.sansMediumFamily())\n'
+                '}\n'
+                '    .width(100.percent)\n'
+                '    .height(Theme.primaryH)\n'
+                '    .backgroundColor(Theme.qingDeep)\n'
+                '    .borderRadius(8)\n'
+                '    .justifyContent(FlexAlign.Center)\n'
+                '    .alignItems(VerticalAlign.Center)\n'
+                f'    .onClick({{event => {onclick}}})\n')
+
+    good_o = _o_container("开始传书", "this.startPlay()") + _o_container("下一驿", "this.nextLevel()")
+    ok_o_good, msg = check_o(good_o)
+    assert ok_o_good, f"selftest o: expected container form to pass, got {msg}"
+
+    bad_o = _o_button("开始传书", "this.startPlay()") + _o_container("下一驿", "this.nextLevel()")
+    ok_o_bad, msg = check_o(bad_o)
+    assert not ok_o_bad and "borderRadius is ineffective" in msg, \
+        f"selftest o: expected bare Button+borderRadius violation, got {ok_o_bad}, {msg}"
+
+    bad_o_bare = _o_container("开始传书", "this.startPlay()") + _o_button("下一驿", "this.nextLevel()").replace(
+        "    .borderRadius(8)\n", "")
+    ok_o_bare, msg = check_o(bad_o_bare)
+    assert not ok_o_bare and "capsule" in msg, \
+        f"selftest o: expected bare primary Button violation, got {ok_o_bare}, {msg}"
+
+    bad_o_missing = good_o.replace("    .borderRadius(8)\n    .justifyContent(FlexAlign.Center)\n    .alignItems(VerticalAlign.Center)\n    .onClick({event => this.startPlay()})",
+                                   "    .borderRadius(8)\n    .onClick({event => this.startPlay()})")
+    ok_o_missing, msg = check_o(bad_o_missing)
+    assert not ok_o_missing and "missing" in msg, \
+        f"selftest o: expected missing-modifier violation, got {ok_o_missing}, {msg}"
+
+    # 16. Test check_p: 12u scroll-content top padding + 12u card-below via gapAbove/gapBelow
+    def _p_chapter(gap_above="12.0", gap_below="12.0", with_toppad=True):
+        txt = ('public class SummaryGeom {\n'
+               '    public static func cardH(): Float64 { return 88.0 }\n'
+               f'    public static func gapAbove(): Float64 {{ return {gap_above} }}\n'
+               f'    public static func gapBelow(): Float64 {{ return {gap_below} }}\n'
+               '}\n'
+               'public class YichengScrollGeom {\n')
+        if with_toppad:
+            txt += '    public static func contentTopPad(): Float64 { return SummaryGeom.gapAbove() }\n'
+        txt += '}\n'
+        return txt
+
+    def _p_index(pad_line="    .padding(top: SummaryGeom.gapAbove())", card_margin=True):
+        card = ('@Builder func summaryCard() {\n'
+                '    Row {\n'
+                '        Text(SummaryCopy.title())\n'
+                '    }\n'
+                '    .width(100.percent)\n'
+                '    .height(SummaryGeom.cardH())\n')
+        if card_margin:
+            card += '    .margin(bottom: SummaryGeom.gapBelow() - 8.0)\n'
+        card += '}\n'
+        return (card +
+                '} else if (this.screen == 3) {\n'
+                'Scroll(this.yichengScroller) {\n'
+                '    Column(space: 8) {\n'
+                '        if (SummaryCopy.summaryVisible(this.cleared, this.levels.size)) {\n'
+                '            this.summaryCard()\n'
+                '        }\n'
+                '    }\n'
+                '    .width(100.percent)\n'
+                f'{pad_line}\n'
+                '}\n'
+                '} else if (this.screen == 4) {\n')
+
+    ok_p_good, msg = check_p(_p_index(), _p_chapter())
+    assert ok_p_good, f"selftest p: expected wired form to pass, got {msg}"
+
+    # c711f3e form: no content top padding (content flush against the divider) -> violation
+    ok_p_bad, msg = check_p(_p_index(pad_line="    .width(100.percent)"), _p_chapter())
+    assert not ok_p_bad and "gapAbove" in msg, \
+        f"selftest p: expected missing-top-padding violation, got {ok_p_bad}, {msg}"
+
+    # whitespace on the card instead of the content Column -> violation (double-count guard)
+    ok_p_card, msg = check_p(_p_index(pad_line="    .width(100.percent)").replace(
+        ".margin(bottom: SummaryGeom.gapBelow() - 8.0)",
+        ".margin(top: SummaryGeom.gapAbove(), bottom: SummaryGeom.gapBelow() - 8.0)"), _p_chapter())
+    assert not ok_p_card and "must not reference gapAbove" in msg, \
+        f"selftest p: expected gapAbove-on-card violation, got {ok_p_card}, {msg}"
+
+    # wrong constants: gapAbove 11 / missing gapBelow / missing contentTopPad
+    ok_p_val, msg = check_p(_p_index(), _p_chapter(gap_above="11.0"))
+    assert not ok_p_val and "gapAbove() = 11.0" in msg, \
+        f"selftest p: expected gapAbove value violation, got {ok_p_val}, {msg}"
+    ok_p_none, msg = check_p(_p_index(),
+                             _p_chapter().replace("    public static func gapBelow(): Float64 { return 12.0 }\n", ""))
+    assert not ok_p_none and "gapBelow" in msg, \
+        f"selftest p: expected missing-gapBelow violation, got {ok_p_none}, {msg}"
+    ok_p_toppad, msg = check_p(_p_index(), _p_chapter(with_toppad=False))
+    assert not ok_p_toppad and "contentTopPad" in msg, \
+        f"selftest p: expected missing-contentTopPad violation, got {ok_p_toppad}, {msg}"
+
+    # parent Column space no longer 8 -> below-gap arithmetic breaks
+    ok_p_space, msg = check_p(_p_index().replace("Column(space: 8)", "Column(space: 12)"), _p_chapter())
+    assert not ok_p_space and "Column(space: 8)" in msg, \
+        f"selftest p: expected Column(space: 8) violation, got {ok_p_space}, {msg}"
+
     print("selftest OK")
     sys.exit(0)
 
@@ -1135,6 +1399,8 @@ def main():
         ("l) footer_slack_and_avail_width", lambda: check_l(index_cj_text, chapter_cj_text)),
         ("m) station_row_geom", lambda: check_m(index_cj_text, chapter_cj_text)),
         ("n) yicheng_scroll_position", lambda: check_n(index_cj_text, chapter_cj_text)),
+        ("o) primary_button_r8_containers", lambda: check_o(index_cj_text)),
+        ("p) summary_card_top_whitespace", lambda: check_p(index_cj_text, chapter_cj_text)),
     ]
 
     all_passed = True
