@@ -748,6 +748,17 @@ public class StationRowGeom {
     public static const chapterLockRight: Int64 = 18
     public static const chapterLockCx: Int64 = 18
     public static const chapterBadgeFont: Int64 = 11
+
+    /* J22: 锁定行右内边距。锁图标盒宽 lockBoxW(= lockIconBox(0.62) 的宽 9.92),行右内边距取
+       lockRight − lockBoxW/2,使锁图标中心距行右缘恰为 lockRight(全表 28 / 章内 18),即
+       lockPadRight + lockBoxW/2 == lockRight;行右缘 = W−20 -> 锁心 x = W−48(全表)/ W−38(章内)。
+       非锁定态仍用 statusRightInset 16。lockBoxW < 2*lockRight(9.92 < 36),结果恒为正。 */
+    public static func lockPadRight(isGlobal: Bool, lockBoxW: Float64): Float64 {
+        if (isGlobal) {
+            return Float64(StationRowGeom.globalLockRight) - lockBoxW / 2.0
+        }
+        return Float64(StationRowGeom.chapterLockRight) - lockBoxW / 2.0
+    }
 }
 
 

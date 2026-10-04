@@ -24,7 +24,8 @@ Checks:
      (exactly 1 .fontFamily(this.sansBoldFamily())), YiluSans-Bold.ttf sha256 prefix 7e46ee679e9d
   l) (J19) index.cj footer Text width avail+1 and maxLines(1), chapter.cj footerSlack
   m) (J20) StationRowGeom in chapter.cj; index.cj screen 3 references global constants,
-     screen 5 references chapter constants, old r18/18pt patterns removed, border order maintained
+     screen 5 references chapter constants, old r18/18pt patterns removed, border order maintained;
+     (J22) locked rows place the lock icon via StationRowGeom.lockPadRight
 """
 import argparse
 import hashlib
@@ -532,7 +533,8 @@ def check_l(index_cj_text, chapter_cj_text):
 
 def check_m(index_cj_text, chapter_cj_text):
     """m) (J20) StationRowGeom in chapter.cj; index.cj screen 3 references global constants,
-    screen 5 references chapter constants, old r18/18pt patterns removed, border before borderRadius."""
+    screen 5 references chapter constants, old r18/18pt patterns removed, border before borderRadius.
+    (J22) locked rows place the lock icon via StationRowGeom.lockPadRight."""
     if "class StationRowGeom" not in chapter_cj_text:
         return False, "chapter.cj missing 'class StationRowGeom'"
 
@@ -563,6 +565,12 @@ def check_m(index_cj_text, chapter_cj_text):
         if req not in s3_text:
             return False, f"index.cj screen 3 missing '{req}'"
 
+    # (J22) locked rows position the lock icon via StationRowGeom.lockPadRight
+    if "func lockPadRight" not in chapter_cj_text:
+        return False, "chapter.cj StationRowGeom missing 'func lockPadRight'"
+    if "StationRowGeom.lockPadRight(true, this.lockW())" not in s3_text:
+        return False, "index.cj screen 3 locked row missing 'StationRowGeom.lockPadRight(true, this.lockW())'"
+
     # Old r18/18pt forbidden patterns in screen 3
     if "this.checkCircleIcon(36)" in s3_text:
         return False, "index.cj screen 3 still contains old 'this.checkCircleIcon(36)' (expected globalRingD 28)"
@@ -588,6 +596,9 @@ def check_m(index_cj_text, chapter_cj_text):
         if req not in s5_text:
             return False, f"index.cj screen 5 missing '{req}'"
 
+    if "StationRowGeom.lockPadRight(false, this.lockW())" not in s5_text:
+        return False, "index.cj screen 5 locked row missing 'StationRowGeom.lockPadRight(false, this.lockW())'"
+
     if "this.checkCircleIcon(32)" in s5_text:
         return False, "index.cj screen 5 still contains old 'this.checkCircleIcon(32)' (expected chapterRingD 26)"
     if ".borderRadius(16)" in s5_text:
@@ -604,7 +615,7 @@ def check_m(index_cj_text, chapter_cj_text):
             if b >= 0 and r >= 0 and b > r:
                 return False, f"index.cj {label} chain has .borderRadius before .border:\n    {txt}"
 
-    return True, "index.cj references StationRowGeom global/chapter constants, old r18/18pt patterns removed, border order maintained"
+    return True, "index.cj references StationRowGeom global/chapter constants, locked rows use lockPadRight, old r18/18pt patterns removed, border order maintained"
 
 
 def check_n(index_cj_text, chapter_cj_text):
@@ -909,6 +920,7 @@ def selftest():
         "    public static const chapterRowH: Int64 = 52\n"
         "    public static const chapterRingR: Int64 = 13\n"
         "    public static const chapterNameFont: Int64 = 16\n"
+        "    public static func lockPadRight(isGlobal: Bool, lockBoxW: Float64): Float64 { return 1.0 }\n"
         "}\n"
     )
     good_m_index = (
@@ -921,7 +933,7 @@ def selftest():
         "            Text(\"x\").fontSize(StationRowGeom.globalMetaFont)\n"
         "            this.dessertTag(0, StationRowGeom.globalBadgeFont)\n"
         "            .height(StationRowGeom.globalRowH)\n"
-        "            .padding(left: StationRowGeom.globalPadLeft, right: 16)\n"
+        "            .padding(left: StationRowGeom.globalPadLeft, right: StationRowGeom.lockPadRight(true, this.lockW()))\n"
         "            .margin(left: StationRowGeom.globalNameGap)\n"
         "        } else if (this.screen == 4) {\n"
         "        } else if (this.screen == 5) {\n"
@@ -931,7 +943,7 @@ def selftest():
         "            Text(\"x\").fontSize(StationRowGeom.chapterMetaFont)\n"
         "            this.dessertTag(0, StationRowGeom.chapterBadgeFont)\n"
         "            .height(StationRowGeom.chapterRowH)\n"
-        "            .padding(left: StationRowGeom.chapterPadLeft, right: 16)\n"
+        "            .padding(left: StationRowGeom.chapterPadLeft, right: StationRowGeom.lockPadRight(false, this.lockW()))\n"
         "            .margin(left: StationRowGeom.chapterNameGap)\n"
         "        }\n"
         "    }\n"
@@ -963,6 +975,13 @@ def selftest():
         ".height(StationRowGeom.globalRowH).borderRadius(8).border(width: 1, color: Theme.paperLine)")
     ok_m_order, msg = check_m(bad_m_index_order, good_m_chapter)
     assert not ok_m_order and ".borderRadius before .border" in msg, f"selftest m: expected order failure, got {msg}"
+
+    # Negative 5: (J22) screen 3 locked row drops lockPadRight (back to fixed 16 padding)
+    bad_m_index_lock = good_m_index.replace(
+        ".padding(left: StationRowGeom.globalPadLeft, right: StationRowGeom.lockPadRight(true, this.lockW()))",
+        ".padding(left: StationRowGeom.globalPadLeft, right: 16)")
+    ok_m_lock, msg = check_m(bad_m_index_lock, good_m_chapter)
+    assert not ok_m_lock and "lockPadRight(true, this.lockW())" in msg, f"selftest m: expected lockPadRight failure, got {msg}"
 
     # 15. Test check_n (yicheng scroll position wiring)
     good_n_chapter = (

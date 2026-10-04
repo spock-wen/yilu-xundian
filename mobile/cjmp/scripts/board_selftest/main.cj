@@ -3392,6 +3392,21 @@ func j32StationRowTests(ctx: Ctx): Unit {
     ctx.ck(chRingRight == 61, "J32 chapter ring right edge=${chRingRight} want=61")
     ctx.ck(chNameLeft == 74, "J32 chapter name left=${chNameLeft} want=74")
 
+    // 6. (J22) 锁定行右内边距 lockPadRight = lockRight − lockBoxW/2,锁心距行右缘 = lockRight
+    let (lockW, _) = lockIconBox(0.62)
+    ctx.ck(absF(lockW - 9.92) < 1e-9, "J22 lockIconBox(0.62) w=${lockW} want=9.92")
+    let gLockPad = StationRowGeom.lockPadRight(true, lockW)
+    let chLockPad = StationRowGeom.lockPadRight(false, lockW)
+    ctx.ck(gLockPad == Float64(StationRowGeom.globalLockRight) - lockW / 2.0, "J22 global lockPadRight=28-w/2 (got ${gLockPad})")
+    ctx.ck(absF(gLockPad - 23.04) < 1e-9, "J22 global lockPadRight=${gLockPad} want=23.04")
+    ctx.ck(chLockPad == Float64(StationRowGeom.chapterLockRight) - lockW / 2.0, "J22 chapter lockPadRight=18-w/2 (got ${chLockPad})")
+    ctx.ck(absF(chLockPad - 13.04) < 1e-9, "J22 chapter lockPadRight=${chLockPad} want=13.04")
+    // 锁心距行右缘 = lockPadRight + lockBoxW/2 == lockRight;行右缘 = W-20 -> 锁心 x = W-48 / W-38
+    ctx.ck(gLockPad + lockW / 2.0 == Float64(StationRowGeom.globalLockRight), "J22 global lockCx inset=${gLockPad + lockW / 2.0} want=28")
+    ctx.ck(chLockPad + lockW / 2.0 == Float64(StationRowGeom.chapterLockRight), "J22 chapter lockCx inset=${chLockPad + lockW / 2.0} want=18")
+    ctx.ck(absF(20.0 + gLockPad + lockW / 2.0 - 48.0) < 1e-9, "J22 global lockCx=W-48 (inset 20+28)")
+    ctx.ck(absF(20.0 + chLockPad + lockW / 2.0 - 38.0) < 1e-9, "J22 chapter lockCx=W-38 (inset 20+18)")
+
     println("J32 station rows done checks=${ctx.checks - c0}")
 }
 

@@ -1246,7 +1246,8 @@ class EntryView {
                                     }
                                     .width(100.percent)
                                     .height(StationRowGeom.globalRowH)
-                                    .padding(left: StationRowGeom.globalPadLeft, right: StationRowGeom.globalStatusRightInset)
+                                    // J22: 锁定行锁心距行右缘 28(lockCx=W-48),其余态保持 16
+                                    .padding(left: StationRowGeom.globalPadLeft, right: if (index > this.cleared) { StationRowGeom.lockPadRight(true, this.lockW()) } else { Float64(StationRowGeom.globalStatusRightInset) })
                                     .backgroundColor(this.rowBg(index))
                                     .border(width: this.rowBorderW(index), color: this.rowBorder(index))
                                     .borderRadius(8)
@@ -1633,7 +1634,8 @@ class EntryView {
                                 }
                                 .width(100.percent)
                                 .height(StationRowGeom.chapterRowH)
-                                .padding(left: StationRowGeom.chapterPadLeft, right: StationRowGeom.chapterStatusRightInset)
+                                // J22: 锁定行锁心距行右缘 18(lockCx=W-38),其余态保持 16
+                                .padding(left: StationRowGeom.chapterPadLeft, right: if (item.id > this.cleared) { StationRowGeom.lockPadRight(false, this.lockW()) } else { Float64(StationRowGeom.chapterStatusRightInset) })
                                 .backgroundColor(this.rowBg(item.id))
                                 .border(width: this.rowBorderW(item.id), color: this.rowBorder(item.id))
                                 .borderRadius(8)
