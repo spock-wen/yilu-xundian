@@ -1756,6 +1756,7 @@ class EntryView {
                 /* BANDS.md composite: chapters 0..9.
                    Full-width 360×100 vp; Theme.bandClear keeps bust/flags
                    out of the Canvas grid (band.bottom ≤ board.top − 30px). */
+                Stack(alignContent: Alignment.TopStart) {
                 Column {
                     if (this.chapterIndex == 0) {
                         Image(rawImg("band_zhuojun_v91"))
@@ -1801,7 +1802,29 @@ class EntryView {
                 }
                 .width(100.percent)
                 .height(Theme.bandH)
-                .margin(top: if (this.hasParityBoard() || this.curLevel().stepLimit > 0 || this.hasBurden()) { 0 } else { 4 }, bottom: Theme.bandClear)
+                    // toast fallback (e): step==4 托盘外兜底 toast 渲染在棋盘 Scroll 之外(不被裁剪)。
+                    // 样式与托盘内 toast 完全一致;底边 = Stack 底边(= 托盘顶边)上方 6u;
+                    // 横向与托盘居中同参考宽度:play 屏 playInset()=0,外层 Column 内容宽 = this.winW
+                    // (boardGeomFor 同用 winW),故 x = (winW - rejectToastW) / 2.0。
+                    if (this.parityRejectText.size > 0 && this.rejectPlace.shown && toastIsOutsideTray(this.rejectPlace)) {
+                        Text(this.parityRejectText)
+                            .fontSize(14)
+                            .fontFamily(this.serifBoldFamily())
+                            .fontColor(Theme.vermillion)
+                            .maxLines(1)
+                            .width(this.rejectToastW)
+                            .height(28)
+                            .textAlign(TextAlign.Center)
+                            .padding(left: 14, right: 14)
+                            .border(width: 1, color: Theme.vermillion)
+                            .borderRadius(4)
+                            .backgroundColor(Theme.whitePaper)
+                            .position(x: (this.winW - this.rejectToastW) / 2.0, y: Float64(Theme.bandH + Theme.bandClear) - 6.0 - 28.0)
+                    }
+                }
+                .width(100.percent)
+                .height(Theme.bandH + Theme.bandClear)
+                .margin(top: if (this.hasParityBoard() || this.curLevel().stepLimit > 0 || this.hasBurden()) { 0 } else { 4 })
                 Scroll {
                     Column {
                         Stack(alignContent: Alignment.TopStart) {
@@ -2014,7 +2037,8 @@ class EntryView {
                                         .borderRadius(4)
                                         .backgroundColor(Theme.whitePaper)
                                         .position(x: this.rejectToastX(), y: this.rejectToastY())
-                                        .visibility(if (this.rejectPlace.shown) { Visibility.Visible } else { Visibility.None })
+                                        // (e) 托盘外兜底时不在托盘内重复显示
+                                        .visibility(if (this.rejectPlace.shown && !toastIsOutsideTray(this.rejectPlace)) { Visibility.Visible } else { Visibility.None })
                                 }
                             }
                         }

@@ -10,6 +10,8 @@ Checks:
   f) dessertTag builder state==1 uses Theme.paperShade without .border, h18/fs11/r3 verified
   g) modifier chains: Theme.qingDeep slip r4, rowBorderW r8, cardBorderW r10, vermillion toast r4,
      doUndo/doClear r8 with border width 1.2
+  h) (e) fallback toast: index.cj references toastIsOutsideTray / rejectPlace.step == 4 and the
+     '// toast fallback (e)' Text appears before the board Scroll (border before borderRadius)
 """
 import argparse
 import json
@@ -310,6 +312,40 @@ def check_g(lines):
     return True, "slip r4, rowBorderW r8, cardBorderW r10, toast r4, undo/clear r8 w1.2 verified"
 
 
+def check_h(index_cj_text):
+    """h) (e) fallback toast outside the tray: marker Text before board Scroll, border order kept."""
+    if ("toastIsOutsideTray" not in index_cj_text) and ("rejectPlace.step == 4" not in index_cj_text):
+        return False, "no toastIsOutsideTray / rejectPlace.step == 4 reference in index.cj"
+
+    marker = index_cj_text.find("// toast fallback (e)")
+    if marker < 0:
+        return False, "fallback toast marker '// toast fallback (e)' not found in index.cj"
+
+    # Board Scroll = the Scroll that owns the board stack. Earlier Scroll blocks exist on other
+    # screens and this.boardCells is also assigned in helpers, so anchor on the last occurrence
+    # (the board ForEach) and search backwards for the nearest 'Scroll {'.
+    cells_pos = index_cj_text.rfind("this.boardCells")
+    if cells_pos < 0:
+        return False, "this.boardCells not found (board Scroll anchor missing)"
+    board_scroll = index_cj_text.rfind("Scroll {", 0, cells_pos)
+    if board_scroll < 0:
+        return False, "board 'Scroll {' not found before this.boardCells"
+    if marker > board_scroll:
+        return False, "fallback toast marker must appear before the board 'Scroll {'"
+
+    # The fallback Text chain (marker .. .position() ) must keep border before borderRadius.
+    chain_end = index_cj_text.find(".position(", marker)
+    if chain_end < 0 or chain_end > board_scroll:
+        return False, "fallback toast Text chain (.position) not found before the board 'Scroll {'"
+    chain = index_cj_text[marker:chain_end]
+    b = chain.find(".border(")
+    r = chain.find(".borderRadius(")
+    if b < 0 or r < 0 or b > r:
+        return False, "fallback toast chain must have .border( before .borderRadius("
+
+    return True, "toastIsOutsideTray referenced, fallback (e) toast before board Scroll, border before borderRadius"
+
+
 def selftest():
     # 1. Test check_a violation detection
     bad_a_lines = [
@@ -348,6 +384,38 @@ def selftest():
 
         ok_c_good, msg = check_c(tmpdir, st_f, ch_f)
         assert ok_c_good, f"selftest c: expected pass, got {ok_c_good}, {msg}"
+
+    # 3. Test check_h fallback toast placement
+    good_h = (
+        "if (txt.size > 0 && p.shown && toastIsOutsideTray(p)) {\n"
+        "    // toast fallback (e)\n"
+        "    Text(txt).border(width: 1, color: Theme.vermillion)\n"
+        "    .borderRadius(4)\n"
+        "    .position(x: 1.0, y: 2.0)\n"
+        "}\n"
+        "Scroll { ForEach(this.boardCells) }\n"
+    )
+    ok_h_good, msg = check_h(good_h)
+    assert ok_h_good, f"selftest h: expected pass, got {ok_h_good}, {msg}"
+
+    ok_h_no_marker, msg = check_h(good_h.replace("    // toast fallback (e)\n", ""))
+    assert not ok_h_no_marker and "marker" in msg, f"selftest h: expected marker failure, got {msg}"
+
+    bad_order = good_h.replace(
+        ".border(width: 1, color: Theme.vermillion)\n    .borderRadius(4)",
+        ".borderRadius(4)\n    .border(width: 1, color: Theme.vermillion)",
+    )
+    ok_h_bad_order, msg = check_h(bad_order)
+    assert not ok_h_bad_order and "border" in msg, f"selftest h: expected order failure, got {msg}"
+
+    after_scroll = "Scroll { ForEach(this.boardCells) }\n" + good_h.replace(
+        "Scroll { ForEach(this.boardCells) }\n", ""
+    )
+    ok_h_after, msg = check_h(after_scroll)
+    assert not ok_h_after and "before" in msg, f"selftest h: expected before-Scroll failure, got {msg}"
+
+    ok_h_no_ref, msg = check_h(good_h.replace("toastIsOutsideTray(p)", "foo(p)"))
+    assert not ok_h_no_ref and "toastIsOutsideTray" in msg, f"selftest h: expected reference failure, got {msg}"
 
     print("selftest OK")
     sys.exit(0)
@@ -391,6 +459,7 @@ def main():
         ("e) home_screen_nav", lambda: check_e(index_cj_lines)),
         ("f) dessert_tag_builder", lambda: check_f(index_cj_text)),
         ("g) border_radius_values", lambda: check_g(index_cj_lines)),
+        ("h) toast_fallback_outside_scroll", lambda: check_h(index_cj_text)),
     ]
 
     all_passed = True
