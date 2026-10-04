@@ -366,7 +366,7 @@ class EntryView {
             .height(SummaryGeom.sealSize())
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
-            .rotate(angle: SummaryGeom.sealAngle())
+            .rotate(angle: Float32(SummaryGeom.sealAngle()))
             .opacity(SummaryGeom.sealAlpha())
         }
         .alignItems(VerticalAlign.Center)

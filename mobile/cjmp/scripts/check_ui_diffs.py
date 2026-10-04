@@ -439,7 +439,7 @@ def check_i(index_cj_text):
         "SummaryCopy.sealChars()",
         "SummaryGeom.cardH()",
         "SummaryGeom.sealSize()",
-        "SummaryGeom.sealAngle()",
+        "Float32(SummaryGeom.sealAngle())",
         "SummaryGeom.sealAlpha()",
     ):
         if req not in body:
@@ -793,7 +793,7 @@ def selftest():
         "    .width(SummaryGeom.sealSize())\n"
         "    .border(width: 1, color: Theme.paperLine)\n"
         "    .borderRadius(SummaryGeom.radius())\n"
-        "    .rotate(angle: SummaryGeom.sealAngle())\n"
+        "    .rotate(angle: Float32(SummaryGeom.sealAngle()))\n"
         "    .opacity(SummaryGeom.sealAlpha())\n"
         "}\n"
     )
