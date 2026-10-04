@@ -35,12 +35,16 @@ public func bottomMarginFor(c: Float64, sb: Float64): Float64 {
 }
 
 public func chipMarginFor(sb: Float64): Float64 {
-    let target = 16.0 - sb
-    if (4.0 > target) {
-        return 4.0
+    let target = 24.0 - sb
+    if (12.0 > target) {
+        return 12.0
     } else {
         return target
     }
+}
+
+public func chipBarHeightFor(sb: Float64): Float64 {
+    return 56.0 + chipMarginFor(sb)
 }
 
 public func hasHundredths(s: ?String): Bool {
@@ -73,6 +77,13 @@ public func chipMarginOrLegacy(sbSet: Bool, sb: Float64): Float64 {
         return 0.0
     }
     return chipMarginFor(sb)
+}
+
+public func chipBarHeightOrLegacy(sbSet: Bool, sb: Float64): Float64 {
+    if (!sbSet) {
+        return 72.0
+    }
+    return chipBarHeightFor(sb)
 }
 
 /* Designer handoff tokens (mocks 01–06). Do not invent a second skin.
@@ -191,6 +202,10 @@ public class Theme {
 
     public static func chipMargin(): Float64 {
         return chipMarginOrLegacy(Theme.safeBottomSet(), Theme.safeBottom())
+    }
+
+    public static func chipBarHeight(): Float64 {
+        return chipBarHeightOrLegacy(Theme.safeBottomSet(), Theme.safeBottom())
     }
 
     public static const inset: Int64 = 20

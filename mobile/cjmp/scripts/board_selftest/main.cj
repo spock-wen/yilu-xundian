@@ -3533,31 +3533,47 @@ func bEdgeGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     ctx.ck(absF(bottomMarginFor(16.0, 34.0) - 16.0) < 1e-9, "bottomMarginFor(16, 34) == 16")
     ctx.ck(absF(bottomMarginFor(16.0, 10.0) - 16.0) < 1e-9, "bottomMarginFor(16, 10) == 16")
 
-    // 4. chipMarginFor 对 (0)→16、(34)→4、(10)→6、(20)→4
-    ctx.ck(absF(chipMarginFor(0.0) - 16.0) < 1e-9, "chipMarginFor(0) == 16")
-    ctx.ck(absF(chipMarginFor(34.0) - 4.0) < 1e-9, "chipMarginFor(34) == 4")
-    ctx.ck(absF(chipMarginFor(10.0) - 6.0) < 1e-9, "chipMarginFor(10) == 6")
-    ctx.ck(absF(chipMarginFor(20.0) - 4.0) < 1e-9, "chipMarginFor(20) == 4")
+    // 4. chipMarginFor 对 (0)→24、(34)→12、(10)→14、(20)→12 (T = max(12, 24 - sb))
+    ctx.ck(absF(chipMarginFor(0.0) - 24.0) < 1e-9, "chipMarginFor(0) == 24")
+    ctx.ck(absF(chipMarginFor(34.0) - 12.0) < 1e-9, "chipMarginFor(34) == 12")
+    ctx.ck(absF(chipMarginFor(10.0) - 14.0) < 1e-9, "chipMarginFor(10) == 14")
+    ctx.ck(absF(chipMarginFor(20.0) - 12.0) < 1e-9, "chipMarginFor(20) == 12")
 
-    // 4b. bottomMarginOrLegacy / chipMarginOrLegacy 用例:
-    // 未传(sbSet=false)→首页 (8,0)→0、页脚 (16,8)→8、芯片→0
+    // 4b. bottomMarginOrLegacy / chipMarginOrLegacy / chipBarHeightOrLegacy 用例:
+    // 未传(sbSet=false)→首页 (8,0)→0、页脚 (16,8)→8、芯片margin→0、底栏Row高→72
     ctx.ck(absF(bottomMarginOrLegacy(8.0, 0.0, false, 0.0) - 0.0) < 1e-9, "bottomMarginOrLegacy(8, 0, false, 0) == 0")
     ctx.ck(absF(bottomMarginOrLegacy(16.0, 8.0, false, 0.0) - 8.0) < 1e-9, "bottomMarginOrLegacy(16, 8, false, 0) == 8")
     ctx.ck(absF(chipMarginOrLegacy(false, 0.0) - 0.0) < 1e-9, "chipMarginOrLegacy(false, 0) == 0")
+    ctx.ck(absF(chipBarHeightOrLegacy(false, 0.0) - 72.0) < 1e-9, "chipBarHeightOrLegacy(false, 0) == 72")
 
-    // 传 34→ (8,0)→8 / (16,8)→16 / 芯片→4
+    // 传 34→ (8,0)→8 / (16,8)→16 / 芯片→12 / 底栏Row高→68
     ctx.ck(absF(bottomMarginOrLegacy(8.0, 0.0, true, 34.0) - 8.0) < 1e-9, "bottomMarginOrLegacy(8, 0, true, 34) == 8")
     ctx.ck(absF(bottomMarginOrLegacy(16.0, 8.0, true, 34.0) - 16.0) < 1e-9, "bottomMarginOrLegacy(16, 8, true, 34) == 16")
-    ctx.ck(absF(chipMarginOrLegacy(true, 34.0) - 4.0) < 1e-9, "chipMarginOrLegacy(true, 34) == 4")
+    ctx.ck(absF(chipMarginOrLegacy(true, 34.0) - 12.0) < 1e-9, "chipMarginOrLegacy(true, 34) == 12")
+    ctx.ck(absF(chipBarHeightOrLegacy(true, 34.0) - 68.0) < 1e-9, "chipBarHeightOrLegacy(true, 34) == 68")
 
-    // 传 0 → (8,0)→24 / (16,8)→24 / 芯片→16
+    // 传 0 → (8,0)→24 / (16,8)→24 / 芯片→24 / 底栏Row高→80
     ctx.ck(absF(bottomMarginOrLegacy(8.0, 0.0, true, 0.0) - 24.0) < 1e-9, "bottomMarginOrLegacy(8, 0, true, 0) == 24")
     ctx.ck(absF(bottomMarginOrLegacy(16.0, 8.0, true, 0.0) - 24.0) < 1e-9, "bottomMarginOrLegacy(16, 8, true, 0) == 24")
-    ctx.ck(absF(chipMarginOrLegacy(true, 0.0) - 16.0) < 1e-9, "chipMarginOrLegacy(true, 0) == 16")
+    ctx.ck(absF(chipMarginOrLegacy(true, 0.0) - 24.0) < 1e-9, "chipMarginOrLegacy(true, 0) == 24")
+    ctx.ck(absF(chipBarHeightOrLegacy(true, 0.0) - 80.0) < 1e-9, "chipBarHeightOrLegacy(true, 0) == 80")
 
-    // 传 10 → 页脚 16、芯片 6
+    // 传 10 → 页脚 16、芯片 14 / 底栏Row高→70
     ctx.ck(absF(bottomMarginOrLegacy(16.0, 8.0, true, 10.0) - 16.0) < 1e-9, "bottomMarginOrLegacy(16, 8, true, 10) == 16")
-    ctx.ck(absF(chipMarginOrLegacy(true, 10.0) - 6.0) < 1e-9, "chipMarginOrLegacy(true, 10) == 6")
+    ctx.ck(absF(chipMarginOrLegacy(true, 10.0) - 14.0) < 1e-9, "chipMarginOrLegacy(true, 10) == 14")
+    ctx.ck(absF(chipBarHeightOrLegacy(true, 10.0) - 70.0) < 1e-9, "chipBarHeightOrLegacy(true, 10) == 70")
+
+    // 传 20 → 芯片 12 / 底栏Row高→68
+    ctx.ck(absF(chipMarginOrLegacy(true, 20.0) - 12.0) < 1e-9, "chipMarginOrLegacy(true, 20) == 12")
+    ctx.ck(absF(chipBarHeightOrLegacy(true, 20.0) - 68.0) < 1e-9, "chipBarHeightOrLegacy(true, 20) == 68")
+
+    // 4c. 屏底距 = sb + T = max(sb + 12, 24)
+    ctx.ck(absF((0.0 + chipMarginFor(0.0)) - 24.0) < 1e-9, "chip bottom to screen bottom (sb=0) == 24")
+    ctx.ck(absF((10.0 + chipMarginFor(10.0)) - 24.0) < 1e-9, "chip bottom to screen bottom (sb=10) == 24")
+    ctx.ck(absF((20.0 + chipMarginFor(20.0)) - 32.0) < 1e-9, "chip bottom to screen bottom (sb=20) == 32")
+    ctx.ck(absF((34.0 + chipMarginFor(34.0)) - 46.0) < 1e-9, "chip bottom to screen bottom (sb=34) == 46")
+    ctx.ck(absF(chipBarHeightFor(0.0) - (56.0 + chipMarginFor(0.0))) < 1e-9, "chipBarHeightFor(0) == 56 + chipMarginFor(0)")
+    ctx.ck(absF(chipBarHeightFor(34.0) - (56.0 + chipMarginFor(34.0))) < 1e-9, "chipBarHeightFor(34) == 56 + chipMarginFor(34)")
 
     // 5. WinGeom: 遮罩 y 范围
     // W=393, H=852, st=59, sb=34: maskTop=115, maskHeight=737, maskTop+maskHeight==H

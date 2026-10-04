@@ -2224,7 +2224,7 @@ class EntryView {
                     .onClick({event => this.doClear()})
                 }
                 .width(100.percent)
-                .height(Theme.bottomBar)
+                .height(Theme.chipBarHeight())
                 .alignItems(VerticalAlign.Center)
                 .padding(left: Theme.inset, right: Theme.inset)
                         }

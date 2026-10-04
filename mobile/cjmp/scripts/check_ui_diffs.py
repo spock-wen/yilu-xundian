@@ -1002,9 +1002,10 @@ def check_s(index_cj_text, theme_cj_text=None):
     3. Yicheng full list ChapterCatalog.yichengFooter has Theme.bottomMargin(16.0, 8.0)
     4. In-chapter yicheng chapterListFooterLines footer Column has Theme.bottomMargin(16.0, 8.0)
     5. Board chips '撤销' and '重绘驿道' Rows have Theme.chipMargin()
+    6. Board bottom bar Row has Theme.chipBarHeight() and not legacy Theme.bottomBar
     None of these 5 locations may use legacy 'bottom: 8' (or unadapted constants).
     theme.cj contains hasHundredths, safeBottomSet, bottomMarginOrLegacy, chipMarginOrLegacy,
-    and Theme.bottomMargin/chipMargin route through *OrLegacy."""
+    chipBarHeightOrLegacy, and Theme.bottomMargin/chipMargin/chipBarHeight route through *OrLegacy."""
     errors = []
 
     # 1. Home '章节·驿程' Row
@@ -1058,6 +1059,16 @@ def check_s(index_cj_text, theme_cj_text=None):
             if re.search(r'bottom:\s*8\b', chip_chain):
                 errors.append(f"chip '{chip}' Row still contains legacy bottom: 8")
 
+    # 5b. Board bottom bar Row height
+    bar_chain = _container_chain_after(index_cj_text, 'Text("重绘驿道")', skip_closes=2)
+    if not bar_chain:
+        errors.append("bottom bar Row modifier chain not found")
+    else:
+        if "Theme.chipBarHeight()" not in bar_chain:
+            errors.append("bottom bar Row missing Theme.chipBarHeight()")
+        if "Theme.bottomBar" in bar_chain:
+            errors.append("bottom bar Row still uses legacy Theme.bottomBar")
+
     # 6. theme.cj assertions
     if theme_cj_text is None:
         default_theme_path = os.path.join(CJMP_DIR, "lib", "theme.cj")
@@ -1074,6 +1085,8 @@ def check_s(index_cj_text, theme_cj_text=None):
             errors.append("theme.cj missing func bottomMarginOrLegacy")
         if not re.search(r'func\s+chipMarginOrLegacy\b', theme_cj_text):
             errors.append("theme.cj missing func chipMarginOrLegacy")
+        if not re.search(r'func\s+chipBarHeightOrLegacy\b', theme_cj_text):
+            errors.append("theme.cj missing func chipBarHeightOrLegacy")
 
         m_bm = re.search(r'public\s+static\s+func\s+bottomMargin\s*\([^)]*\)[^{]*\{([\s\S]*?)\}', theme_cj_text)
         if not m_bm or "bottomMarginOrLegacy" not in m_bm.group(1):
@@ -1082,12 +1095,16 @@ def check_s(index_cj_text, theme_cj_text=None):
         m_cm = re.search(r'public\s+static\s+func\s+chipMargin\s*\([^)]*\)[^{]*\{([\s\S]*?)\}', theme_cj_text)
         if not m_cm or "chipMarginOrLegacy" not in m_cm.group(1):
             errors.append("Theme.chipMargin does not route via chipMarginOrLegacy")
+
+        m_cbh = re.search(r'public\s+static\s+func\s+chipBarHeight\s*\([^)]*\)[^{]*\{([\s\S]*?)\}', theme_cj_text)
+        if not m_cbh or "chipBarHeightOrLegacy" not in m_cbh.group(1):
+            errors.append("Theme.chipBarHeight does not route via chipBarHeightOrLegacy")
     else:
         errors.append("theme.cj not found or provided")
 
     if errors:
         return False, "; ".join(errors)
-    return True, ("5 bottom margins use Theme.bottomMargin(8.0, 0.0)/(16.0, 8.0) and Theme.chipMargin(), "
+    return True, ("5 bottom margins use Theme.bottomMargin(8.0, 0.0)/(16.0, 8.0), Theme.chipMargin() and Theme.chipBarHeight(), "
                   "theme.cj has hasHundredths/safeBottomSet/*OrLegacy routing, legacy bottom: 8 removed")
 
 
@@ -2083,6 +2100,7 @@ def selftest():
         'public func hasHundredths(s: ?String): Bool { return true }\n'
         'public func bottomMarginOrLegacy(c: Float64, legacy: Float64, sbSet: Bool, sb: Float64): Float64 { return 0.0 }\n'
         'public func chipMarginOrLegacy(sbSet: Bool, sb: Float64): Float64 { return 0.0 }\n'
+        'public func chipBarHeightOrLegacy(sbSet: Bool, sb: Float64): Float64 { return 72.0 }\n'
         'class Theme {\n'
         '    public static func safeBottomSet(): Bool { return false }\n'
         '    public static func safeBottom(): Float64 { return 0.0 }\n'
@@ -2091,6 +2109,9 @@ def selftest():
         '    }\n'
         '    public static func chipMargin(): Float64 {\n'
         '        return chipMarginOrLegacy(Theme.safeBottomSet(), Theme.safeBottom())\n'
+        '    }\n'
+        '    public static func chipBarHeight(): Float64 {\n'
+        '        return chipBarHeightOrLegacy(Theme.safeBottomSet(), Theme.safeBottom())\n'
         '    }\n'
         '}\n'
     )
@@ -2115,6 +2136,7 @@ def selftest():
         '    )\n'
         '}\n'
         '.margin(top: 8, bottom: Theme.bottomMargin(16.0, 8.0))\n'
+        'Row(space: 12) {\n'
         'Row {\n'
         '    Text("撤销")\n'
         '}\n'
@@ -2127,6 +2149,9 @@ def selftest():
         '.borderRadius(8)\n'
         '.margin(bottom: Theme.chipMargin())\n'
         '.onClick({event => this.doClear()})\n'
+        '}\n'
+        '.width(100.percent)\n'
+        '.height(Theme.chipBarHeight())\n'
     )
     ok_s, msg = check_s(good_s_index, good_s_theme)
     assert ok_s, f"selftest s: expected pass, got {msg}"
@@ -2148,6 +2173,10 @@ def selftest():
     ok_s_chip, msg = check_s(bad_s_chip, good_s_theme)
     assert not ok_s_chip and "Theme.chipMargin()" in msg, f"selftest s: expected missing chip margin, got {msg}"
 
+    bad_s_bar = good_s_index.replace(".height(Theme.chipBarHeight())", ".height(Theme.bottomBar)")
+    ok_s_bar, msg = check_s(bad_s_bar, good_s_theme)
+    assert not ok_s_bar and "Theme.bottomBar" in msg, f"selftest s: expected bottom bar failure, got {msg}"
+
     bad_s_notheme = good_s_theme.replace("func hasHundredths", "func hasSomething")
     ok_s_nth, msg = check_s(good_s_index, bad_s_notheme)
     assert not ok_s_nth and "hasHundredths" in msg, f"selftest s: expected missing hasHundredths failure, got {msg}"
@@ -2155,6 +2184,10 @@ def selftest():
     bad_s_noroute = good_s_theme.replace("bottomMarginOrLegacy", "bottomMarginFor")
     ok_s_nr, msg = check_s(good_s_index, bad_s_noroute)
     assert not ok_s_nr and "bottomMarginOrLegacy" in msg, f"selftest s: expected missing routing failure, got {msg}"
+
+    bad_s_nobarroute = good_s_theme.replace("chipBarHeightOrLegacy", "chipBarHeightFor")
+    ok_s_nbr, msg = check_s(good_s_index, bad_s_nobarroute)
+    assert not ok_s_nbr and "chipBarHeightOrLegacy" in msg, f"selftest s: expected missing chipBarHeight routing failure, got {msg}"
 
     # 20. Test check_t: win popup scrim/card
     good_t_theme = (
