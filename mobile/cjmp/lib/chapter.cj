@@ -769,39 +769,52 @@ public class StationRowGeom {
 
 
 
-/* 驿程全表(screen==3)Scroll 初始滚动定位几何(J21 裁决 4b)。每个常量逐项取自
-   index.cj 驿程全表 Scroll 内现有实际布局,改布局须同步改这里:
-   - 内容容器 Column(space: 8) -> rowGap 8(章内行间距;亦即上一章末行块与
-     下一章分组头块之间由 Column space 提供的 8)
-   - 分组头 Column .height(40) -> headerH 40
-   - 分组头 .margin(top: index==0 ? 0 : 4) -> headerTopMargin 4(非首章)
-   - 组间距 groupGap = rowGap 8 + headerTopMargin 4 = 12(上一章末行 -> 下一章分组头顶)
+/* 驿程全表(screen==3)Scroll 内容几何常量(J32/J33/J34,SPEC.md B5「视口顶与间距」)。
+   设计规格:B5(每组前加分组头,头高 40,底线在底,文字中心在顶下 22u,其下接行间距 8;
+   每行 64,行下间距 8(含组末行);组末行下边到下一章分组头上边 = 8 + 12 = 20u;
+   每章周期 = 40 + 8 + 10×72 + 12 = 780;第 1 章前无组间距 12)。
+   与 screen==3 Scroll(Column(space: 8)) 的映射关系:
+   - 列间距 space: 8 -> rowGap 8(章内行间、组末行后由 Column space 提供的 8)
+   - 分组头块高 .height(40) -> headerH 40;底线 1u 在块底(y+39.5)
+   - 分组头顶内边距 4u (headerPadTop 4) 使居中点下移 2u (headerTextShift 2,中心在顶下 22u)
+   - 分组头底间距 .margin(bottom: 8) -> rowGap 8(分组头块底到首行上边 = 8)
+   - 分组头顶间距 .margin(top: index==0 ? 0 : 12) -> headerTopMargin 12(=groupGap)
+   - 组间距 groupGap = 12;组末行底到下一章分组头顶 = rowGap 8 + groupGap 12 = 20
    - 行 .height(StationRowGeom.globalRowH)=64 -> rowH 64
-   - 总结卡 SummaryGeom.cardH()=88,其后与第 1 章分组头块之间隔 Column space 8
-     -> summaryBlockH 96(仅百驿全通时存在,此时 offset 恒 0,不参与偏移计算,仅对账);
+   - 单章高度 chapterH(10) = 40 + 8 + 10×(64 + 8) = 768
+   - 单章周期 period = chapterH(10) + groupGap = 768 + 12 = 780
+   - 总结卡 SummaryGeom.cardH()=88,其后与第 1 章分组头块之间隔 Column space 8 + margin 4
+     -> 总间距 12(SummaryGeom.gapBelow);summaryBlockH 96 为卡高+行间距(对账用);
      内容顶部另有 padding top 12(SummaryGeom.gapAbove, J26b),两态同源、在所有
      内容坐标之前,不改变 yichengScrollOffset:章头内容坐标 = contentTopPad +
      (k-1)*周期,scrollTo 偏移 = (k-1)*周期,对齐后章头仍在视口顶+contentTopPad */
 public class YichengScrollGeom {
     public static func contentTopPad(): Float64 { return SummaryGeom.gapAbove() }
     public static func headerH(): Float64 { return 40.0 }
+    public static func headerPadTop(): Float64 { return 4.0 }
+    public static func headerTextShift(): Float64 { return 2.0 }
     public static func rowH(): Float64 { return Float64(StationRowGeom.globalRowH) }
     public static func rowGap(): Float64 { return 8.0 }
-    public static func headerTopMargin(): Float64 { return 4.0 }
-    public static func groupGap(): Float64 {
-        return YichengScrollGeom.rowGap() + YichengScrollGeom.headerTopMargin()
-    }
+    public static func headerTopMargin(): Float64 { return 12.0 }
+    public static func groupGap(): Float64 { return 12.0 }
     public static func summaryBlockH(): Float64 {
         return SummaryGeom.cardH() + YichengScrollGeom.rowGap()
     }
 
-    /* 单章完整占位:分组头 + n 行 + (n-1) 行间距(章内行间由外层 Column space 提供,
-       分组头与首行同属一个 ForEach 子 Column,其间无额外间距)。 */
+    /* 单章完整高度(SPEC.md B5 / 2026-10-04 裁决):
+       分组头 40 + 头下接行间距 8 + n 行(每行高 64 + 行下间距 8,含组末行)。
+       公式含 headerH + rowGap 与 levelCount * (rowH + rowGap)。
+       10 驿章 = 40 + 8 + 10 * 72 = 768。 */
     public static func chapterH(levelCount: Int64): Float64 {
         if (levelCount <= 0) {
             return 0.0
         }
-        return YichengScrollGeom.headerH() + Float64(levelCount) * YichengScrollGeom.rowH() +
-            Float64(levelCount - 1) * YichengScrollGeom.rowGap()
+        return YichengScrollGeom.headerH() + YichengScrollGeom.rowGap() +
+            Float64(levelCount) * (YichengScrollGeom.rowH() + YichengScrollGeom.rowGap())
+    }
+
+    /* 完整章周期:chapterH(10) + groupGap = 768 + 12 = 780。 */
+    public static func period(): Float64 {
+        return YichengScrollGeom.chapterH(10) + YichengScrollGeom.groupGap()
     }
 }

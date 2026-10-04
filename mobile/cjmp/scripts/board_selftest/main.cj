@@ -3440,18 +3440,18 @@ func j33YichengScrollTests(ctx: Ctx): Unit {
     ctx.ck(YichengScrollGeom.rowH() == Float64(StationRowGeom.globalRowH), "J33 rowH==StationRowGeom.globalRowH")
     ctx.ck(YichengScrollGeom.rowH() == 64.0, "J33 rowH=${YichengScrollGeom.rowH()} want=64")
     ctx.ck(YichengScrollGeom.rowGap() == 8.0, "J33 rowGap=${YichengScrollGeom.rowGap()} want=8")
-    ctx.ck(YichengScrollGeom.headerTopMargin() == 4.0, "J33 headerTopMargin=${YichengScrollGeom.headerTopMargin()} want=4")
-    ctx.ck(YichengScrollGeom.groupGap() == 12.0, "J33 groupGap=${YichengScrollGeom.groupGap()} want=12(8+4)")
+    ctx.ck(YichengScrollGeom.headerTopMargin() == 12.0, "J33 headerTopMargin=${YichengScrollGeom.headerTopMargin()} want=12")
+    ctx.ck(YichengScrollGeom.groupGap() == 12.0, "J33 groupGap=${YichengScrollGeom.groupGap()} want=12")
     ctx.ck(YichengScrollGeom.summaryBlockH() == SummaryGeom.cardH() + YichengScrollGeom.rowGap(), "J33 summaryBlockH==cardH(88)+rowGap(8)")
     ctx.ck(YichengScrollGeom.summaryBlockH() == 96.0, "J33 summaryBlockH=${YichengScrollGeom.summaryBlockH()} want=96")
 
-    // 2. 整章高度展开式: 分组头40 + 10×行高64 + 9×行间距8 = 752(章内只有 9 个行间距);
-    //    加组间距 12 的完整章周期 = 764
+    // 2. 整章高度展开式: 分组头40 + 头下间距8 + 10×(行高64 + 行下间距8) = 768;
+    //    加组间距 12 的完整章周期 = 780
     let full10 = YichengScrollGeom.chapterH(10)
-    ctx.ck(full10 == YichengScrollGeom.headerH() + 10.0 * YichengScrollGeom.rowH() + 9.0 * YichengScrollGeom.rowGap(), "J33 chapterH(10) expansion headerH+10*rowH+9*rowGap")
-    ctx.ck(full10 == 752.0, "J33 chapterH(10)=${full10} want=752")
+    ctx.ck(full10 == YichengScrollGeom.headerH() + YichengScrollGeom.rowGap() + 10.0 * (YichengScrollGeom.rowH() + YichengScrollGeom.rowGap()), "J33 chapterH(10) expansion headerH+rowGap+10*(rowH+rowGap)")
+    ctx.ck(full10 == 768.0, "J33 chapterH(10)=${full10} want=768")
     let cycle = full10 + YichengScrollGeom.groupGap()
-    ctx.ck(cycle == 764.0, "J33 chapter cycle(header+rows+gaps+groupGap)=${cycle} want=764")
+    ctx.ck(cycle == 780.0, "J33 chapter cycle(header+rows+gaps+groupGap)=${cycle} want=780")
     ctx.ck(YichengScrollGeom.chapterH(0) == 0.0, "J33 chapterH(0)==0")
 
     // 3. cleared=0 → 当前章=第 1 章 → offset 0
@@ -3463,14 +3463,14 @@ func j33YichengScrollTests(ctx: Ctx): Unit {
         let cleared = (k - 1) * 10
         let ch = ChapterCatalog.chapterIdForLevel(cleared)
         let got = ChapterCatalog.yichengScrollOffset(ch, cleared, 100)
-        let want = Float64(k - 1) * (YichengScrollGeom.headerH() + 10.0 * YichengScrollGeom.rowH() +
-            9.0 * YichengScrollGeom.rowGap() + YichengScrollGeom.groupGap())
+        let want = Float64(k - 1) * (YichengScrollGeom.headerH() + YichengScrollGeom.rowGap() +
+            10.0 * (YichengScrollGeom.rowH() + YichengScrollGeom.rowGap()) + YichengScrollGeom.groupGap())
         ctx.ck(got == want, "J33 ch${k} cleared=${cleared} offset=${got} want=${want}")
         ctx.ck(ChapterCatalog.groupIsCurrent(ch, cleared), "J33 ch${k} cleared=${cleared} groupIsCurrent")
         k = k + 1
     }
-    // 章中关卡也落对本章头(第 5 章第 3 关 cleared=42 → 第 5 章 offset = 4×764)
-    ctx.ck(ChapterCatalog.yichengScrollOffset(4, 42, 100) == 4.0 * cycle, "J33 mid-level cleared=42 offset==4*764")
+    // 章中关卡也落对本章头(第 5 章第 3 关 cleared=42 → 第 5 章 offset = 4×780)
+    ctx.ck(ChapterCatalog.yichengScrollOffset(4, 42, 100) == 4.0 * cycle, "J33 mid-level cleared=42 offset==4*780")
     // 传入的章号与 cleared 不一致时按 groupIsCurrent/chapterIdForLevel 归一
     ctx.ck(ChapterCatalog.yichengScrollOffset(0, 42, 100) == 4.0 * cycle, "J33 mismatched chapter arg normalized to cleared's chapter")
 
@@ -3478,9 +3478,9 @@ func j33YichengScrollTests(ctx: Ctx): Unit {
     ctx.ck(ChapterCatalog.yichengScrollOffset(9, 100, 100) == 0.0, "J33 cleared=100 offset==0")
     ctx.ck(ChapterCatalog.yichengScrollOffset(0, 100, 100) == 0.0, "J33 cleared=100 any chapter arg offset==0")
 
-    // 6. cleared=99(第 10 章最后一关)→ 第 10 章分组头 offset = 9×764
+    // 6. cleared=99(第 10 章最后一关)→ 第 10 章分组头 offset = 9×780
     ctx.ck(ChapterCatalog.chapterIdForLevel(99) == 9, "J33 chapterIdForLevel(99)==9")
-    ctx.ck(ChapterCatalog.yichengScrollOffset(9, 99, 100) == 9.0 * cycle, "J33 cleared=99 offset==9*764=${9.0 * cycle}")
+    ctx.ck(ChapterCatalog.yichengScrollOffset(9, 99, 100) == 9.0 * cycle, "J33 cleared=99 offset==9*780=${9.0 * cycle}")
 
     println("J33 yicheng scroll done checks=${ctx.checks - c0}")
 }
@@ -3579,6 +3579,48 @@ func bEdgeGeomTests(ctx: Ctx): Unit {
     ctx.ck(absF(WinGeom.docArriveCenterY() - 154.0) < 1e-9, "WinGeom docArriveCenterY == 154")
 
     println("B-edge geom done checks=${ctx.checks - c0}")
+}
+
+func j34YichengScrollGeomRulingTests(ctx: Ctx): Unit {
+    let c0 = ctx.checks
+
+    // J34 (SPEC.md B5 / 2026-10-04 裁决): 驿程全表几何按设计师裁决对齐预览
+    // 1. chapterH(10) = 40 + 8 + 10*(64+8) = 768
+    ctx.ck(YichengScrollGeom.chapterH(10) == 768.0, "J34 chapterH(10)=${YichengScrollGeom.chapterH(10)} want=768")
+
+    // 2. period = chapterH(10) + groupGap = 780
+    ctx.ck(YichengScrollGeom.period() == 780.0, "J34 period=${YichengScrollGeom.period()} want=780")
+
+    // 3. 分组头块底到首行上边间距 = 8 (rowGap)
+    ctx.ck(YichengScrollGeom.rowGap() == 8.0, "J34 header bottom to first row gap=8")
+
+    // 4. 组末行底到下一章分组头顶 = rowGap 8 + groupGap 12 = 20
+    let lastRowToNextHdr = YichengScrollGeom.rowGap() + YichengScrollGeom.groupGap()
+    ctx.ck(lastRowToNextHdr == 20.0, "J34 last row to next header gap=${lastRowToNextHdr} want=20")
+
+    // 5. 分组头块高 40 不变
+    ctx.ck(YichengScrollGeom.headerH() == 40.0, "J34 header block height=40")
+
+    // 6. 分组头文字整体下移 2 (顶内边距 4)
+    ctx.ck(YichengScrollGeom.headerPadTop() == 4.0, "J34 header padTop=4")
+    ctx.ck(YichengScrollGeom.headerTextShift() == 2.0, "J34 header textShift=2")
+
+    // 7. 分隔线到首个分组头墨迹顶 ≈ 12(视口顶留白) + 16(块顶到墨迹顶) = 28 的常量推导:
+    //    依设计师裁决 (2026-10-04 裁定 / SPEC.md B5):
+    //    视口顶留白 contentTopPad = 12u (顶栏分隔线到首个分组头块顶);
+    //    分组头文字中心在块顶下 22u (= 块中心 20u + 文字下移 headerTextShift 2u);
+    //    Serif Bold 16 号字墨迹半高 ≈ 6u (16 * 0.75 / 2 ≈ 6u),
+    //    因此块顶到文字墨迹顶 ≈ 22 - 6 = 16u;
+    //    顶栏分隔线到首个分组头墨迹顶 ≈ 12 + 16 = 28u (预览实测 android-B5 27.81u, ios-B5 28.00u).
+    let inkHalfH: Float64 = 6.0
+    let blockCenterY = YichengScrollGeom.headerH() / 2.0
+    let textCenterY = blockCenterY + YichengScrollGeom.headerTextShift()
+    let blockTopToInkTop = textCenterY - inkHalfH
+    ctx.ck(absF(blockTopToInkTop - 16.0) < 1e-6, "J34 blockTopToInkTop=${blockTopToInkTop} want=16")
+    let dividerToInkTop = YichengScrollGeom.contentTopPad() + blockTopToInkTop
+    ctx.ck(absF(dividerToInkTop - 28.0) < 1e-6, "J34 dividerToInkTop=${dividerToInkTop} want=28")
+
+    println("J34 yicheng scroll geom ruling done checks=${ctx.checks - c0}")
 }
 
 /* ===== P4 DUMP:按场景文件渲染 app 各板层 JSON(与设计稿 PNG 对拍,box-only) ===== */
@@ -4037,6 +4079,8 @@ main(args: Array<String>): Int64 {
     j33YichengScrollTests(ctx)
     /* B-edge geom checks. */
     bEdgeGeomTests(ctx)
+    /* J34 yicheng scroll geom ruling (780 cycle, 768 chapterH, 20 gap, 28 divider-to-ink). */
+    j34YichengScrollGeomRulingTests(ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit} fallback=${ctx.toastFallback}")
     ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")

@@ -1149,12 +1149,13 @@ class EntryView {
                                             }
                                             .width(100.percent)
                                             .height(39)
+                                            .padding(top: YichengScrollGeom.headerPadTop())
                                             .alignItems(VerticalAlign.Center)
                                             Column() {}.width(100.percent).height(1).backgroundColor(this.groupLineColor(this.groupChapterId(index)))
                                         }
                                         .width(100.percent)
                                         .height(40)
-                                        .margin(top: if (index == 0) { 0 } else { 4 }, bottom: 0)
+                                        .margin(top: if (index == 0) { 0 } else { 12 }, bottom: 8)
                                     }
                                     Row {
                                         if (index < this.cleared) {

@@ -834,8 +834,112 @@ def check_p(index_cj_text, chapter_cj_text):
                   "offset formula unchanged via YichengScrollGeom.contentTopPad")
 
 
-def check_q(index_cj_text):
-    """q) Root padding & safe area: build() outer container is Stack, first child is root Column;
+def _yicheng_geom_value(chapter_cj_text, func_name):
+    """Return the Float64 literal returned by YichengScrollGeom.<func_name>(), or None."""
+    m = re.search(r'class\s+YichengScrollGeom\b', chapter_cj_text)
+    if not m:
+        return None
+    body = _extract_brace_body(chapter_cj_text, m.end())
+    fm = re.search(r'func\s+' + func_name + r'\(\)\s*:\s*Float64\s*\{\s*return\s+([0-9.]+)', body)
+    if fm:
+        return float(fm.group(1))
+    if func_name == "rowH":
+        if "StationRowGeom.globalRowH" in body:
+            return 64.0
+    return None
+
+
+def check_q(index_cj_text, chapter_cj_text):
+    """q) (J32) yicheng scroll geometry alignment with designer ruling (SPEC.md B5):
+    ① chapterH formula includes headerH + rowGap (8u below header) and levelCount * (rowH + rowGap);
+    ② period constant 780 derived from YichengScrollGeom (40 + 8 + 10*72 + 12 = 780);
+    ③ group header Row carries 4u top padding (headerPadTop 4 / headerTextShift 2) with block height 40;
+    ④ old 'chapterH ... - rowGap' (levelCount - 1) formula removed."""
+    errors = []
+
+    m_geom = re.search(r'class\s+YichengScrollGeom\b', chapter_cj_text)
+    if not m_geom:
+        return False, "chapter.cj missing 'class YichengScrollGeom'"
+    geom_body = _extract_brace_body(chapter_cj_text, m_geom.end())
+
+    # 1. chapterH formula
+    m_ch_h = re.search(r'func\s+chapterH\s*\([^)]*\)\s*:\s*Float64', geom_body)
+    if not m_ch_h:
+        errors.append("chapter.cj YichengScrollGeom missing 'func chapterH(levelCount: Int64): Float64'")
+    else:
+        ch_body = _extract_brace_body(geom_body, m_ch_h.end())
+        # ④ Check that old (levelCount - 1) or - rowGap pattern is absent
+        if re.search(r'levelCount\s*-\s*1', ch_body) or "- rowGap" in ch_body or "- YichengScrollGeom.rowGap" in ch_body:
+            errors.append("chapterH formula still uses old 'levelCount - 1' / '- rowGap' pattern (must be levelCount * (rowH + rowGap))")
+        # ① Check that chapterH contains headerH + rowGap
+        if not re.search(r'headerH\s*\(\s*\)\s*\+\s*(?:YichengScrollGeom\.)?rowGap\s*\(\s*\)', ch_body):
+            errors.append("chapterH formula missing 'headerH + rowGap' (8u gap below header block)")
+        # ① Check that levelCount is multiplied by (rowH + rowGap)
+        if not re.search(r'(?:levelCount|Float64\s*\(\s*levelCount\s*\))\s*\*\s*\(\s*(?:YichengScrollGeom\.)?rowH\s*\(\s*\)\s*\+\s*(?:YichengScrollGeom\.)?rowGap\s*\(\s*\)\s*\)', ch_body):
+            errors.append("chapterH formula missing 'levelCount * (rowH + rowGap)' (each row includes 8u trailing gap)")
+
+    # 2. Derive period 780 from YichengScrollGeom constants
+    hdr_h = _yicheng_geom_value(chapter_cj_text, "headerH")
+    row_h = _yicheng_geom_value(chapter_cj_text, "rowH")
+    row_gap = _yicheng_geom_value(chapter_cj_text, "rowGap")
+    group_gap = _yicheng_geom_value(chapter_cj_text, "groupGap")
+
+    if hdr_h is None or abs(hdr_h - 40.0) > 1e-6:
+        errors.append(f"YichengScrollGeom.headerH() expected 40.0, got {hdr_h}")
+    if row_h is None or abs(row_h - 64.0) > 1e-6:
+        errors.append(f"YichengScrollGeom.rowH() expected 64.0, got {row_h}")
+    if row_gap is None or abs(row_gap - 8.0) > 1e-6:
+        errors.append(f"YichengScrollGeom.rowGap() expected 8.0, got {row_gap}")
+    if group_gap is None or abs(group_gap - 12.0) > 1e-6:
+        errors.append(f"YichengScrollGeom.groupGap() expected 12.0, got {group_gap}")
+
+    if hdr_h is not None and row_h is not None and row_gap is not None and group_gap is not None:
+        chapter_10_h = hdr_h + row_gap + 10.0 * (row_h + row_gap)
+        if abs(chapter_10_h - 768.0) > 1e-6:
+            errors.append(f"Derived chapterH(10) {chapter_10_h} != 768.0")
+        derived_period = chapter_10_h + group_gap
+        if abs(derived_period - 780.0) > 1e-6:
+            errors.append(f"Derived chapter period {derived_period} != 780.0")
+
+    # Header text shift constants
+    pad_top = _yicheng_geom_value(chapter_cj_text, "headerPadTop")
+    if pad_top is None or abs(pad_top - 4.0) > 1e-6:
+        errors.append(f"YichengScrollGeom.headerPadTop() expected 4.0, got {pad_top}")
+    text_shift = _yicheng_geom_value(chapter_cj_text, "headerTextShift")
+    if text_shift is None or abs(text_shift - 2.0) > 1e-6:
+        errors.append(f"YichengScrollGeom.headerTextShift() expected 2.0, got {text_shift}")
+
+    # 3. Group header block in index.cj screen 3
+    build_idx = index_cj_text.find("func build()")
+    s3_idx = index_cj_text.find("this.screen == 3", build_idx if build_idx >= 0 else 0)
+    s4_idx = index_cj_text.find("this.screen == 4", s3_idx)
+    s3_text = index_cj_text[s3_idx:s4_idx if s4_idx > 0 else len(index_cj_text)] if s3_idx >= 0 else ""
+
+    if "this.groupIsFirst(index)" not in s3_text:
+        errors.append("index.cj screen 3 missing 'this.groupIsFirst(index)' group header block")
+    else:
+        # Check header Row has 4u top padding (headerPadTop or literal 4)
+        if not re.search(r'\.padding\s*\(\s*top\s*:\s*(?:YichengScrollGeom\.headerPadTop\(\)|4(?:\.0)?)\s*\)', s3_text):
+            errors.append("group header Row missing 4u top padding (.padding(top: YichengScrollGeom.headerPadTop()) or 4)")
+        # Check header block has height 40
+        if not re.search(r'Column\s*\{\s*Row\b.*?\.height\s*\(\s*40\s*\)', s3_text, re.DOTALL):
+            errors.append("group header container block missing '.height(40)'")
+        # Check hairline is 1u at bottom
+        if "Column() {}.width(100.percent).height(1).backgroundColor(" not in s3_text:
+            errors.append("group header missing 1u hairline Column at bottom of block")
+        # Check margin top 12 (groupGap) and bottom 8 (rowGap) on header block
+        if not re.search(r'\.margin\s*\(\s*top\s*:\s*if\s*\(\s*index\s*==\s*0\s*\)\s*\{\s*0\s*\}\s*else\s*\{\s*12\s*\}\s*,\s*bottom\s*:\s*8\s*\)', s3_text):
+            errors.append("group header container missing '.margin(top: if (index == 0) { 0 } else { 12 }, bottom: 8)'")
+
+    if errors:
+        return False, "\n    ".join(errors)
+    return True, ("yicheng scroll geometry aligned with designer ruling: chapterH formula has headerH+rowGap "
+                  "and levelCount*(rowH+rowGap); period 780 derived from YichengScrollGeom (40+8+10*72+12); "
+                  "group header Row has 4u top padding (text shift 2u) and height 40 block; old (levelCount - 1) removed")
+
+
+def check_r(index_cj_text):
+    """r) Root padding & safe area: build() outer container is Stack, first child is root Column;
     root Column modifier chain has .padding(top: this.padTop, bottom: this.padBottom, left: this.playInset(), right: this.playInset());
     @State var padTop/padBottom initialized from Theme.safeTop()/Theme.safeBottom();
     root background is this.playPaper(); onAreaChange re-reads safeTop/safeBottom."""
@@ -888,8 +992,8 @@ def check_q(index_cj_text):
                   "@State safeTop/safeBottom, playPaper background, onAreaChange re-read verified")
 
 
-def check_r(index_cj_text):
-    """r) 5 bottom margins use Theme.bottomMargin/chipMargin:
+def check_s(index_cj_text):
+    """s) 5 bottom margins use Theme.bottomMargin/chipMargin:
     1. Home screen '章节·驿程' Row has Theme.bottomMargin(8.0)
     2. Chapter screen Text(this.chapterOpenFooter()) has Theme.bottomMargin(16.0)
     3. Yicheng full list ChapterCatalog.yichengFooter has Theme.bottomMargin(16.0)
@@ -954,8 +1058,8 @@ def check_r(index_cj_text):
     return True, "5 bottom margins use Theme.bottomMargin(8.0/16.0) and Theme.chipMargin(), legacy bottom: 8 removed"
 
 
-def check_s(index_cj_text, theme_cj_text):
-    """s) Win popup scrim/card layers and styling: theme.cj contains winScrim (0x802C2A26);
+def check_t(index_cj_text, theme_cj_text):
+    """t) Win popup scrim/card layers and styling: theme.cj contains winScrim (0x802C2A26);
     screen == 2 branch removed from root Column; outer Stack order: root Column -> mask (winScrim, maskTop)
     -> shadow (paperShade, dx/dy) -> card (Stack, WinGeom geometry, border before borderRadius(4))
     -> hairline overlay; mask has NO onClick; board Column visibility contains screen == 1 || screen == 2;
@@ -1067,8 +1171,8 @@ def check_s(index_cj_text, theme_cj_text):
     return True, "win scrim, card stack, layers, geometry, and styling OK"
 
 
-def check_t(theme_cj_text, lib_dir):
-    """t) safeTop/safeBottom implementation constraints: theme.cj section does not use
+def check_u(theme_cj_text, lib_dir):
+    """u) safeTop/safeBottom implementation constraints: theme.cj section does not use
     .toString(), Int64.parse, .parse(), or \"${ on Ints; YILU_SAFE_TOP and YILU_SAFE_BOTTOM
     are each read inside a try-catch block; Theme.safeAreaTop does not appear in any lib file."""
     errors = []
@@ -1098,8 +1202,8 @@ def check_t(theme_cj_text, lib_dir):
     return True, "safeTop/safeBottom safe implementation, getVariable in try-catch, 0 safeAreaTop references"
 
 
-def check_u(index_cj_text):
-    """u) Play paper colors: playPaper() returns Theme.paperOf( only for screen == 6,
+def check_v(index_cj_text):
+    """v) Play paper colors: playPaper() returns Theme.paperOf( only for screen == 6,
     all other screens return Theme.paper; paperOf( called exactly once in index.cj."""
     errors = []
     m = re.search(r'func\s+playPaper\s*\(\s*\)\s*:\s*Int64\s*\{([\s\S]*?)\}', index_cj_text)
@@ -1669,8 +1773,100 @@ def selftest():
     assert not ok_p_space and "Column(space: 8)" in msg, \
         f"selftest p: expected Column(space: 8) violation, got {ok_p_space}, {msg}"
 
-    # 17. Test check_q: root padding & safe area
+    # 17. Test check_q: yicheng scroll ruling geometry (780 cycle, 768 chapterH, text shift 2u)
+    good_q_chapter = (
+        'public class StationRowGeom {\n'
+        '    public static let globalRowH: Int64 = 64\n'
+        '}\n'
+        'public class YichengScrollGeom {\n'
+        '    public static func headerH(): Float64 { return 40.0 }\n'
+        '    public static func headerPadTop(): Float64 { return 4.0 }\n'
+        '    public static func headerTextShift(): Float64 { return 2.0 }\n'
+        '    public static func rowH(): Float64 { return Float64(StationRowGeom.globalRowH) }\n'
+        '    public static func rowGap(): Float64 { return 8.0 }\n'
+        '    public static func headerTopMargin(): Float64 { return 12.0 }\n'
+        '    public static func groupGap(): Float64 { return 12.0 }\n'
+        '    public static func chapterH(levelCount: Int64): Float64 {\n'
+        '        if (levelCount <= 0) { return 0.0 }\n'
+        '        return YichengScrollGeom.headerH() + YichengScrollGeom.rowGap() +\n'
+        '            Float64(levelCount) * (YichengScrollGeom.rowH() + YichengScrollGeom.rowGap())\n'
+        '    }\n'
+        '    public static func period(): Float64 {\n'
+        '        return YichengScrollGeom.chapterH(10) + YichengScrollGeom.groupGap()\n'
+        '    }\n'
+        '}\n'
+    )
     good_q_index = (
+        '} else if (this.screen == 3) {\n'
+        '    Scroll(this.yichengScroller) {\n'
+        '        Column(space: 8) {\n'
+        '            ForEach(this.levels, itemGenerator: {item: LevelDef, index: Int64 =>\n'
+        '                Column {\n'
+        '                    if (this.groupIsFirst(index)) {\n'
+        '                        Column {\n'
+        '                            Row {\n'
+        '                                Text("label")\n'
+        '                            }\n'
+        '                            .width(100.percent)\n'
+        '                            .height(39)\n'
+        '                            .padding(top: YichengScrollGeom.headerPadTop())\n'
+        '                            .alignItems(VerticalAlign.Center)\n'
+        '                            Column() {}.width(100.percent).height(1).backgroundColor(Theme.ink)\n'
+        '                        }\n'
+        '                        .width(100.percent)\n'
+        '                        .height(40)\n'
+        '                        .margin(top: if (index == 0) { 0 } else { 12 }, bottom: 8)\n'
+        '                    }\n'
+        '                }\n'
+        '            })\n'
+        '        }\n'
+        '    }\n'
+        '} else if (this.screen == 4) {\n'
+    )
+
+    ok_q_good, msg = check_q(good_q_index, good_q_chapter)
+    assert ok_q_good, f"selftest q: expected valid q to pass, got {msg}"
+
+    # Historical commits c711f3e and cec0712 must fail check_q
+    for commit in ("c711f3e", "cec0712"):
+        try:
+            res = subprocess.run(["git", "show", f"{commit}:mobile/cjmp/lib/chapter.cj"],
+                                 capture_output=True, text=True, check=True)
+            ok_q_old, msg = check_q(good_q_index, res.stdout)
+            assert not ok_q_old, f"selftest q: expected historical commit {commit} to fail check_q"
+            assert "levelCount - 1" in msg or "headerH + rowGap" in msg, \
+                f"selftest q: expected formula failure in commit {commit}, got: {msg}"
+        except subprocess.CalledProcessError:
+            pass
+
+    # Old formula pattern: Float64(levelCount - 1) * rowGap
+    bad_q_old_formula = good_q_chapter.replace(
+        "return YichengScrollGeom.headerH() + YichengScrollGeom.rowGap() +\n            Float64(levelCount) * (YichengScrollGeom.rowH() + YichengScrollGeom.rowGap())",
+        "return YichengScrollGeom.headerH() + Float64(levelCount) * YichengScrollGeom.rowH() +\n            Float64(levelCount - 1) * YichengScrollGeom.rowGap()"
+    )
+    ok_q_bad_form, msg = check_q(good_q_index, bad_q_old_formula)
+    assert not ok_q_bad_form and "levelCount - 1" in msg, f"selftest q: expected old formula violation, got {msg}"
+
+    # Missing header bottom gap in formula (40 + n*72 without the 8)
+    bad_q_no_hdr_gap = good_q_chapter.replace(
+        "YichengScrollGeom.headerH() + YichengScrollGeom.rowGap()",
+        "YichengScrollGeom.headerH()"
+    )
+    ok_q_no_hdr_gap, msg = check_q(good_q_index, bad_q_no_hdr_gap)
+    assert not ok_q_no_hdr_gap and "headerH + rowGap" in msg, f"selftest q: expected header gap violation, got {msg}"
+
+    # Missing 4u top padding on group header Row
+    bad_q_no_pad = good_q_index.replace(".padding(top: YichengScrollGeom.headerPadTop())", "")
+    ok_q_no_pad, msg = check_q(bad_q_no_pad, good_q_chapter)
+    assert not ok_q_no_pad and "4u top padding" in msg, f"selftest q: expected top padding violation, got {msg}"
+
+    # Wrong header block margin (e.g. old 4 / 0)
+    bad_q_margin = good_q_index.replace("margin(top: if (index == 0) { 0 } else { 12 }, bottom: 8)", "margin(top: if (index == 0) { 0 } else { 4 }, bottom: 0)")
+    ok_q_margin, msg = check_q(bad_q_margin, good_q_chapter)
+    assert not ok_q_margin and "margin" in msg, f"selftest q: expected margin violation, got {msg}"
+
+    # 18. Test check_r: root padding & safe area
+    good_r_index = (
         '@State var padTop: Float64 = Theme.safeTop()\n'
         '@State var padBottom: Float64 = Theme.safeBottom()\n'
         'func build() {\n'
@@ -1691,18 +1887,18 @@ def selftest():
         '    }\n'
         '}\n'
     )
-    ok_q, msg = check_q(good_q_index)
-    assert ok_q, f"selftest q: expected pass, got {msg}"
+    ok_r, msg = check_r(good_r_index)
+    assert ok_r, f"selftest r: expected pass, got {msg}"
 
-    bad_q_nobottom = good_q_index.replace("bottom: this.padBottom, ", "")
-    ok_q_nobot, msg = check_q(bad_q_nobottom)
-    assert not ok_q_nobot and "bottom: this.padBottom" in msg, f"selftest q: expected missing bottom, got {msg}"
+    bad_r_nobottom = good_r_index.replace("bottom: this.padBottom, ", "")
+    ok_r_nobot, msg = check_r(bad_r_nobottom)
+    assert not ok_r_nobot and "bottom: this.padBottom" in msg, f"selftest r: expected missing bottom, got {msg}"
 
-    bad_q_nostate = good_q_index.replace("@State var padBottom: Float64 = Theme.safeBottom()\n", "")
-    ok_q_nostate, msg = check_q(bad_q_nostate)
-    assert not ok_q_nostate and "padBottom @State" in msg, f"selftest q: expected missing state, got {msg}"
+    bad_r_nostate = good_r_index.replace("@State var padBottom: Float64 = Theme.safeBottom()\n", "")
+    ok_r_nostate, msg = check_r(bad_r_nostate)
+    assert not ok_r_nostate and "padBottom @State" in msg, f"selftest r: expected missing state, got {msg}"
 
-    bad_q_nostack = (
+    bad_r_nostack = (
         '@State var padTop: Float64 = Theme.safeTop()\n'
         '@State var padBottom: Float64 = Theme.safeBottom()\n'
         'func build() {\n'
@@ -1717,11 +1913,11 @@ def selftest():
         '    })\n'
         '}\n'
     )
-    ok_q_nostack, msg = check_q(bad_q_nostack)
-    assert not ok_q_nostack and "Stack" in msg, f"selftest q: expected missing Stack, got {msg}"
+    ok_r_nostack, msg = check_r(bad_r_nostack)
+    assert not ok_r_nostack and "Stack" in msg, f"selftest r: expected missing Stack, got {msg}"
 
-    # 18. Test check_r: 5 bottom margins
-    good_r_index = (
+    # 19. Test check_s: 5 bottom margins
+    good_s_index = (
         'Row {\n'
         '    Text("章节")\n'
         '    Text("驿程")\n'
@@ -1755,21 +1951,21 @@ def selftest():
         '.margin(bottom: Theme.chipMargin())\n'
         '.onClick({event => this.doClear()})\n'
     )
-    ok_r, msg = check_r(good_r_index)
-    assert ok_r, f"selftest r: expected pass, got {msg}"
+    ok_s, msg = check_s(good_s_index)
+    assert ok_s, f"selftest s: expected pass, got {msg}"
 
-    bad_r_legacy = good_r_index.replace("bottom: Theme.bottomMargin(16.0)", "bottom: 8", 1)
-    ok_r_leg, msg = check_r(bad_r_legacy)
-    assert not ok_r_leg and "bottom: 8" in msg, f"selftest r: expected legacy bottom:8 failure, got {msg}"
+    bad_s_legacy = good_s_index.replace("bottom: Theme.bottomMargin(16.0)", "bottom: 8", 1)
+    ok_s_leg, msg = check_s(bad_s_legacy)
+    assert not ok_s_leg and "bottom: 8" in msg, f"selftest s: expected legacy bottom:8 failure, got {msg}"
 
-    bad_r_chip = good_r_index.replace(".margin(bottom: Theme.chipMargin())\n.onClick({event => this.doUndo()})",
+    bad_s_chip = good_s_index.replace(".margin(bottom: Theme.chipMargin())\n.onClick({event => this.doUndo()})",
                                      ".onClick({event => this.doUndo()})")
-    ok_r_chip, msg = check_r(bad_r_chip)
-    assert not ok_r_chip and "Theme.chipMargin()" in msg, f"selftest r: expected missing chip margin, got {msg}"
+    ok_s_chip, msg = check_s(bad_s_chip)
+    assert not ok_s_chip and "Theme.chipMargin()" in msg, f"selftest s: expected missing chip margin, got {msg}"
 
-    # 19. Test check_s: win popup scrim/card
-    good_s_theme = "public static const winScrim: Int64 = 0x802C2A26\n"
-    good_s_index = (
+    # 20. Test check_t: win popup scrim/card
+    good_t_theme = "public static const winScrim: Int64 = 0x802C2A26\n"
+    good_t_index = (
         'func build() {\n'
         '    Stack(alignContent: Alignment.TopStart) {\n'
         '        Column {\n'
@@ -1807,10 +2003,10 @@ def selftest():
         '    }\n'
         '}\n'
     )
-    ok_s, msg = check_s(good_s_index, good_s_theme)
-    assert ok_s, f"selftest s: expected pass, got {msg}"
+    ok_t, msg = check_t(good_t_index, good_t_theme)
+    assert ok_t, f"selftest t: expected pass, got {msg}"
 
-    bad_s_incol = (
+    bad_t_incol = (
         'func build() {\n'
         '    Stack {\n'
         '        Column {\n'
@@ -1822,20 +2018,20 @@ def selftest():
         '    }\n'
         '}\n'
     )
-    ok_s_incol, msg = check_s(bad_s_incol, good_s_theme)
-    assert not ok_s_incol and "root Column still contains screen == 2 branch" in msg, f"selftest s: expected in-column failure, got {msg}"
+    ok_t_incol, msg = check_t(bad_t_incol, good_t_theme)
+    assert not ok_t_incol and "root Column still contains screen == 2 branch" in msg, f"selftest t: expected in-column failure, got {msg}"
 
-    bad_s_onclick = good_s_index.replace(".position(x: 0.0, y: WinGeom.maskTop(this.padTop))\n",
+    bad_t_onclick = good_t_index.replace(".position(x: 0.0, y: WinGeom.maskTop(this.padTop))\n",
                                          ".position(x: 0.0, y: WinGeom.maskTop(this.padTop))\n                .onClick({event => ()})\n")
-    ok_s_click, msg = check_s(bad_s_onclick, good_s_theme)
-    assert not ok_s_click and ".onClick" in msg, f"selftest s: expected mask onClick failure, got {msg}"
+    ok_t_click, msg = check_t(bad_t_onclick, good_t_theme)
+    assert not ok_t_click and ".onClick" in msg, f"selftest t: expected mask onClick failure, got {msg}"
 
-    bad_s_theme = "public static const winScrim: Int64 = 0xFF000000\n"
-    ok_s_theme, msg = check_s(good_s_index, bad_s_theme)
-    assert not ok_s_theme and "winScrim = 0x802C2A26" in msg, f"selftest s: expected winScrim failure, got {msg}"
+    bad_t_theme = "public static const winScrim: Int64 = 0xFF000000\n"
+    ok_t_theme, msg = check_t(good_t_index, bad_t_theme)
+    assert not ok_t_theme and "winScrim = 0x802C2A26" in msg, f"selftest t: expected winScrim failure, got {msg}"
 
-    # 20. Test check_t: safeTop/safeBottom implementation
-    good_t_theme = (
+    # 21. Test check_u: safeTop/safeBottom implementation
+    good_u_theme = (
         'func parseHundredths(s: ?String): Int64 {\n'
         '    return 0\n'
         '}\n'
@@ -1855,26 +2051,26 @@ def selftest():
     )
     with tempfile.TemporaryDirectory() as tmp_lib:
         with open(os.path.join(tmp_lib, "theme.cj"), "w", encoding="utf-8") as f:
-            f.write(good_t_theme)
-        ok_t, msg = check_t(good_t_theme, tmp_lib)
-        assert ok_t, f"selftest t: expected pass, got {msg}"
+            f.write(good_u_theme)
+        ok_u, msg = check_u(good_u_theme, tmp_lib)
+        assert ok_u, f"selftest u: expected pass, got {msg}"
 
-        bad_t_tostring = good_t_theme.replace("return 0\n", "return 0.toString()\n")
-        ok_t_str, msg = check_t(bad_t_tostring, tmp_lib)
-        assert not ok_t_str and "toString" in msg, f"selftest t: expected toString failure, got {msg}"
+        bad_u_tostring = good_u_theme.replace("return 0\n", "return 0.toString()\n")
+        ok_u_str, msg = check_u(bad_u_tostring, tmp_lib)
+        assert not ok_u_str and "toString" in msg, f"selftest u: expected toString failure, got {msg}"
 
-        bad_t_notry = good_t_theme.replace('try { opt = getVariable("YILU_SAFE_TOP") } catch (e: Exception) { opt = None }',
+        bad_u_notry = good_u_theme.replace('try { opt = getVariable("YILU_SAFE_TOP") } catch (e: Exception) { opt = None }',
                                            'opt = getVariable("YILU_SAFE_TOP")')
-        ok_t_try, msg = check_t(bad_t_notry, tmp_lib)
-        assert not ok_t_try and "try" in msg, f"selftest t: expected try-catch failure, got {msg}"
+        ok_u_try, msg = check_u(bad_u_notry, tmp_lib)
+        assert not ok_u_try and "try" in msg, f"selftest u: expected try-catch failure, got {msg}"
 
         with open(os.path.join(tmp_lib, "other.cj"), "w", encoding="utf-8") as f:
             f.write("let x = Theme.safeAreaTop\n")
-        ok_t_dep, msg = check_t(good_t_theme, tmp_lib)
-        assert not ok_t_dep and "safeAreaTop" in msg, f"selftest t: expected safeAreaTop failure, got {msg}"
+        ok_u_dep, msg = check_u(good_u_theme, tmp_lib)
+        assert not ok_u_dep and "safeAreaTop" in msg, f"selftest u: expected safeAreaTop failure, got {msg}"
 
-    # 21. Test check_u: playPaper
-    good_u_index = (
+    # 22. Test check_v: playPaper
+    good_v_index = (
         'func playPaper(): Int64 {\n'
         '    if (this.screen == 6) {\n'
         '        return Theme.paperOf(this.chapterIndex)\n'
@@ -1882,10 +2078,10 @@ def selftest():
         '    return Theme.paper\n'
         '}\n'
     )
-    ok_u, msg = check_u(good_u_index)
-    assert ok_u, f"selftest u: expected pass, got {msg}"
+    ok_v, msg = check_v(good_v_index)
+    assert ok_v, f"selftest v: expected pass, got {msg}"
 
-    bad_u_screen2 = (
+    bad_v_screen2 = (
         'func playPaper(): Int64 {\n'
         '    if (this.screen == 6) {\n'
         '        return Theme.paperOf(this.chapterIndex)\n'
@@ -1896,14 +2092,14 @@ def selftest():
         '    return Theme.paper\n'
         '}\n'
     )
-    ok_u_s2, msg = check_u(bad_u_screen2)
-    assert not ok_u_s2, f"selftest u: expected screen 2 paperOf failure, got {msg}"
+    ok_v_s2, msg = check_v(bad_v_screen2)
+    assert not ok_v_s2, f"selftest v: expected screen 2 paperOf failure, got {msg}"
 
-    bad_u_extra = good_u_index + 'let p = Theme.paperOf(0)\n'
-    ok_u_ext, msg = check_u(bad_u_extra)
-    assert not ok_u_ext and "expected exactly 1" in msg, f"selftest u: expected extra call failure, got {msg}"
+    bad_v_extra = good_v_index + 'let p = Theme.paperOf(0)\n'
+    ok_v_ext, msg = check_v(bad_v_extra)
+    assert not ok_v_ext and "expected exactly 1" in msg, f"selftest v: expected extra call failure, got {msg}"
 
-    # 22. Baseline regression assertions: cec0712 must fail at least (q), (r), (s), (u)
+    # 23. Baseline regression assertions: cec0712 must fail at least (r), (s), (t), (v)
     try:
         cec_text = subprocess.check_output(
             ["git", "-C", REPO_ROOT, "show", "cec0712:mobile/cjmp/lib/index.cj"],
@@ -1914,14 +2110,14 @@ def selftest():
         cec_text = None
 
     if cec_text is not None:
-        q_pass, q_err = check_q(cec_text)
-        assert not q_pass, f"selftest regression: cec0712 must fail check_q, but passed: {q_err}"
         r_pass, r_err = check_r(cec_text)
         assert not r_pass, f"selftest regression: cec0712 must fail check_r, but passed: {r_err}"
-        s_pass, s_err = check_s(cec_text, good_s_theme)
+        s_pass, s_err = check_s(cec_text)
         assert not s_pass, f"selftest regression: cec0712 must fail check_s, but passed: {s_err}"
-        u_pass, u_err = check_u(cec_text)
-        assert not u_pass, f"selftest regression: cec0712 must fail check_u, but passed: {u_err}"
+        t_pass, t_err = check_t(cec_text, good_t_theme)
+        assert not t_pass, f"selftest regression: cec0712 must fail check_t, but passed: {t_err}"
+        v_pass, v_err = check_v(cec_text)
+        assert not v_pass, f"selftest regression: cec0712 must fail check_v, but passed: {v_err}"
     else:
         print("SKIP baseline regression check (cannot read cec0712)")
 
@@ -1983,11 +2179,12 @@ def main():
         ("n) yicheng_scroll_position", lambda: check_n(index_cj_text, chapter_cj_text)),
         ("o) primary_button_r8_containers", lambda: check_o(index_cj_text)),
         ("p) summary_card_top_whitespace", lambda: check_p(index_cj_text, chapter_cj_text)),
-        ("q) root_padding_and_safe_area", lambda: check_q(index_cj_text)),
-        ("r) bottom_margins_use_theme", lambda: check_r(index_cj_text)),
-        ("s) win_scrim_and_card_stack", lambda: check_s(index_cj_text, theme_cj_text)),
-        ("t) safe_area_implementation", lambda: check_t(theme_cj_text, lib_dir)),
-        ("u) play_paper_colors", lambda: check_u(index_cj_text)),
+        ("q) yicheng_scroll_ruling_geom", lambda: check_q(index_cj_text, chapter_cj_text)),
+        ("r) root_padding_and_safe_area", lambda: check_r(index_cj_text)),
+        ("s) bottom_margins_use_theme", lambda: check_s(index_cj_text)),
+        ("t) win_scrim_and_card_stack", lambda: check_t(index_cj_text, theme_cj_text)),
+        ("u) safe_area_implementation", lambda: check_u(theme_cj_text, lib_dir)),
+        ("v) play_paper_colors", lambda: check_v(index_cj_text)),
     ]
 
     all_passed = True
