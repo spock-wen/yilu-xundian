@@ -2933,6 +2933,45 @@ func j26ChapterTextTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     println("J26 chapter text done checks=${ctx.checks - c0}")
 }
 
+/* ===== J28 全通总结卡(SummaryCopy/SummaryGeom)纯函数自测 ===== */
+func j28SummaryTests(ctx: Ctx): Unit {
+    let c0 = ctx.checks
+
+    // 1. 文案常量
+    ctx.ck(SummaryCopy.title() == "驿路全通", "J28 title='${SummaryCopy.title()}' want=驿路全通")
+    ctx.ck(SummaryCopy.subtitle(100) == "已通 100 / 100 · 十章皆通",
+        "J28 subtitle(100)='${SummaryCopy.subtitle(100)}' want=已通 100 / 100 · 十章皆通")
+    ctx.ck(SummaryCopy.footer(100) == "已通 100 · 驿路全通",
+        "J28 footer(100)='${SummaryCopy.footer(100)}' want=已通 100 · 驿路全通")
+    let sc = SummaryCopy.sealChars()
+    ctx.ck(sc.size == 2 && sc[0] == "全" && sc[1] == "通",
+        "J28 sealChars size=${sc.size} [${sc[0]},${sc[1]}] want=[全,通]")
+
+    // 2. yichengFooter 与 SummaryCopy.footer 一致;非全通态不含「驿路全通」
+    let yf100 = ChapterCatalog.yichengFooter(100, 100, "已通")
+    ctx.ck(yf100 == SummaryCopy.footer(100),
+        "J28 yichengFooter(100,100)='${yf100}' want='${SummaryCopy.footer(100)}'")
+    let yf99 = ChapterCatalog.yichengFooter(99, 100, "X")
+    ctx.ck(!j26StrContains(yf99, "驿路全通"), "J28 yichengFooter(99,100)='${yf99}' must not contain 驿路全通")
+
+    // 3. summaryVisible 纯函数
+    ctx.ck(SummaryCopy.summaryVisible(100, 100), "J28 summaryVisible(100,100) want=true")
+    ctx.ck(!SummaryCopy.summaryVisible(99, 100), "J28 summaryVisible(99,100) want=false")
+    ctx.ck(!SummaryCopy.summaryVisible(0, 0), "J28 summaryVisible(0,0) want=false")
+
+    // 4. 几何常量(容差 1e-9)
+    ctx.ck(absF(SummaryGeom.cardH() - 88.0) < 1e-9, "J28 cardH=${SummaryGeom.cardH()} want=88")
+    ctx.ck(absF(SummaryGeom.padLeft() - 16.0) < 1e-9, "J28 padLeft=${SummaryGeom.padLeft()} want=16")
+    ctx.ck(absF(SummaryGeom.sealSize() - 56.0) < 1e-9, "J28 sealSize=${SummaryGeom.sealSize()} want=56")
+    ctx.ck(absF(SummaryGeom.sealAngle() - (-8.0)) < 1e-9, "J28 sealAngle=${SummaryGeom.sealAngle()} want=-8")
+    ctx.ck(absF(SummaryGeom.sealFrameW() - 3.0) < 1e-9, "J28 sealFrameW=${SummaryGeom.sealFrameW()} want=3")
+    ctx.ck(absF(SummaryGeom.sealFrameInset() - 3.0) < 1e-9, "J28 sealFrameInset=${SummaryGeom.sealFrameInset()} want=3")
+    ctx.ck(absF(SummaryGeom.sealInnerInset() - 9.0) < 1e-9, "J28 sealInnerInset=${SummaryGeom.sealInnerInset()} want=9")
+    ctx.ck(absF(SummaryGeom.sealFont() - 16.8) < 1e-9, "J28 sealFont=${SummaryGeom.sealFont()} want=16.8")
+
+    println("J28 summary done checks=${ctx.checks - c0}")
+}
+
 /* ===== P4 DUMP:按场景文件渲染 app 各板层 JSON(与设计稿 PNG 对拍,box-only) ===== */
 
 func dumpBool(v: Bool): String {
@@ -3373,6 +3412,8 @@ main(args: Array<String>): Int64 {
     j25IconTests(ctx)
     /* J26 chapter text and group header checks. */
     j26ChapterTextTests(levels, ctx)
+    /* J28 all-clear summary card copy/geom checks. */
+    j28SummaryTests(ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit} fallback=${ctx.toastFallback}")
     ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")

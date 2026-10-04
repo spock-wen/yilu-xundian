@@ -4,7 +4,10 @@
 Checks:
   a) index.cj has no .borderRadius before .border (check_border_radius 0 violations)
   b) dessertIds() in chapter.cj has 10 IDs matching boards-locked, isDessert() has no '== 4'
-  c) lib/*.cj has no '当前已通'; chapter.cj and board_selftest/main.cj have required footer strings
+  c) lib/*.cj has no '当前已通'; chapter.cj centralizes all-clear copy in class SummaryCopy
+     (literal '驿路全通' only inside SummaryCopy); board_selftest/main.cj has required footer
+     literal. Once index.cj wires the summary card (references SummaryCopy, J12b), index.cj
+     must not contain the literals '驿路全通'/'十章皆通'/Text("全通") outside that wiring.
   d) index.cj has no Text("通")/Text("锁"), no rawImg("card_05".."10"), has lockIcon & checkCircleIcon
   e) index.cj Text("章节") has no .border, Text("驿程") has screen=3 onClick
   f) dessertTag builder state==1 uses Theme.paperShade without .border, h18/fs11/r3 verified
@@ -30,6 +33,12 @@ from check_border_radius import split_chains, check_source
 
 def _extract_brace_body(text, start_pos):
     """Extract contents inside matching { ... } starting at or after start_pos."""
+    brace_open, brace_close = _brace_span(text, start_pos)
+    return text[brace_open + 1:brace_close]
+
+
+def _brace_span(text, start_pos):
+    """Return (open, close) indices of the matching { ... } at or after start_pos."""
     brace_open = text.index('{', start_pos)
     depth = 0
     end = brace_open
@@ -41,7 +50,7 @@ def _extract_brace_body(text, start_pos):
             if depth == 0:
                 end = idx
                 break
-    return text[brace_open + 1:end]
+    return brace_open, end
 
 
 def check_a(lines, name="index.cj"):
@@ -109,8 +118,8 @@ def check_b(chapter_cj_text, boards_locked_dir):
     return True, f"10 dessert levels match boards-locked {expected_ids}, isDessert clean"
 
 
-def check_c(lib_dir, board_selftest_main_path, chapter_cj_path=None):
-    """c) No '当前已通' in lib/*.cj, footer templates present."""
+def check_c(lib_dir, board_selftest_main_path, chapter_cj_path=None, index_cj_path=None):
+    """c) No '当前已通' in lib/*.cj; all-clear copy centralized in SummaryCopy; literals present."""
     found_violations = []
     if os.path.isdir(lib_dir):
         for fn in sorted(os.listdir(lib_dir)):
@@ -129,8 +138,19 @@ def check_c(lib_dir, board_selftest_main_path, chapter_cj_path=None):
         return False, f"chapter.cj not found at {ch_path}"
     with open(ch_path, "r", encoding="utf-8") as f:
         chapter_content = f.read()
-    if "已通 ${total} · 驿路全通" not in chapter_content:
-        return False, "chapter.cj missing template '已通 ${total} · 驿路全通'"
+
+    # All-clear summary copy (B7) must live in class SummaryCopy; the title literal
+    # '驿路全通' may appear only inside SummaryCopy (yichengFooter routes through it).
+    m_class = re.search(r'class\s+SummaryCopy\b', chapter_content)
+    if not m_class:
+        return False, "chapter.cj missing 'class SummaryCopy' (summary card copy must be centralized)"
+    brace_open, brace_close = _brace_span(chapter_content, m_class.end())
+    summary_body = chapter_content[brace_open:brace_close + 1]
+    outside = chapter_content[:brace_open] + chapter_content[brace_close + 1:]
+    if 'return "驿路全通"' not in summary_body:
+        return False, "SummaryCopy must define title() returning literal '驿路全通'"
+    if "驿路全通" in outside:
+        return False, "literal '驿路全通' appears outside SummaryCopy in chapter.cj (copy must be centralized)"
 
     if not os.path.exists(board_selftest_main_path):
         return False, f"board_selftest/main.cj not found at {board_selftest_main_path}"
@@ -139,7 +159,23 @@ def check_c(lib_dir, board_selftest_main_path, chapter_cj_path=None):
     if "已通 100 · 驿路全通" not in selftest_content:
         return False, "board_selftest/main.cj missing literal '已通 100 · 驿路全通'"
 
-    return True, "no '当前已通' in lib, required footer templates/literals present"
+    # index.cj literal ban: only enforced once the summary card is wired into index.cj
+    # (references SummaryCopy); until J12b lands, index.cj has none of these literals anyway.
+    if index_cj_path and os.path.exists(index_cj_path):
+        with open(index_cj_path, "r", encoding="utf-8") as f:
+            index_content = f.read()
+        if "SummaryCopy" in index_content:
+            index_issues = []
+            if "驿路全通" in index_content:
+                index_issues.append("contains literal '驿路全通' (use SummaryCopy.title())")
+            if "十章皆通" in index_content:
+                index_issues.append("contains literal '十章皆通' (use SummaryCopy.subtitle())")
+            if 'Text("全通")' in index_content:
+                index_issues.append('contains Text("全通")')
+            if index_issues:
+                return False, "index.cj: " + "; ".join(index_issues)
+
+    return True, "no '当前已通' in lib, SummaryCopy centralizes all-clear copy, footer literal present"
 
 
 def check_d(index_cj_text):
@@ -377,13 +413,48 @@ def selftest():
         os.remove(bad_f)
         ch_f = os.path.join(tmpdir, "chapter.cj")
         with open(ch_f, "w", encoding="utf-8") as f:
-            f.write('func yichengFooter() { return "已通 ${total} · 驿路全通" }')
+            f.write('class SummaryCopy { static func title(): String { return "驿路全通" } }\n'
+                    'func yichengFooter() { return SummaryCopy.footer(1) }')
         st_f = os.path.join(tmpdir, "main.cj")
         with open(st_f, "w", encoding="utf-8") as f:
             f.write('func test() { ctx.ck(s == "已通 100 · 驿路全通") }')
 
         ok_c_good, msg = check_c(tmpdir, st_f, ch_f)
         assert ok_c_good, f"selftest c: expected pass, got {ok_c_good}, {msg}"
+
+        # literal '驿路全通' outside SummaryCopy must fail
+        with open(ch_f, "w", encoding="utf-8") as f:
+            f.write('func yichengFooter() { return "已通 ${total} · 驿路全通" }\n'
+                    'class SummaryCopy { static func title(): String { return "驿路全通" } }')
+        ok_c_outside, msg = check_c(tmpdir, st_f, ch_f)
+        assert not ok_c_outside and "outside" in msg, f"selftest c: expected outside failure, got {msg}"
+
+        # missing SummaryCopy must fail
+        with open(ch_f, "w", encoding="utf-8") as f:
+            f.write('func yichengFooter() { return "x" }')
+        ok_c_noclass, msg = check_c(tmpdir, st_f, ch_f)
+        assert not ok_c_noclass and "SummaryCopy" in msg, f"selftest c: expected missing-class failure, got {msg}"
+
+        # index.cj literal ban, gated on summary wiring (SummaryCopy reference)
+        with open(ch_f, "w", encoding="utf-8") as f:
+            f.write('class SummaryCopy { static func title(): String { return "驿路全通" } }')
+        idx_f = os.path.join(tmpdir, "index.cj")
+
+        with open(idx_f, "w", encoding="utf-8") as f:
+            f.write('let s = SummaryCopy.title()')
+        ok_c_idx_wired, msg = check_c(tmpdir, st_f, ch_f, idx_f)
+        assert ok_c_idx_wired, f"selftest c: expected wired-clean index pass, got {msg}"
+
+        with open(idx_f, "w", encoding="utf-8") as f:
+            f.write('let s = SummaryCopy.title()\nText("驿路全通")')
+        ok_c_idx_lit, msg = check_c(tmpdir, st_f, ch_f, idx_f)
+        assert not ok_c_idx_lit and "index.cj" in msg, f"selftest c: expected index literal failure, got {msg}"
+
+        # unwired index (no SummaryCopy reference) with literals is skipped until J12b
+        with open(idx_f, "w", encoding="utf-8") as f:
+            f.write('Text("全通")')
+        ok_c_idx_unwired, msg = check_c(tmpdir, st_f, ch_f, idx_f)
+        assert ok_c_idx_unwired, f"selftest c: expected unwired index skip, got {msg}"
 
     # 3. Test check_h fallback toast placement
     good_h = (
@@ -454,7 +525,7 @@ def main():
     checks = [
         ("a) border_radius_order", lambda: check_a(index_cj_lines, name="index.cj")),
         ("b) dessert_count_and_ids", lambda: check_b(chapter_cj_text, boards_locked_dir)),
-        ("c) prohibited_strings", lambda: check_c(lib_dir, selftest_main_path, chapter_cj_path)),
+        ("c) prohibited_strings", lambda: check_c(lib_dir, selftest_main_path, chapter_cj_path, index_cj_path)),
         ("d) icons_and_cards", lambda: check_d(index_cj_text)),
         ("e) home_screen_nav", lambda: check_e(index_cj_lines)),
         ("f) dessert_tag_builder", lambda: check_f(index_cj_text)),

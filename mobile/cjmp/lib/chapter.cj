@@ -291,7 +291,7 @@ public class ChapterCatalog {
 
     public static func yichengFooter(cleared: Int64, total: Int64, currentName: String): String {
         if (total > 0 && cleared >= total) {
-            return "已通 ${total} · 驿路全通"
+            return SummaryCopy.footer(total)
         }
         return "已通 ${cleared} · 当前 ${currentName}"
     }
@@ -401,4 +401,59 @@ public class ChapterCatalog {
         }
         return out
     }
+}
+
+/* 驿程全表百驿全通总结卡(B7)文案集中处:render_cjmp_gaps_v1.draw_summary。
+   文案已由作家定稿(COPY_ALLCLEAR_20261004.md);若再改标题,只改 title() 这一处,
+   页脚/subtitle/sealChars 全部经它引用,index.cj 与页脚不得另写字面量。 */
+public class SummaryCopy {
+    // 作家定稿标题「驿路全通」;换文案只改这一行
+    public static func title(): String {
+        return "驿路全通"
+    }
+
+    public static func subtitle(total: Int64): String {
+        return "已通 ${total} / ${total} · 十章皆通"
+    }
+
+    public static func sealChars(): Array<String> {
+        return ["全", "通"]
+    }
+
+    public static func footer(total: Int64): String {
+        return "已通 ${total} · ${SummaryCopy.title()}"
+    }
+
+    /* 总结卡可见性:cleared >= total 且 total > 0。 */
+    public static func summaryVisible(cleared: Int64, total: Int64): Bool {
+        return cleared >= total && total > 0
+    }
+}
+
+/* 总结卡(B7)几何常量:draw_summary(SUMMARY_H=88、rrect r8、左内边 16、
+   title y+30 serif 20、line y+58 sans 12)与 make_seal(size=56、旋转 -8°)。
+   朱印各值均按 make_seal 公式取 size=56 的结果,注释标明公式。 */
+public class SummaryGeom {
+    public static func cardH(): Float64 { return 88.0 } /* SUMMARY_H */
+    public static func radius(): Float64 { return 8.0 } /* 卡圆角 rrect 8 */
+    public static func padLeft(): Float64 { return 16.0 }
+    public static func padRight(): Float64 { return 16.0 }
+    public static func titleCenterY(): Float64 { return 30.0 }
+    public static func lineCenterY(): Float64 { return 58.0 }
+    public static func titleFont(): Float64 { return 20.0 }
+    public static func lineFont(): Float64 { return 12.0 }
+    public static func gapBelow(): Float64 { return 12.0 }
+    public static func sealSize(): Float64 { return 56.0 }
+    public static func sealAngle(): Float64 { return -8.0 } /* rotate(-8) */
+
+    /* 朱印 make_seal 公式,size=56 */
+    public static func sealFrameInset(): Float64 { return 3.0 } /* m=max(2,size//16) */
+    public static func sealFrameW(): Float64 { return 3.0 } /* max(2,size//16) */
+    public static func sealFrameR(): Float64 { return 4.0 } /* size//14 */
+    public static func sealInnerInset(): Float64 { return 9.0 } /* m+size//9 */
+    public static func sealInnerW(): Float64 { return 1.0 } /* max(1,size//30) */
+    public static func sealInnerR(): Float64 { return 2.0 } /* size//20 */
+    public static func sealFont(): Float64 { return 16.8 } /* 0.30*size,两字 */
+    public static func sealLineStep(): Float64 { return 1.02 } /* 字间距系数 */
+    public static func sealAlpha(): Float64 { return 0.92 } /* 235/255 */
 }
