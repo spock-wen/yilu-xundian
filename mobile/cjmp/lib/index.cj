@@ -1081,7 +1081,7 @@ class EntryView {
                 }
                 .height(HomeLinkGeom.blockH)
                 // B-edge: home footer margin
-                .margin(top: HomeLinkGeom.rowMarginTop, bottom: Theme.bottomMargin(8.0), left: HomeLinkGeom.rowMarginLeft)
+                .margin(top: HomeLinkGeom.rowMarginTop, bottom: Theme.bottomMargin(8.0, 0.0), left: HomeLinkGeom.rowMarginLeft)
                 .justifyContent(FlexAlign.Center)
                 .alignItems(VerticalAlign.Center)
             } else if (this.screen == 3) {
@@ -1287,7 +1287,7 @@ class EntryView {
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.sansFamily())
                     // B-edge: yicheng footer margin
-                    .margin(top: 12, bottom: Theme.bottomMargin(16.0))
+                    .margin(top: 12, bottom: Theme.bottomMargin(16.0, 8.0))
                     .width(100.percent)
             } else if (this.screen == 4) {
                 Stack {
@@ -1521,7 +1521,7 @@ class EntryView {
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.sansFamily())
                     // B-edge: chapter footer margin
-                    .margin(top: 8, bottom: Theme.bottomMargin(16.0))
+                    .margin(top: 8, bottom: Theme.bottomMargin(16.0, 8.0))
                     .width(100.percent)
             } else if (this.screen == 5) {
                 Stack {
@@ -1690,7 +1690,7 @@ class EntryView {
                 .width(100.percent)
                 .alignItems(HorizontalAlign.Start)
                 // B-edge: in-chapter yicheng footer margin
-                .margin(top: 8, bottom: Theme.bottomMargin(16.0))
+                .margin(top: 8, bottom: Theme.bottomMargin(16.0, 8.0))
             } else if (this.screen == 6) {
                 /* Skin-only preview for locked 05–10. No boards, no gameplay. */
                 Stack {

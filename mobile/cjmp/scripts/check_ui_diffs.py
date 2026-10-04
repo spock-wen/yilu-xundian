@@ -992,14 +992,16 @@ def check_r(index_cj_text):
                   "@State safeTop/safeBottom, playPaper background, onAreaChange re-read verified")
 
 
-def check_s(index_cj_text):
+def check_s(index_cj_text, theme_cj_text=None):
     """s) 5 bottom margins use Theme.bottomMargin/chipMargin:
-    1. Home screen '章节·驿程' Row has Theme.bottomMargin(8.0)
-    2. Chapter screen Text(this.chapterOpenFooter()) has Theme.bottomMargin(16.0)
-    3. Yicheng full list ChapterCatalog.yichengFooter has Theme.bottomMargin(16.0)
-    4. In-chapter yicheng chapterListFooterLines footer Column has Theme.bottomMargin(16.0)
+    1. Home screen '章节·驿程' Row has Theme.bottomMargin(8.0, 0.0)
+    2. Chapter screen Text(this.chapterOpenFooter()) has Theme.bottomMargin(16.0, 8.0)
+    3. Yicheng full list ChapterCatalog.yichengFooter has Theme.bottomMargin(16.0, 8.0)
+    4. In-chapter yicheng chapterListFooterLines footer Column has Theme.bottomMargin(16.0, 8.0)
     5. Board chips '撤销' and '重绘驿道' Rows have Theme.chipMargin()
-    None of these 5 locations may use legacy 'bottom: 8' (or unadapted constants)."""
+    None of these 5 locations may use legacy 'bottom: 8' (or unadapted constants).
+    theme.cj contains hasHundredths, safeBottomSet, bottomMarginOrLegacy, chipMarginOrLegacy,
+    and Theme.bottomMargin/chipMargin route through *OrLegacy."""
     errors = []
 
     # 1. Home '章节·驿程' Row
@@ -1007,8 +1009,8 @@ def check_s(index_cj_text):
     if not home_chain:
         errors.append("home '章节·驿程' Row modifier chain not found")
     else:
-        if "Theme.bottomMargin(8.0)" not in home_chain and "Theme.bottomMargin(8)" not in home_chain:
-            errors.append("home '章节·驿程' Row missing Theme.bottomMargin(8.0)")
+        if "Theme.bottomMargin(8.0, 0.0)" not in home_chain:
+            errors.append("home '章节·驿程' Row missing Theme.bottomMargin(8.0, 0.0)")
         if re.search(r'bottom:\s*8(?!\.0)\b', home_chain):
             errors.append("home '章节·驿程' Row still contains legacy bottom: 8")
 
@@ -1017,8 +1019,8 @@ def check_s(index_cj_text):
     if not ch_chain:
         errors.append("Text(this.chapterOpenFooter()) modifier chain not found")
     else:
-        if "Theme.bottomMargin(16.0)" not in ch_chain and "Theme.bottomMargin(16)" not in ch_chain:
-            errors.append("Text(this.chapterOpenFooter()) missing Theme.bottomMargin(16.0)")
+        if "Theme.bottomMargin(16.0, 8.0)" not in ch_chain:
+            errors.append("Text(this.chapterOpenFooter()) missing Theme.bottomMargin(16.0, 8.0)")
         if re.search(r'bottom:\s*8\b', ch_chain):
             errors.append("Text(this.chapterOpenFooter()) still contains legacy bottom: 8")
 
@@ -1027,8 +1029,8 @@ def check_s(index_cj_text):
     if not yc_chain:
         errors.append("Text(ChapterCatalog.yichengFooter(...)) modifier chain not found")
     else:
-        if "Theme.bottomMargin(16.0)" not in yc_chain and "Theme.bottomMargin(16)" not in yc_chain:
-            errors.append("Text(ChapterCatalog.yichengFooter(...)) missing Theme.bottomMargin(16.0)")
+        if "Theme.bottomMargin(16.0, 8.0)" not in yc_chain:
+            errors.append("Text(ChapterCatalog.yichengFooter(...)) missing Theme.bottomMargin(16.0, 8.0)")
         if re.search(r'bottom:\s*8\b', yc_chain):
             errors.append("Text(ChapterCatalog.yichengFooter(...)) still contains legacy bottom: 8")
 
@@ -1037,8 +1039,8 @@ def check_s(index_cj_text):
     if not cl_chain:
         errors.append("chapterListFooterLines footer Column modifier chain not found")
     else:
-        if "Theme.bottomMargin(16.0)" not in cl_chain and "Theme.bottomMargin(16)" not in cl_chain:
-            errors.append("chapterListFooterLines footer Column missing Theme.bottomMargin(16.0)")
+        if "Theme.bottomMargin(16.0, 8.0)" not in cl_chain:
+            errors.append("chapterListFooterLines footer Column missing Theme.bottomMargin(16.0, 8.0)")
         if re.search(r'bottom:\s*8\b', cl_chain):
             errors.append("chapterListFooterLines footer Column still contains legacy bottom: 8")
 
@@ -1053,9 +1055,37 @@ def check_s(index_cj_text):
             if re.search(r'bottom:\s*8\b', chip_chain):
                 errors.append(f"chip '{chip}' Row still contains legacy bottom: 8")
 
+    # 6. theme.cj assertions
+    if theme_cj_text is None:
+        default_theme_path = os.path.join(CJMP_DIR, "lib", "theme.cj")
+        if os.path.isfile(default_theme_path):
+            with open(default_theme_path, "r", encoding="utf-8") as f:
+                theme_cj_text = f.read()
+
+    if theme_cj_text is not None:
+        if not re.search(r'func\s+hasHundredths\b', theme_cj_text):
+            errors.append("theme.cj missing func hasHundredths")
+        if not re.search(r'func\s+safeBottomSet\b', theme_cj_text):
+            errors.append("theme.cj missing Theme.safeBottomSet")
+        if not re.search(r'func\s+bottomMarginOrLegacy\b', theme_cj_text):
+            errors.append("theme.cj missing func bottomMarginOrLegacy")
+        if not re.search(r'func\s+chipMarginOrLegacy\b', theme_cj_text):
+            errors.append("theme.cj missing func chipMarginOrLegacy")
+
+        m_bm = re.search(r'public\s+static\s+func\s+bottomMargin\s*\([^)]*\)[^{]*\{([\s\S]*?)\}', theme_cj_text)
+        if not m_bm or "bottomMarginOrLegacy" not in m_bm.group(1):
+            errors.append("Theme.bottomMargin does not route via bottomMarginOrLegacy")
+
+        m_cm = re.search(r'public\s+static\s+func\s+chipMargin\s*\([^)]*\)[^{]*\{([\s\S]*?)\}', theme_cj_text)
+        if not m_cm or "chipMarginOrLegacy" not in m_cm.group(1):
+            errors.append("Theme.chipMargin does not route via chipMarginOrLegacy")
+    else:
+        errors.append("theme.cj not found or provided")
+
     if errors:
         return False, "; ".join(errors)
-    return True, "5 bottom margins use Theme.bottomMargin(8.0/16.0) and Theme.chipMargin(), legacy bottom: 8 removed"
+    return True, ("5 bottom margins use Theme.bottomMargin(8.0, 0.0)/(16.0, 8.0) and Theme.chipMargin(), "
+                  "theme.cj has hasHundredths/safeBottomSet/*OrLegacy routing, legacy bottom: 8 removed")
 
 
 def check_t(index_cj_text, theme_cj_text):
@@ -1177,10 +1207,12 @@ def check_u(theme_cj_text, lib_dir):
     are each read inside a try-catch block; Theme.safeAreaTop does not appear in any lib file."""
     errors = []
     idx_parse = theme_cj_text.find("func parseHundredths")
+    idx_has = theme_cj_text.find("func hasHundredths")
+    candidates = [i for i in (idx_parse, idx_has) if i >= 0]
     idx_end = theme_cj_text.find("public static const inset")
-    if idx_parse < 0 or idx_end < 0:
+    if not candidates or idx_end < 0:
         return False, "parseHundredths or Theme.safeTop/Bottom segment not found in theme.cj"
-    seg = theme_cj_text[idx_parse:idx_end]
+    seg = theme_cj_text[min(candidates):idx_end]
     for banned in (".toString(", "Int64.parse", ".parse(", '"${'):
         if banned in seg:
             errors.append(f"theme.cj safeTop/safeBottom contains banned construct: {banned}")
@@ -1917,6 +1949,21 @@ def selftest():
     assert not ok_r_nostack and "Stack" in msg, f"selftest r: expected missing Stack, got {msg}"
 
     # 19. Test check_s: 5 bottom margins
+    good_s_theme = (
+        'public func hasHundredths(s: ?String): Bool { return true }\n'
+        'public func bottomMarginOrLegacy(c: Float64, legacy: Float64, sbSet: Bool, sb: Float64): Float64 { return 0.0 }\n'
+        'public func chipMarginOrLegacy(sbSet: Bool, sb: Float64): Float64 { return 0.0 }\n'
+        'class Theme {\n'
+        '    public static func safeBottomSet(): Bool { return false }\n'
+        '    public static func safeBottom(): Float64 { return 0.0 }\n'
+        '    public static func bottomMargin(c: Float64, legacy: Float64): Float64 {\n'
+        '        return bottomMarginOrLegacy(c, legacy, Theme.safeBottomSet(), Theme.safeBottom())\n'
+        '    }\n'
+        '    public static func chipMargin(): Float64 {\n'
+        '        return chipMarginOrLegacy(Theme.safeBottomSet(), Theme.safeBottom())\n'
+        '    }\n'
+        '}\n'
+    )
     good_s_index = (
         'Row {\n'
         '    Text("章节")\n'
@@ -1924,11 +1971,11 @@ def selftest():
         '        .onClick({event => this.openYicheng()})\n'
         '}\n'
         '.height(HomeLinkGeom.blockH)\n'
-        '.margin(top: HomeLinkGeom.rowMarginTop, bottom: Theme.bottomMargin(8.0), left: HomeLinkGeom.rowMarginLeft)\n'
+        '.margin(top: HomeLinkGeom.rowMarginTop, bottom: Theme.bottomMargin(8.0, 0.0), left: HomeLinkGeom.rowMarginLeft)\n'
         'Text(ChapterCatalog.yichengFooter(this.cleared, 10, "名"))\n'
-        '    .margin(top: 12, bottom: Theme.bottomMargin(16.0))\n'
+        '    .margin(top: 12, bottom: Theme.bottomMargin(16.0, 8.0))\n'
         'Text(this.chapterOpenFooter())\n'
-        '    .margin(top: 8, bottom: Theme.bottomMargin(16.0))\n'
+        '    .margin(top: 8, bottom: Theme.bottomMargin(16.0, 8.0))\n'
         'Column {\n'
         '    ForEach(\n'
         '        this.chapterListFooterLines(),\n'
@@ -1937,7 +1984,7 @@ def selftest():
         '        }\n'
         '    )\n'
         '}\n'
-        '.margin(top: 8, bottom: Theme.bottomMargin(16.0))\n'
+        '.margin(top: 8, bottom: Theme.bottomMargin(16.0, 8.0))\n'
         'Row {\n'
         '    Text("撤销")\n'
         '}\n'
@@ -1951,17 +1998,33 @@ def selftest():
         '.margin(bottom: Theme.chipMargin())\n'
         '.onClick({event => this.doClear()})\n'
     )
-    ok_s, msg = check_s(good_s_index)
+    ok_s, msg = check_s(good_s_index, good_s_theme)
     assert ok_s, f"selftest s: expected pass, got {msg}"
 
-    bad_s_legacy = good_s_index.replace("bottom: Theme.bottomMargin(16.0)", "bottom: 8", 1)
-    ok_s_leg, msg = check_s(bad_s_legacy)
+    bad_s_legacy = good_s_index.replace("bottom: Theme.bottomMargin(16.0, 8.0)", "bottom: 8", 1)
+    ok_s_leg, msg = check_s(bad_s_legacy, good_s_theme)
     assert not ok_s_leg and "bottom: 8" in msg, f"selftest s: expected legacy bottom:8 failure, got {msg}"
+
+    bad_s_single = good_s_index.replace("bottom: Theme.bottomMargin(16.0, 8.0)", "bottom: Theme.bottomMargin(16.0)", 1)
+    ok_s_sin, msg = check_s(bad_s_single, good_s_theme)
+    assert not ok_s_sin and "bottomMargin(16.0, 8.0)" in msg, f"selftest s: expected single-param failure, got {msg}"
+
+    bad_s_legacy_p = good_s_index.replace("Theme.bottomMargin(8.0, 0.0)", "Theme.bottomMargin(8.0, 8.0)")
+    ok_s_leg_p, msg = check_s(bad_s_legacy_p, good_s_theme)
+    assert not ok_s_leg_p and "bottomMargin(8.0, 0.0)" in msg, f"selftest s: expected wrong legacy parameter failure, got {msg}"
 
     bad_s_chip = good_s_index.replace(".margin(bottom: Theme.chipMargin())\n.onClick({event => this.doUndo()})",
                                      ".onClick({event => this.doUndo()})")
-    ok_s_chip, msg = check_s(bad_s_chip)
+    ok_s_chip, msg = check_s(bad_s_chip, good_s_theme)
     assert not ok_s_chip and "Theme.chipMargin()" in msg, f"selftest s: expected missing chip margin, got {msg}"
+
+    bad_s_notheme = good_s_theme.replace("func hasHundredths", "func hasSomething")
+    ok_s_nth, msg = check_s(good_s_index, bad_s_notheme)
+    assert not ok_s_nth and "hasHundredths" in msg, f"selftest s: expected missing hasHundredths failure, got {msg}"
+
+    bad_s_noroute = good_s_theme.replace("bottomMarginOrLegacy", "bottomMarginFor")
+    ok_s_nr, msg = check_s(good_s_index, bad_s_noroute)
+    assert not ok_s_nr and "bottomMarginOrLegacy" in msg, f"selftest s: expected missing routing failure, got {msg}"
 
     # 20. Test check_t: win popup scrim/card
     good_t_theme = "public static const winScrim: Int64 = 0x802C2A26\n"
@@ -2035,6 +2098,9 @@ def selftest():
         'func parseHundredths(s: ?String): Int64 {\n'
         '    return 0\n'
         '}\n'
+        'func hasHundredths(s: ?String): Bool {\n'
+        '    return false\n'
+        '}\n'
         'class Theme {\n'
         '    public static func safeTop(): Float64 {\n'
         '        var opt: ?String = None\n'
@@ -2058,6 +2124,10 @@ def selftest():
         bad_u_tostring = good_u_theme.replace("return 0\n", "return 0.toString()\n")
         ok_u_str, msg = check_u(bad_u_tostring, tmp_lib)
         assert not ok_u_str and "toString" in msg, f"selftest u: expected toString failure, got {msg}"
+
+        bad_u_hstr = good_u_theme.replace("return false\n", "return false.toString()\n")
+        ok_u_hstr, msg = check_u(bad_u_hstr, tmp_lib)
+        assert not ok_u_hstr and "toString" in msg, f"selftest u: expected toString in hasHundredths failure, got {msg}"
 
         bad_u_notry = good_u_theme.replace('try { opt = getVariable("YILU_SAFE_TOP") } catch (e: Exception) { opt = None }',
                                            'opt = getVariable("YILU_SAFE_TOP")')
@@ -2181,7 +2251,7 @@ def main():
         ("p) summary_card_top_whitespace", lambda: check_p(index_cj_text, chapter_cj_text)),
         ("q) yicheng_scroll_ruling_geom", lambda: check_q(index_cj_text, chapter_cj_text)),
         ("r) root_padding_and_safe_area", lambda: check_r(index_cj_text)),
-        ("s) bottom_margins_use_theme", lambda: check_s(index_cj_text)),
+        ("s) bottom_margins_use_theme", lambda: check_s(index_cj_text, theme_cj_text)),
         ("t) win_scrim_and_card_stack", lambda: check_t(index_cj_text, theme_cj_text)),
         ("u) safe_area_implementation", lambda: check_u(theme_cj_text, lib_dir)),
         ("v) play_paper_colors", lambda: check_v(index_cj_text)),

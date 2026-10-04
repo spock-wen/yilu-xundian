@@ -3511,7 +3511,18 @@ func bEdgeGeomTests(ctx: Ctx): Unit {
     ctx.ck(parseHundredths(Some("1234567890")) == 0, "parseHundredths 1234567890 overflow 10 digits")
     ctx.ck(parseHundredths(None) == 0, "parseHundredths None")
 
-    // 2. Theme.safeTop()/safeBottom() 在测试环境(未 setenv)→ 0.0
+    // 1b. hasHundredths 用例: Some("0")→true, Some("3400")→true, Some("")→false, Some("12a")→false, Some("-5")→false, Some("1234567890")→false, None→false
+    ctx.ck(hasHundredths(Some("0")) == true, "hasHundredths 0")
+    ctx.ck(hasHundredths(Some("3400")) == true, "hasHundredths 3400")
+    ctx.ck(hasHundredths(Some("")) == false, "hasHundredths empty")
+    ctx.ck(hasHundredths(Some("12a")) == false, "hasHundredths 12a")
+    ctx.ck(hasHundredths(Some("-5")) == false, "hasHundredths -5")
+    ctx.ck(hasHundredths(Some("1234567890")) == false, "hasHundredths 1234567890 overflow 10 digits")
+    ctx.ck(hasHundredths(None) == false, "hasHundredths None")
+
+    // 2. Theme.safeTop()/safeBottom() 在测试环境(未 setenv)→ 0.0, safeTopSet()/safeBottomSet()→ false
+    ctx.ck(Theme.safeTopSet() == false, "Theme.safeTopSet() default false")
+    ctx.ck(Theme.safeBottomSet() == false, "Theme.safeBottomSet() default false")
     ctx.ck(absF(Theme.safeTop() - 0.0) < 1e-9, "Theme.safeTop() default 0.0")
     ctx.ck(absF(Theme.safeBottom() - 0.0) < 1e-9, "Theme.safeBottom() default 0.0")
 
@@ -3527,6 +3538,26 @@ func bEdgeGeomTests(ctx: Ctx): Unit {
     ctx.ck(absF(chipMarginFor(34.0) - 4.0) < 1e-9, "chipMarginFor(34) == 4")
     ctx.ck(absF(chipMarginFor(10.0) - 6.0) < 1e-9, "chipMarginFor(10) == 6")
     ctx.ck(absF(chipMarginFor(20.0) - 4.0) < 1e-9, "chipMarginFor(20) == 4")
+
+    // 4b. bottomMarginOrLegacy / chipMarginOrLegacy 用例:
+    // 未传(sbSet=false)→首页 (8,0)→0、页脚 (16,8)→8、芯片→0
+    ctx.ck(absF(bottomMarginOrLegacy(8.0, 0.0, false, 0.0) - 0.0) < 1e-9, "bottomMarginOrLegacy(8, 0, false, 0) == 0")
+    ctx.ck(absF(bottomMarginOrLegacy(16.0, 8.0, false, 0.0) - 8.0) < 1e-9, "bottomMarginOrLegacy(16, 8, false, 0) == 8")
+    ctx.ck(absF(chipMarginOrLegacy(false, 0.0) - 0.0) < 1e-9, "chipMarginOrLegacy(false, 0) == 0")
+
+    // 传 34→ (8,0)→8 / (16,8)→16 / 芯片→4
+    ctx.ck(absF(bottomMarginOrLegacy(8.0, 0.0, true, 34.0) - 8.0) < 1e-9, "bottomMarginOrLegacy(8, 0, true, 34) == 8")
+    ctx.ck(absF(bottomMarginOrLegacy(16.0, 8.0, true, 34.0) - 16.0) < 1e-9, "bottomMarginOrLegacy(16, 8, true, 34) == 16")
+    ctx.ck(absF(chipMarginOrLegacy(true, 34.0) - 4.0) < 1e-9, "chipMarginOrLegacy(true, 34) == 4")
+
+    // 传 0 → (8,0)→24 / (16,8)→24 / 芯片→16
+    ctx.ck(absF(bottomMarginOrLegacy(8.0, 0.0, true, 0.0) - 24.0) < 1e-9, "bottomMarginOrLegacy(8, 0, true, 0) == 24")
+    ctx.ck(absF(bottomMarginOrLegacy(16.0, 8.0, true, 0.0) - 24.0) < 1e-9, "bottomMarginOrLegacy(16, 8, true, 0) == 24")
+    ctx.ck(absF(chipMarginOrLegacy(true, 0.0) - 16.0) < 1e-9, "chipMarginOrLegacy(true, 0) == 16")
+
+    // 传 10 → 页脚 16、芯片 6
+    ctx.ck(absF(bottomMarginOrLegacy(16.0, 8.0, true, 10.0) - 16.0) < 1e-9, "bottomMarginOrLegacy(16, 8, true, 10) == 16")
+    ctx.ck(absF(chipMarginOrLegacy(true, 10.0) - 6.0) < 1e-9, "chipMarginOrLegacy(true, 10) == 6")
 
     // 5. WinGeom: 遮罩 y 范围
     // W=393, H=852, st=59, sb=34: maskTop=115, maskHeight=737, maskTop+maskHeight==H

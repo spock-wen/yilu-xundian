@@ -43,6 +43,38 @@ public func chipMarginFor(sb: Float64): Float64 {
     }
 }
 
+public func hasHundredths(s: ?String): Bool {
+    match (s) {
+        case None => return false
+        case Some(str) =>
+            let arr = str.toArray()
+            let n = arr.size
+            if (n == 0 || n > 9) {
+                return false
+            }
+            for (b in arr) {
+                if (b < 48u8 || b > 57u8) {
+                    return false
+                }
+            }
+            return true
+    }
+}
+
+public func bottomMarginOrLegacy(c: Float64, legacy: Float64, sbSet: Bool, sb: Float64): Float64 {
+    if (!sbSet) {
+        return legacy
+    }
+    return bottomMarginFor(c, sb)
+}
+
+public func chipMarginOrLegacy(sbSet: Bool, sb: Float64): Float64 {
+    if (!sbSet) {
+        return 0.0
+    }
+    return chipMarginFor(sb)
+}
+
 /* Designer handoff tokens (mocks 01–06). Do not invent a second skin.
    Color ints follow official Canvas docs (0XRRGGBB). */
 public class Theme {
@@ -111,6 +143,16 @@ public class Theme {
     public static const flagGongsun: Int64 = 0xFF9AA7B0
     public static const flagYuan: Int64 = 0xFF7A6B32
 
+    public static func safeTopSet(): Bool {
+        var opt: ?String = None
+        try {
+            opt = getVariable("YILU_SAFE_TOP")
+        } catch (e: Exception) {
+            opt = None
+        }
+        return hasHundredths(opt)
+    }
+
     public static func safeTop(): Float64 {
         var opt: ?String = None
         try {
@@ -119,6 +161,16 @@ public class Theme {
             opt = None
         }
         return Float64(parseHundredths(opt)) / 100.0
+    }
+
+    public static func safeBottomSet(): Bool {
+        var opt: ?String = None
+        try {
+            opt = getVariable("YILU_SAFE_BOTTOM")
+        } catch (e: Exception) {
+            opt = None
+        }
+        return hasHundredths(opt)
     }
 
     public static func safeBottom(): Float64 {
@@ -131,12 +183,12 @@ public class Theme {
         return Float64(parseHundredths(opt)) / 100.0
     }
 
-    public static func bottomMargin(c: Float64): Float64 {
-        return bottomMarginFor(c, Theme.safeBottom())
+    public static func bottomMargin(c: Float64, legacy: Float64): Float64 {
+        return bottomMarginOrLegacy(c, legacy, Theme.safeBottomSet(), Theme.safeBottom())
     }
 
     public static func chipMargin(): Float64 {
-        return chipMarginFor(Theme.safeBottom())
+        return chipMarginOrLegacy(Theme.safeBottomSet(), Theme.safeBottom())
     }
 
     public static const inset: Int64 = 20
