@@ -53,6 +53,7 @@ class EntryView {
     // J13: 本次拒绝是否为单向门拒绝(改画官方 reject PNG 而非朱红 Line)
     var rejectOneWay: Bool = false
     @State var winW: Float64 = 360.0
+    @State var winH: Float64 = 0.0
     @State var padTop: Float64 = Theme.safeTop()
     @State var padBottom: Float64 = Theme.safeBottom()
     // A2: back button pressed ripple opacity
@@ -921,8 +922,10 @@ class EntryView {
     }
 
     func build() {
-        Column {
-            if (this.screen == 0) {
+        let currentH = if (this.winH > 0.0) { this.winH } else { 800.0 } // H 未测到(<=0)时用 800.0 兜底
+        Stack(alignContent: Alignment.TopStart) {
+            Column {
+                if (this.screen == 0) {
                 /* Home seal copy: 关防 (vermillion only). */
                 Row {
                     Blank()
@@ -1743,88 +1746,6 @@ class EntryView {
                         .layoutWeight(1)
                         .objectFit(ImageFit.Contain)
                 }
-            } else if (this.screen == 2) {
-                // in-page back: iOS edge swipe does not pop on Keels 0.2.2
-                Row {
-                    // A2: 48vp hit area
-                    this.backButton({ => this.leaveBoard() }, true)
-                    Blank()
-                }
-                .width(100.percent)
-                .height(48)
-                .padding(left: Theme.inset, right: Theme.inset)
-                Blank()
-                Column {
-                    Text("通关")
-                        .fontSize(14)
-                        .fontColor(Theme.inkMuted)
-                        .fontFamily(this.sansFamily())
-                        .margin(bottom: 8)
-                    Text(this.roadTitle())
-                        .fontSize(26)
-                        .fontColor(Theme.ink)
-                        .fontFamily(this.serifBoldFamily())
-                        .fontWeight(FontWeight.Bold)
-                        .margin(bottom: 16)
-                    Row {
-                        Column {
-                            Text("驿道已通")
-                                .fontSize(14)
-                                .fontColor(Theme.inkMuted)
-                                .fontFamily(this.sansFamily())
-                            Text("文书递达本驿")
-                                .fontSize(14)
-                                .fontColor(Theme.inkMuted)
-                                .fontFamily(this.sansFamily())
-                                .margin(top: 4)
-                        }
-                        .alignItems(HorizontalAlign.Start)
-                        Blank()
-                        /* Win seal copy: 文书到 (vermillion only). */
-                        Column {
-                            Text("文")
-                                .fontSize(13)
-                                .fontColor(Theme.whitePaper)
-                                .fontFamily(this.serifFamily())
-                            Text("书")
-                                .fontSize(13)
-                                .fontColor(Theme.whitePaper)
-                                .fontFamily(this.serifFamily())
-                            Text("到")
-                                .fontSize(13)
-                                .fontColor(Theme.whitePaper)
-                                .fontFamily(this.serifFamily())
-                        }
-                        .width(52)
-                        .height(52)
-                        .backgroundColor(Theme.vermillion)
-                        .justifyContent(FlexAlign.Center)
-                        .alignItems(HorizontalAlign.Center)
-                        .rotate(angle: 10.0)
-                    }
-                    .width(100.percent)
-                    .margin(bottom: 24)
-                    // J26 缺陷3 同类:胜利弹窗主按钮同为 button token(浮层操作,tokens radius.button=8),
-                    // 裸 Button 默认胶囊,换成与「开始传书」一致的容器写法
-                    Row {
-                        Text("下一驿")
-                            .fontSize(16)
-                            .fontColor(Theme.whitePaper)
-                            .fontFamily(this.sansMediumFamily())
-                    }
-                        .width(100.percent)
-                        .height(Theme.primaryH)
-                        .backgroundColor(Theme.qingDeep)
-                        .borderRadius(8)
-                        .justifyContent(FlexAlign.Center)
-                        .alignItems(VerticalAlign.Center)
-                        .onClick({event => this.nextLevel()})
-                }
-                .width(86.percent)
-                .padding(20)
-                .backgroundColor(Theme.whitePaper)
-                .borderRadius(12)
-                Blank()
             }
             // Keels 0.2.2 leaks @State subscriptions of destroyed subtrees; keep board mounted
             Column {
@@ -2299,7 +2220,7 @@ class EntryView {
                 .alignItems(VerticalAlign.Center)
                 .padding(left: Theme.inset, right: Theme.inset)
                         }
-            .visibility(if (this.screen == 1) { Visibility.Visible } else { Visibility.None })
+            .visibility(if (this.screen == 1 || this.screen == 2) { Visibility.Visible } else { Visibility.None })
             .width(100.percent)
             .layoutWeight(1)
         }
@@ -2315,6 +2236,11 @@ class EntryView {
                 this.winW = targetW
                 this.rebuildBoard()
             }
+            let h = new.height.value
+            let targetH = if (h > 0.0) { h } else { 800.0 }
+            if (targetH - this.winH > 0.5 || this.winH - targetH > 0.5) {
+                this.winH = targetH
+            }
             // TODO(E2/E8): 宿主 setenv 时机待 Mac 实测;此处是宿主晚写 env 时的重读钩子
             let st = Theme.safeTop()
             let sb = Theme.safeBottom()
@@ -2325,5 +2251,139 @@ class EntryView {
                 this.padBottom = sb
             }
         })
+
+        if (this.screen == 2) {
+            // 1. 遮罩: 纯色 winScrim(0x802C2A26), 从 hairline 上缘盖到屏幕最底
+            Column() {}
+                .width(100.percent)
+                .height(WinGeom.maskHeight(currentH, this.padTop))
+                .backgroundColor(Theme.winScrim)
+                .position(x: 0.0, y: WinGeom.maskTop(this.padTop))
+
+            // 2. 通关卡硬阴影: 偏移 右 3、下 5, 色 paperShade, 圆角 4, 无模糊、不用 .shadow()
+            Column() {}
+                .width(WinGeom.cardW(this.winW))
+                .height(WinGeom.cardH())
+                .backgroundColor(Theme.paperShade)
+                .borderRadius(4)
+                .position(
+                    x: WinGeom.cardX() + WinGeom.cardShadowDx(),
+                    y: WinGeom.cardTop(currentH, this.padTop, this.padBottom) + WinGeom.cardShadowDy()
+                )
+
+            // 3. 通关卡主体: Stack, 相对 sy=cardTop 垂直居中于 hairline 到 H-safeBottom
+            Stack(alignContent: Alignment.TopStart) {
+                // 「通关」Serif Regular 14, inkMuted, 水平居中, 中心 sy+28
+                Text("通关")
+                    .fontSize(14)
+                    .fontColor(Theme.inkMuted)
+                    .fontFamily(this.serifFamily())
+                    .width(100.percent)
+                    .height(WinGeom.passH())
+                    .lineHeight(WinGeom.passH())
+                    .textAlign(TextAlign.Center)
+                    .position(x: 0.0, y: WinGeom.passY())
+
+                // 关名 this.roadTitle() Serif Bold 22, ink, 水平居中, 中心 sy+62
+                Text(this.roadTitle())
+                    .fontSize(22)
+                    .fontColor(Theme.ink)
+                    .fontFamily(this.serifBoldFamily())
+                    .fontWeight(FontWeight.Bold)
+                    .width(100.percent)
+                    .height(WinGeom.titleH())
+                    .lineHeight(WinGeom.titleH())
+                    .textAlign(TextAlign.Center)
+                    .position(x: 0.0, y: WinGeom.titleY())
+
+                // 金线: 高 1.2, Theme.gold, 水平居中, 中心 sy+82, 宽 = 关名字宽估算
+                Column() {}
+                    .width(WinGeom.roadTitleWidth(this.roadTitle()))
+                    .height(WinGeom.goldLineH())
+                    .backgroundColor(Theme.gold)
+                    .position(x: WinGeom.goldLineX(this.winW, WinGeom.roadTitleWidth(this.roadTitle())), y: WinGeom.goldLineY())
+
+                // 「驿道已通」Serif Regular 16, qingDeep, 左对齐, 左缘 24, 中心 sy+124
+                Text("驿道已通")
+                    .fontSize(16)
+                    .fontColor(Theme.qingDeep)
+                    .fontFamily(this.serifFamily())
+                    .height(WinGeom.roadDoneH())
+                    .lineHeight(WinGeom.roadDoneH())
+                    .textAlign(TextAlign.Start)
+                    .position(x: WinGeom.roadDoneX(), y: WinGeom.roadDoneY())
+
+                // 「文书递达本驿」Sans 13, inkMuted, 左缘 24, 中心 sy+154
+                Text("文书递达本驿")
+                    .fontSize(13)
+                    .fontColor(Theme.inkMuted)
+                    .fontFamily(this.sansFamily())
+                    .height(WinGeom.docArriveH())
+                    .lineHeight(WinGeom.docArriveH())
+                    .textAlign(TextAlign.Start)
+                    .position(x: WinGeom.docArriveX(), y: WinGeom.docArriveY())
+
+                // 朱印「文书到」: 96×96 方, 旋转 -18°, vermillion 底, whitePaper 字, 三字竖排 Serif
+                Column {
+                    Text("文")
+                        .fontSize(WinGeom.sealFont())
+                        .fontColor(Theme.whitePaper)
+                        .fontFamily(this.serifFamily())
+                        .height(WinGeom.sealCharH())
+                        .lineHeight(WinGeom.sealCharH())
+                    Text("书")
+                        .fontSize(WinGeom.sealFont())
+                        .fontColor(Theme.whitePaper)
+                        .fontFamily(this.serifFamily())
+                        .height(WinGeom.sealCharH())
+                        .lineHeight(WinGeom.sealCharH())
+                    Text("到")
+                        .fontSize(WinGeom.sealFont())
+                        .fontColor(Theme.whitePaper)
+                        .fontFamily(this.serifFamily())
+                        .height(WinGeom.sealCharH())
+                        .lineHeight(WinGeom.sealCharH())
+                }
+                .width(WinGeom.sealSize())
+                .height(WinGeom.sealSize())
+                .backgroundColor(Theme.vermillion)
+                .justifyContent(FlexAlign.Center)
+                .alignItems(HorizontalAlign.Center)
+                .rotate(angle: Float32(WinGeom.sealAngle()))
+                .position(x: WinGeom.sealLeft(this.winW), y: WinGeom.sealTop())
+
+                // 「下一驿」按钮: Row 容器 r8, 高 Theme.primaryH(52), x: 20 到 W-56-20, y: 288, Sans Bold 16
+                Row {
+                    Text("下一驿")
+                        .fontSize(16)
+                        .fontColor(Theme.whitePaper)
+                        .fontFamily(this.sansBoldFamily())
+                }
+                .width(WinGeom.btnW(this.winW))
+                .height(Theme.primaryH)
+                .backgroundColor(Theme.qingDeep)
+                .borderRadius(8)
+                .justifyContent(FlexAlign.Center)
+                .alignItems(VerticalAlign.Center)
+                .position(x: WinGeom.btnX(), y: WinGeom.btnTop())
+                .onClick({event => this.nextLevel()})
+            }
+            .width(WinGeom.cardW(this.winW))
+            .height(WinGeom.cardH())
+            .backgroundColor(Theme.whitePaper)
+            .border(width: 1, color: Theme.paperLine)
+            .borderRadius(4)
+            .position(x: WinGeom.cardX(), y: WinGeom.cardTop(currentH, this.padTop, this.padBottom))
+
+            // 4. 顶栏 hairline 覆盖层: 重画在遮罩之上
+            Column() {}
+                .width(this.winW - 40.0)
+                .height(1)
+                .backgroundColor(Theme.paperLine)
+                .position(x: 20.0, y: WinGeom.hairlineY(this.padTop))
+        }
     }
+    .width(100.percent)
+    .height(100.percent)
+}
 }

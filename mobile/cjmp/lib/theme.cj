@@ -59,6 +59,8 @@ public class Theme {
     public static const locked: Int64 = 0xFFC9BBA6
     public static const success: Int64 = 0xFF5E7A6A
     public static const whitePaper: Int64 = 0xFFFBF6EC
+    /* B4: 胜利(通关)页顶栏以下遮罩色, 纯色 50% ink (0x802C2A26) */
+    public static const winScrim: Int64 = 0x802C2A26
     /* 泽地(滑行)填色, hard-fx-skin.md ze */
     public static const ze: Int64 = 0xFFC4D2D6
     /* Parity step limit warning threshold (mock warn state is N=3; applies to 3,2,1,0). */
@@ -180,4 +182,179 @@ public class Theme {
     public static const sansBold: String = "YiluSansBold"     // YiluSans-Bold.ttf (700),仅用于首页「章节」
     // one family per file because Keels 0.2.2 cannot carry two weights under one family name (device-tested)
     public static const stationSerif: String = "YiluSerifBold"
+}
+
+/* B4: 胜利(通关)页几何纯函数与常量 */
+public class WinGeom {
+    public static func hairlineY(safeTop: Float64): Float64 {
+        return safeTop + 56.0
+    }
+
+    public static func maskTop(safeTop: Float64): Float64 {
+        return safeTop + 56.0
+    }
+
+    public static func maskHeight(h: Float64, safeTop: Float64): Float64 {
+        let top = WinGeom.maskTop(safeTop)
+        let rem = h - top
+        if (rem > 0.0) {
+            return rem
+        } else {
+            return 0.0
+        }
+    }
+
+    public static func cardX(): Float64 {
+        return 28.0
+    }
+
+    public static func cardW(w: Float64): Float64 {
+        return w - 56.0
+    }
+
+    public static func cardH(): Float64 {
+        return 360.0
+    }
+
+    public static func cardTop(h: Float64, safeTop: Float64, safeBottom: Float64): Float64 {
+        let hl = WinGeom.hairlineY(safeTop)
+        return hl + (h - safeBottom - hl - WinGeom.cardH()) / 2.0
+    }
+
+    public static func cardShadowDx(): Float64 {
+        return 3.0
+    }
+
+    public static func cardShadowDy(): Float64 {
+        return 5.0
+    }
+
+    /* 各文字中心偏移(28/62/82/124/154) */
+    public static func passCenterY(): Float64 {
+        return 28.0
+    }
+
+    public static func titleCenterY(): Float64 {
+        return 62.0
+    }
+
+    public static func goldLineCenterY(): Float64 {
+        return 82.0
+    }
+
+    public static func roadDoneCenterY(): Float64 {
+        return 124.0
+    }
+
+    public static func docArriveCenterY(): Float64 {
+        return 154.0
+    }
+
+    /* 显式行高与 Y 坐标: y = 中心 - h/2 */
+    public static func passH(): Float64 {
+        return 20.0
+    }
+
+    public static func passY(): Float64 {
+        return WinGeom.passCenterY() - WinGeom.passH() / 2.0
+    }
+
+    public static func titleH(): Float64 {
+        return 28.0
+    }
+
+    public static func titleY(): Float64 {
+        return WinGeom.titleCenterY() - WinGeom.titleH() / 2.0
+    }
+
+    public static func goldLineH(): Float64 {
+        return 1.2
+    }
+
+    public static func goldLineY(): Float64 {
+        return WinGeom.goldLineCenterY() - WinGeom.goldLineH() / 2.0
+    }
+
+    /* 关名字宽估算: CJK 每字 22.0(字号 22), ASCII/数字 0.55 * 22.0 = 12.1 */
+    public static func roadTitleWidth(title: String): Float64 {
+        var w: Float64 = 0.0
+        for (r in title.toRuneArray()) {
+            if (r < r'\u{0080}') {
+                w += 0.55 * 22.0
+            } else {
+                w += 22.0
+            }
+        }
+        return w
+    }
+
+    public static func goldLineX(w: Float64, titleW: Float64): Float64 {
+        return (WinGeom.cardW(w) - titleW) / 2.0
+    }
+
+    public static func roadDoneH(): Float64 {
+        return 22.0
+    }
+
+    public static func roadDoneX(): Float64 {
+        return 24.0
+    }
+
+    public static func roadDoneY(): Float64 {
+        return WinGeom.roadDoneCenterY() - WinGeom.roadDoneH() / 2.0
+    }
+
+    public static func docArriveH(): Float64 {
+        return 18.0
+    }
+
+    public static func docArriveX(): Float64 {
+        return 24.0
+    }
+
+    public static func docArriveY(): Float64 {
+        return WinGeom.docArriveCenterY() - WinGeom.docArriveH() / 2.0
+    }
+
+    /* 朱印几何 */
+    public static func sealSize(): Float64 {
+        return 96.0
+    }
+
+    public static func sealAngle(): Float64 {
+        return -18.0
+    }
+
+    public static func sealLeft(w: Float64): Float64 {
+        return WinGeom.cardW(w) - 24.0 - WinGeom.sealSize()
+    }
+
+    public static func sealTop(): Float64 {
+        return 100.0
+    }
+
+    public static func sealFont(): Float64 {
+        return 24.0
+    }
+
+    public static func sealCharH(): Float64 {
+        return 32.0 // 96 / 3 均分行高
+    }
+
+    /* 「下一驿」按钮几何 */
+    public static func btnX(): Float64 {
+        return 20.0
+    }
+
+    public static func btnW(w: Float64): Float64 {
+        return WinGeom.cardW(w) - 40.0
+    }
+
+    public static func btnTop(): Float64 {
+        return 288.0
+    }
+
+    public static func btnH(): Float64 {
+        return 52.0
+    }
 }
