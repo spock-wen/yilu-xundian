@@ -1,5 +1,48 @@
 package ohos_app_cangjie_entry
 
+import std.env.*
+
+/* 纯函数 parseHundredths: 将 1/100 点格式的整数字符串解析为 Int64。
+ * None / 空串 / 含非 ASCII 数字 / 负号 / 溢出(>9位) 一律返回 0。
+ * 禁用 Int64.parse / Int64.toString / 字符串插值。 */
+public func parseHundredths(s: ?String): Int64 {
+    match (s) {
+        case None => return 0
+        case Some(str) =>
+            let arr = str.toArray()
+            let n = arr.size
+            if (n == 0 || n > 9) {
+                return 0
+            }
+            var acc: Int64 = 0
+            for (b in arr) {
+                if (b < 48u8 || b > 57u8) {
+                    return 0
+                }
+                acc = acc * 10 + (Int64(b) - 48)
+            }
+            return acc
+    }
+}
+
+public func bottomMarginFor(c: Float64, sb: Float64): Float64 {
+    let target = 24.0 - sb
+    if (c > target) {
+        return c
+    } else {
+        return target
+    }
+}
+
+public func chipMarginFor(sb: Float64): Float64 {
+    let target = 16.0 - sb
+    if (4.0 > target) {
+        return 4.0
+    } else {
+        return target
+    }
+}
+
 /* Designer handoff tokens (mocks 01–06). Do not invent a second skin.
    Color ints follow official Canvas docs (0XRRGGBB). */
 public class Theme {
@@ -66,8 +109,33 @@ public class Theme {
     public static const flagGongsun: Int64 = 0xFF9AA7B0
     public static const flagYuan: Int64 = 0xFF7A6B32
 
-    // PLACEHOLDER(M1): safe area / status bar follows current HarmonyOS styling (no extra inset, paper background) until PM design decision.
-    public static const safeAreaTop: Int64 = 0
+    public static func safeTop(): Float64 {
+        var opt: ?String = None
+        try {
+            opt = getVariable("YILU_SAFE_TOP")
+        } catch (e: Exception) {
+            opt = None
+        }
+        return Float64(parseHundredths(opt)) / 100.0
+    }
+
+    public static func safeBottom(): Float64 {
+        var opt: ?String = None
+        try {
+            opt = getVariable("YILU_SAFE_BOTTOM")
+        } catch (e: Exception) {
+            opt = None
+        }
+        return Float64(parseHundredths(opt)) / 100.0
+    }
+
+    public static func bottomMargin(c: Float64): Float64 {
+        return bottomMarginFor(c, Theme.safeBottom())
+    }
+
+    public static func chipMargin(): Float64 {
+        return chipMarginFor(Theme.safeBottom())
+    }
 
     public static const inset: Int64 = 20
     public static const topBar: Int64 = 56

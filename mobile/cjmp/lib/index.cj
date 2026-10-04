@@ -53,6 +53,8 @@ class EntryView {
     // J13: 本次拒绝是否为单向门拒绝(改画官方 reject PNG 而非朱红 Line)
     var rejectOneWay: Bool = false
     @State var winW: Float64 = 360.0
+    @State var padTop: Float64 = Theme.safeTop()
+    @State var padBottom: Float64 = Theme.safeBottom()
     // A2: back button pressed ripple opacity
     @State var backPressedOpacity: Float64 = 0.0
 
@@ -681,9 +683,6 @@ class EntryView {
         if (this.screen == 6) {
             return Theme.paperOf(this.chapterIndex)
         }
-        if (this.screen == 1 || this.screen == 2) {
-            return Theme.paperOf(this.chapterIndex)
-        }
         return Theme.paper
     }
 
@@ -1078,7 +1077,8 @@ class EntryView {
                         .onClick({event => this.openYicheng()})
                 }
                 .height(HomeLinkGeom.blockH)
-                .margin(top: HomeLinkGeom.rowMarginTop, left: HomeLinkGeom.rowMarginLeft)
+                // B-edge: home footer margin
+                .margin(top: HomeLinkGeom.rowMarginTop, bottom: Theme.bottomMargin(8.0), left: HomeLinkGeom.rowMarginLeft)
                 .justifyContent(FlexAlign.Center)
                 .alignItems(VerticalAlign.Center)
             } else if (this.screen == 3) {
@@ -1282,7 +1282,8 @@ class EntryView {
                     .fontSize(12)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.sansFamily())
-                    .margin(top: 12, bottom: 8)
+                    // B-edge: yicheng footer margin
+                    .margin(top: 12, bottom: Theme.bottomMargin(16.0))
                     .width(100.percent)
             } else if (this.screen == 4) {
                 Stack {
@@ -1515,7 +1516,8 @@ class EntryView {
                     .fontSize(12)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.sansFamily())
-                    .margin(top: 8, bottom: 8)
+                    // B-edge: chapter footer margin
+                    .margin(top: 8, bottom: Theme.bottomMargin(16.0))
                     .width(100.percent)
             } else if (this.screen == 5) {
                 Stack {
@@ -1683,7 +1685,8 @@ class EntryView {
                 }
                 .width(100.percent)
                 .alignItems(HorizontalAlign.Start)
-                .margin(top: 8, bottom: 8)
+                // B-edge: in-chapter yicheng footer margin
+                .margin(top: 8, bottom: Theme.bottomMargin(16.0))
             } else if (this.screen == 6) {
                 /* Skin-only preview for locked 05–10. No boards, no gameplay. */
                 Stack {
@@ -2270,6 +2273,7 @@ class EntryView {
                     .backgroundColor(Theme.whitePaper)
                     .border(width: 1.2, color: Theme.ink)
                     .borderRadius(8)
+                    .margin(bottom: Theme.chipMargin()) // B-edge: undo chip bottom margin
                     .onClick({event => this.doUndo()})
                     Row(space: 8) {
                         Image(rawSvg("icon-reset"))
@@ -2287,6 +2291,7 @@ class EntryView {
                     .backgroundColor(Theme.whitePaper)
                     .border(width: 1.2, color: Theme.ink)
                     .borderRadius(8)
+                    .margin(bottom: Theme.chipMargin()) // B-edge: reset chip bottom margin
                     .onClick({event => this.doClear()})
                 }
                 .width(100.percent)
@@ -2300,7 +2305,7 @@ class EntryView {
         }
         .width(100.percent)
         .height(100.percent)
-        .padding(left: this.playInset(), right: this.playInset())
+        .padding(top: this.padTop, bottom: this.padBottom, left: this.playInset(), right: this.playInset())
         .backgroundColor(this.playPaper())
         .alignItems(HorizontalAlign.Center)
         .onAreaChange({ old, new =>
@@ -2309,6 +2314,15 @@ class EntryView {
             if (targetW - this.winW > 0.5 || this.winW - targetW > 0.5) {
                 this.winW = targetW
                 this.rebuildBoard()
+            }
+            // TODO(E2/E8): 宿主 setenv 时机待 Mac 实测;此处是宿主晚写 env 时的重读钩子
+            let st = Theme.safeTop()
+            let sb = Theme.safeBottom()
+            if (st - this.padTop > 0.01 || this.padTop - st > 0.01) {
+                this.padTop = st
+            }
+            if (sb - this.padBottom > 0.01 || this.padBottom - sb > 0.01) {
+                this.padBottom = sb
             }
         })
     }
