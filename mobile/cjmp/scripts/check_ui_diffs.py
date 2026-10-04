@@ -505,6 +505,26 @@ def check_k(lib_dir, fonts_dir):
     return True, f"YiluSans-Bold.ttf (7e46ee679e9d) OK, .fontFamily(this.sansBoldFamily()) exactly 1 on Text('章节')"
 
 
+def check_l(index_cj_text, chapter_cj_text):
+    """l) (J19) index.cj footer Text width avail+1 and maxLines(1), chapter.cj footerSlack."""
+    if "footerSlack" not in chapter_cj_text:
+        return False, "chapter.cj missing 'footerSlack'"
+
+    if "this.chapterListFooterLines" not in index_cj_text:
+        return False, "index.cj missing 'this.chapterListFooterLines'"
+
+    idx = index_cj_text.find("this.chapterListFooterLines")
+    window = index_cj_text[idx:idx + 600]
+
+    if not re.search(r'\.width\(\s*this\.winW\s*-\s*40(?:\.0)?\s*\+\s*1(?:\.0)?\s*\)', window):
+        return False, "index.cj footer Text missing .width(this.winW - 40.0 + 1.0)"
+
+    if not re.search(r'\.maxLines\(\s*1\s*\)', window):
+        return False, "index.cj footer Text missing .maxLines(1)"
+
+    return True, "footer Text width avail+1 and maxLines(1) verified, chapter.cj has footerSlack"
+
+
 def selftest():
     # 1. Test check_a violation detection
     bad_a_lines = [
@@ -726,6 +746,49 @@ def selftest():
         ok_k_other, msg = check_k(tmp_lib, tmp_fonts)
         assert not ok_k_other and "unexpected Theme.sansBold" in msg, f"selftest k: expected other file failure, got {msg}"
 
+    # 7. Test check_l footer slack and avail+1 width
+    good_l_index = (
+        "Column {\n"
+        "    ForEach(\n"
+        "        this.chapterListFooterLines(),\n"
+        "        itemGenerator: {line: String, index: Int64 =>\n"
+        "            Text(line)\n"
+        "                .fontSize(12)\n"
+        "                .lineHeight(16)\n"
+        "                .height(16)\n"
+        "                .fontColor(Theme.inkMuted)\n"
+        "                .fontFamily(this.sansFamily())\n"
+        "                .maxLines(1)\n"
+        "                .width(this.winW - 40.0 + 1.0)\n"
+        "        }\n"
+        "    )\n"
+        "}\n"
+    )
+    good_l_chapter = "public func footerSlack(): Float64 { return 0.5 }\n"
+
+    ok_l, msg = check_l(good_l_index, good_l_chapter)
+    assert ok_l, f"selftest l: expected pass, got {msg}"
+
+    # Negative 1: missing footerSlack in chapter.cj
+    bad_l_chapter = "public func footerNeedsTwoLines(): Bool { return false }\n"
+    ok_l_noslack, msg = check_l(good_l_index, bad_l_chapter)
+    assert not ok_l_noslack and "footerSlack" in msg, f"selftest l: expected footerSlack failure, got {msg}"
+
+    # Negative 2: missing width(this.winW - 40.0 + 1.0) in index.cj
+    bad_l_index_width = good_l_index.replace(".width(this.winW - 40.0 + 1.0)", ".width(100.percent)")
+    ok_l_nowidth, msg = check_l(bad_l_index_width, good_l_chapter)
+    assert not ok_l_nowidth and "width" in msg, f"selftest l: expected width failure, got {msg}"
+
+    # Negative 3: missing maxLines(1) in index.cj
+    bad_l_index_maxlines = good_l_index.replace(".maxLines(1)\n", "")
+    ok_l_nomaxlines, msg = check_l(bad_l_index_maxlines, good_l_chapter)
+    assert not ok_l_nomaxlines and "maxLines" in msg, f"selftest l: expected maxLines failure, got {msg}"
+
+    # Negative 4: missing this.chapterListFooterLines in index.cj
+    bad_l_index_noblock = "Text(\"x\").width(this.winW - 40.0 + 1.0).maxLines(1)\n"
+    ok_l_noblock, msg = check_l(bad_l_index_noblock, good_l_chapter)
+    assert not ok_l_noblock and "chapterListFooterLines" in msg, f"selftest l: expected block failure, got {msg}"
+
     print("selftest OK")
     sys.exit(0)
 
@@ -773,6 +836,7 @@ def main():
         ("i) summary_card_wiring", lambda: check_i(index_cj_text)),
         ("j) chapter_list_footer_lines", lambda: check_j(index_cj_text)),
         ("k) sans_bold_font_and_usage", lambda: check_k(lib_dir, fonts_dir)),
+        ("l) footer_slack_and_avail_width", lambda: check_l(index_cj_text, chapter_cj_text)),
     ]
 
     all_passed = True

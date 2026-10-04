@@ -335,23 +335,41 @@ public class ChapterCatalog {
         let ch = ChapterCatalog.byIndex(chapterId)
         let n = ChapterCatalog.clearedCount(chapterId, cleared)
         let isAllClear = (ch.levelCount > 0 && n >= ch.levelCount)
-        if (isAllClear && footerNeedsTwoLines(full, winW)) {
-            var dims = ""
-            if (ch.levelStart < levels.size) {
-                let board = levels[ch.levelStart]
-                dims = " · ${board.cols}×${board.rows}"
+        if (isAllClear) {
+            if (footerNeedsTwoLines(full, winW)) {
+                var dims = ""
+                if (ch.levelStart < levels.size) {
+                    let board = levels[ch.levelStart]
+                    dims = " · ${board.cols}×${board.rows}"
+                }
+                let l1 = "已通 ${n} · 本章全通"
+                var l2 = ""
+                if (chapterId < ChapterCatalog.count() - 1) {
+                    let nextCh = ChapterCatalog.byIndex(chapterId + 1)
+                    l2 = "下一章 ${nextCh.name} · 共10驿${dims}"
+                } else {
+                    l2 = "驿路终章 · 共10驿${dims}"
+                }
+                return [l1, l2]
             }
-            let l1 = "已通 ${n} · 本章全通"
-            var l2 = ""
-            if (chapterId < ChapterCatalog.count() - 1) {
-                let nextCh = ChapterCatalog.byIndex(chapterId + 1)
-                l2 = "下一章 ${nextCh.name} · 共10驿${dims}"
-            } else {
-                l2 = "驿路终章 · 共10驿${dims}"
-            }
-            return [l1, l2]
+            return [full]
         }
-        return [full]
+        var curName = ""
+        if (!ChapterCatalog.isOpen(ch.id, cleared)) {
+            curName = "未开"
+        } else if (cleared < ch.levelStart) {
+            if (ch.levelStart < levels.size) {
+                curName = levels[ch.levelStart].name
+            }
+        } else if (cleared < levels.size) {
+            curName = levels[cleared].name
+        }
+        var dims = ""
+        if (ch.levelStart < levels.size) {
+            let board = levels[ch.levelStart]
+            dims = " · ${board.cols}×${board.rows}"
+        }
+        return footerCurrentLines(n, curName, dims, winW)
     }
 
     public static func groupState(chapterId: Int64, cleared: Int64): Int64 {
@@ -565,7 +583,47 @@ public func footerTextWidth(s: String): Float64 {
     return total
 }
 
+public func footerSlack(): Float64 {
+    return 0.5
+}
+
+public func footerWidthOverflows(w: Float64, avail: Float64): Bool {
+    return w > avail + footerSlack()
+}
+
 public func footerNeedsTwoLines(text: String, winW: Float64): Bool {
-    return footerTextWidth(text) > winW - 40.0
+    return footerWidthOverflows(footerTextWidth(text), winW - 40.0)
+}
+
+func footerStrStartsWith(s: String, prefix: String): Bool {
+    if (s.size < prefix.size) {
+        return false
+    }
+    var i: Int64 = 0
+    while (i < prefix.size) {
+        match (s.get(i)) {
+            case Some(b1) => match (prefix.get(i)) {
+                case Some(b2) => if (b1 != b2) { return false }
+                case None => return false
+            }
+            case None => return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+public func footerCurrentLines(n: Int64, curName: String, dims: String, winW: Float64): Array<String> {
+    var dimsPart = dims
+    if (dimsPart.size > 0 && !footerStrStartsWith(dimsPart, " · ")) {
+        dimsPart = " · " + dimsPart
+    }
+    let full = "已通 ${n} · 当前${curName} · 共10驿${dimsPart}"
+    if (footerNeedsTwoLines(full, winW)) {
+        let l1 = "已通 ${n} · 当前${curName}"
+        let l2 = "共10驿${dimsPart}"
+        return [l1, l2]
+    }
+    return [full]
 }
 

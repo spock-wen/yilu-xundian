@@ -1609,7 +1609,7 @@ class EntryView {
                                 .fontColor(Theme.inkMuted)
                                 .fontFamily(this.sansFamily())
                                 .maxLines(1)
-                                .width(100.percent)
+                                .width(this.winW - 40.0 + 1.0)
                         }
                     )
                 }

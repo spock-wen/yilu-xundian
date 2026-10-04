@@ -3159,6 +3159,81 @@ func j29FooterTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     println("J29 current-variant overflow cases=${overflowCases}")
 }
 
+/* ===== J31 页脚宽容(+0.5)与「当前」变体拆行自测 ===== */
+func j31FooterSlackTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
+    let c0 = ctx.checks
+
+    // 1. 纯函数边界
+    ctx.ck(!footerWidthOverflows(280.5, 280.0), "J31 footerWidthOverflows(280.5, 280.0)==false")
+    ctx.ck(footerWidthOverflows(280.5 + 0.01, 280.0), "J31 footerWidthOverflows(280.5+0.01, 280.0)==true")
+    ctx.ck(!footerWidthOverflows(280.15, 280.0), "J31 footerWidthOverflows(280.15, 280.0)==false")
+    ctx.ck(footerWidthOverflows(281.0, 280.0), "J31 footerWidthOverflows(281.0, 280.0)==true")
+    ctx.ck(footerSlack() == 0.5, "J31 footerSlack()==0.5")
+
+    // 2. 之前统计出的 43 个「当前」变体 case (100 关 × winW ∈ {320, 360, 411.43} 宽度在 (avail, avail+0.5]):
+    //    断言每一个 chapterListFooterLines 都只返回 1 行, 并打印 J31 within-slack current cases=N (N==43)
+    // 3. 断言真实 100 关 × 三个宽度里没有「当前」变体拆行
+    var withinSlackCases: Int64 = 0
+    var currentWrapCases: Int64 = 0
+    let sweepWinWs: Array<Float64> = [320.0, 360.0, 411.43]
+    var clr: Int64 = 0
+    while (clr < 100) {
+        let chId = ChapterCatalog.chapterIdForLevel(clr)
+        let txt = ChapterCatalog.chapterListFooterText(chId, clr, levels)
+        let ch = ChapterCatalog.byIndex(chId)
+        let n = ChapterCatalog.clearedCount(chId, clr)
+        let isAllClear = (ch.levelCount > 0 && n >= ch.levelCount)
+        if (!isAllClear) {
+            let w = footerTextWidth(txt)
+            for (winW in sweepWinWs) {
+                let avail = winW - 40.0
+                if (w > avail && w <= avail + 0.5) {
+                    withinSlackCases = withinSlackCases + 1
+                    let lines = ChapterCatalog.chapterListFooterLines(chId, clr, levels, winW)
+                    ctx.ck(lines.size == 1, "J31 within-slack case clr=${clr} winW=${winW} lines.size=${lines.size} want=1")
+                }
+                let linesAll = ChapterCatalog.chapterListFooterLines(chId, clr, levels, winW)
+                if (linesAll.size > 1) {
+                    currentWrapCases = currentWrapCases + 1
+                }
+            }
+        }
+        clr = clr + 1
+    }
+    println("J31 within-slack current cases=${withinSlackCases}")
+    ctx.ck(withinSlackCases == 43, "J31 withinSlackCases=${withinSlackCases} want=43")
+    ctx.ck(currentWrapCases == 0, "J31 real 100 levels currentWrapCases=${currentWrapCases} want=0")
+
+    // 4. 合成长关名测试
+    let longName = "极长超宽自定义测试关卡名称很长很长"
+    let dims6x6 = " · 6×6"
+    let longLines = footerCurrentLines(3, longName, dims6x6, 320.0)
+    ctx.ck(longLines.size == 2, "J31 long current name lines.size=${longLines.size} want=2")
+    if (longLines.size == 2) {
+        ctx.ck(longLines[0] == "已通 3 · 当前${longName}", "J31 line1='${longLines[0]}' want='已通 3 · 当前${longName}'")
+        ctx.ck(longLines[1] == "共10驿 · 6×6", "J31 line2='${longLines[1]}' want='共10驿 · 6×6'")
+    }
+    let longLinesRawDims = footerCurrentLines(5, longName, "7×7", 320.0)
+    ctx.ck(longLinesRawDims.size == 2, "J31 raw dims lines.size=2")
+    if (longLinesRawDims.size == 2) {
+        ctx.ck(longLinesRawDims[1] == "共10驿 · 7×7", "J31 raw dims line2='${longLinesRawDims[1]}'")
+    }
+    let longLinesEmptyDims = footerCurrentLines(2, longName, "", 320.0)
+    ctx.ck(longLinesEmptyDims.size == 2, "J31 empty dims lines.size=2")
+    if (longLinesEmptyDims.size == 2) {
+        ctx.ck(longLinesEmptyDims[1] == "共10驿", "J31 empty dims line2='${longLinesEmptyDims[1]}'")
+    }
+
+    // 5. 全通变体边界: 构造宽度恰好 avail+0.5 不拆、略大拆
+    let allClearSample = "已通 10 · 本章全通 · 下一章 平原 · 共10驿 · 6×6"
+    let wAllClear = footerTextWidth(allClearSample)
+    let winWExact = wAllClear + 39.5
+    ctx.ck(!footerNeedsTwoLines(allClearSample, winWExact), "J31 all-clear exact avail+0.5 does not wrap")
+    ctx.ck(footerNeedsTwoLines(allClearSample, winWExact - 0.01), "J31 all-clear slightly narrower wraps")
+
+    println("J31 footer slack done checks=${ctx.checks - c0}")
+}
+
 /* ===== J30 首页「章节 · 驿程」点击区几何自测 (SPEC_A1_ADDENDUM §3.3 & RULINGS_ABF56B0) ===== */
 func j30HomeLinkTests(ctx: Ctx): Unit {
     let c0 = ctx.checks
@@ -3645,6 +3720,8 @@ main(args: Array<String>): Int64 {
     j29FooterTests(levels, ctx)
     /* J30 home screen links geometry checks. */
     j30HomeLinkTests(ctx)
+    /* J31 footer slack (+0.5) and current-variant wrapping checks. */
+    j31FooterSlackTests(levels, ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit} fallback=${ctx.toastFallback}")
     ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")
