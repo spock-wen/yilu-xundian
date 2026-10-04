@@ -12,9 +12,23 @@ on iOS 27. This script patches the generated host in place:
      application:didFinishLaunchingWithOptions:, per CJMP project-setup.md)
   * registers SceneDelegate.h/.m in <name>.xcodeproj/project.pbxproj
 
+--bars controls the status-bar / navigation-bar area of the generated host
+(the "white band" fix; see mobile/cjmp/README.md):
+
+  * paper (default) paper(#F3E8D6) window background, forced light mode,
+           navigation bar kept but repainted opaque paper with no shadow
+           hairline — Mac-measured colour-exact (ΔRGB 0 vs paper), content
+           start identical to off (the 116pt band stays, just paper-coloured)
+  * hide            paper window background, forced light mode, hidden
+           navigation bar — Mac-measured to cover content on iOS 27 (the whole
+           page moves up 116pt under the status bar), so NOT the default; only
+           usable together with a safe-top aware app (plan B)
+  * off             the original template behaviour (white window background)
+
 Anchors are taken from the Keels engine sample project (same toolchain, same
-shape: ObjC AppDelegate with a `window` property, main.m, minimal Info.plist).
-The real `keels create` output is UNCONFIRMED: every anchor is checked and a
+shape: ObjC AppDelegate with a `window` property, main.m, minimal Info.plist)
+and have been exercised against real `keels create` 0.2.2 output on Mac
+(hide/paper/off all built, check-app OK). Every anchor is still checked and a
 missing anchor makes the script exit 1 with
 "Keels template changed: anchor X not found in FILE" — never a silent skip.
 
@@ -122,18 +136,74 @@ CONFIG_METHOD = """\
 
 """ % {"m": MARKER}
 
-IN_SCENE_METHOD = """\
-// %(m)s: UIScene lifecycle — the window belongs to a UIWindowScene.
-- (void)setNavRootVC:(id)viewController inScene:(UIWindowScene *)scene {
+# --bars 三种模式的公共片段（paper 色 #F3E8D6，与 CJMP 皮肤一致）。
+PAPER_COLOR_DECL = (
+    "    UIColor *paper = [UIColor colorWithRed:243.0/255.0 "
+    "green:232.0/255.0 blue:214.0/255.0 alpha:1.0];")
+
+IN_SCENE_METHOD_OFF = """\
     self.window = [[UIWindow alloc] initWithWindowScene:scene];
     self.window.backgroundColor = [UIColor whiteColor];
     [self.window makeKeyAndVisible];
     UINavigationController *navi = [[UINavigationController alloc]initWithRootViewController:viewController];
     [self setNaviAppearance:navi];
     self.window.rootViewController = navi;
-}
+"""
 
-""" % {"m": MARKER}
+IN_SCENE_METHOD_PAPER = """\
+%(paper_decl)s
+    self.window = [[UIWindow alloc] initWithWindowScene:scene];
+    self.window.backgroundColor = paper;
+    [self.window makeKeyAndVisible];
+    UINavigationController *navi = [[UINavigationController alloc]initWithRootViewController:viewController];
+    self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleLight;
+    [self setNaviAppearance:navi];
+    UINavigationBarAppearance *barsAppearance = [UINavigationBarAppearance new];
+    [barsAppearance configureWithOpaqueBackground];
+    barsAppearance.backgroundColor = paper;
+    barsAppearance.shadowColor = [UIColor clearColor];
+    navi.navigationBar.standardAppearance = barsAppearance;
+    navi.navigationBar.scrollEdgeAppearance = barsAppearance;
+    self.window.rootViewController = navi;
+"""
+
+IN_SCENE_METHOD_HIDE = """\
+%(paper_decl)s
+    self.window = [[UIWindow alloc] initWithWindowScene:scene];
+    self.window.backgroundColor = paper;
+    [self.window makeKeyAndVisible];
+    UINavigationController *navi = [[UINavigationController alloc]initWithRootViewController:viewController];
+    self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleLight;
+    navi.view.backgroundColor = paper;
+    [navi setNavigationBarHidden:YES animated:NO];
+    [self setNaviAppearance:navi];
+    self.window.rootViewController = navi;
+"""
+
+
+def in_scene_method(bars):
+    """生成 setNavRootVC:inScene: 方法文本（含 MARKER 注释头与模式注释行）。
+
+    off   —— 与 Keels 模板原文本逐字相同（window 背景 whiteColor）。
+    paper —— window 背景改 paper，强制浅色模式；导航栏保留，但在
+             setNaviAppearance 之后重设 standardAppearance/scrollEdgeAppearance
+             为 opaque paper、无阴影细线。
+    hide  —— 同 paper 的 window 背景与浅色模式，再隐藏导航栏
+             （navi.view 背景也设成 paper），不再改 appearance。
+    """
+    bodies = {"off": IN_SCENE_METHOD_OFF,
+              "paper": IN_SCENE_METHOD_PAPER,
+              "hide": IN_SCENE_METHOD_HIDE}
+    if bars not in bodies:
+        die("unknown --bars mode: %r" % bars)
+    return """\
+// %(m)s: UIScene lifecycle — the window belongs to a UIWindowScene.
+// yilu-bars-patch: mode=%(bars)s (see mobile/cjmp/README.md)
+- (void)setNavRootVC:(id)viewController inScene:(UIWindowScene *)scene {
+%(body)s}
+
+""" % {"m": MARKER, "bars": bars,
+           "body": bodies[bars] % {"paper_decl": PAPER_COLOR_DECL}}
 
 
 def insert_before_line(text, line_pred, block, anchor, path):
@@ -146,7 +216,11 @@ def insert_before_line(text, line_pred, block, anchor, path):
     anchor_error(anchor, path)
 
 
-def patch_app_delegate_m(m_path, changed):
+# 已打补丁方法里的模式注释行（用于检测模式冲突）。
+RE_BARS_MODE = re.compile(r"//\s*yilu-bars-patch:\s*mode=(\w+)")
+
+
+def patch_app_delegate_m(m_path, changed, bars):
     src = read_text(m_path)
 
     # (a) BUNDLE_NAME value — required anchor (needed for SceneDelegate.m).
@@ -198,11 +272,16 @@ def patch_app_delegate_m(m_path, changed):
     # (d) setNavRootVC:inScene: before setNaviAppearance:.
     if "setNavRootVC:(id)viewController inScene:" in src:
         print("  already patched: setNavRootVC:inScene: in %s" % m_path)
+        # 已是补丁方法：若其中的 mode= 与本次请求不同，提示但不报错（幂等）。
+        m = RE_BARS_MODE.search(src)
+        if m and m.group(1) != bars:
+            print("  NOTE: already patched with mode=%s, requested %s; "
+                  "regenerate the host project to switch" % (m.group(1), bars))
     else:
         src = insert_before_line(
             src,
             lambda l: l.lstrip().startswith("- (void)setNaviAppearance:"),
-            IN_SCENE_METHOD,
+            in_scene_method(bars),
             "- (void)setNaviAppearance:", m_path)
 
     if src != original:
@@ -399,7 +478,7 @@ def patch_pbxproj(pbx_path, changed):
 # cmd: patch
 # ---------------------------------------------------------------------------
 
-def cmd_patch(ios_dir, name):
+def cmd_patch(ios_dir, name, bars):
     host_dir = os.path.join(ios_dir, name)
     pbx_path = os.path.join(ios_dir, "%s.xcodeproj" % name, "project.pbxproj")
     plist_path = os.path.join(host_dir, "Info.plist")
@@ -413,7 +492,7 @@ def cmd_patch(ios_dir, name):
 
     changed = []
     patch_info_plist(plist_path, changed)
-    bundle_name = patch_app_delegate_m(adm_path, changed)
+    bundle_name = patch_app_delegate_m(adm_path, changed, bars)
     patch_app_delegate_h(adh_path, changed)
     write_scene_delegate(host_dir, bundle_name, changed)
     patch_pbxproj(pbx_path, changed)
@@ -719,6 +798,19 @@ def cmd_selftest():
                         "SceneDelegate.m not in Sources phase files")
         selftest_assert("7E5CE4E000000000000000A1" in pbx, "deterministic ID seed missing")
 
+        # -- 默认模式（不传 --bars）产出 paper --------------------------------
+        # paper = 保留导航栏但染纸色、去阴影细线、强制浅色模式、绝不隐藏。
+        m_def = RE_BARS_MODE.search(adm)
+        selftest_assert(m_def is not None and m_def.group(1) == "paper",
+                        "default --bars must be paper (mode comment: %r)"
+                        % (m_def.group(1) if m_def else None))
+        selftest_assert("243.0/255.0" in adm and "shadowColor" in adm,
+                        "default (paper): paper colour / hairline removal missing")
+        selftest_assert("setNavigationBarHidden:YES" not in adm,
+                        "default (paper): navigation bar must not be hidden")
+        selftest_assert("overrideUserInterfaceStyle" in adm,
+                        "default (paper): forced light mode missing")
+
         # -- patch is idempotent ------------------------------------------
         def snap(d):
             out = {}
@@ -735,6 +827,66 @@ def cmd_selftest():
         selftest_assert("no changes made" in r2.stdout + r2.stderr,
                         "second patch did not report no-changes: %r" % r2.stdout)
         selftest_assert(snap(ios_dir) == before, "second patch changed files")
+
+        # -- --bars 三种模式的关键片段 ------------------------------------
+        mode_dirs = {}
+        for mode in ("off", "paper", "hide"):
+            d = make_fixture(os.path.join(tmp, "bars-" + mode))
+            r = run_self(["patch", d, "--name", "xundian", "--bars", mode])
+            selftest_assert(r.returncode == 0,
+                            "patch --bars %s exit=%d stderr=%s"
+                            % (mode, r.returncode, r.stderr))
+            mode_dirs[mode] = d
+            adm_bars = read_text(os.path.join(d, "xundian", "AppDelegate.m"))
+            selftest_assert("setNavRootVC:(id)viewController inScene:" in adm_bars,
+                            "--bars %s: inScene method missing" % mode)
+            m = RE_BARS_MODE.search(adm_bars)
+            selftest_assert(m is not None and m.group(1) == mode,
+                            "--bars %s: mode comment wrong" % mode)
+            if mode == "off":
+                selftest_assert("whiteColor" in adm_bars,
+                                "off: whiteColor missing")
+                selftest_assert("setNavigationBarHidden" not in adm_bars,
+                                "off: setNavigationBarHidden present")
+            elif mode == "paper":
+                selftest_assert("243.0/255.0" in adm_bars,
+                                "paper: paper color missing")
+                selftest_assert("shadowColor" in adm_bars,
+                                "paper: shadowColor missing")
+                selftest_assert("setNavigationBarHidden:YES" not in adm_bars,
+                                "paper: nav bar hidden")
+            else:
+                selftest_assert("setNavigationBarHidden:YES" in adm_bars,
+                                "hide: nav bar not hidden")
+                selftest_assert("overrideUserInterfaceStyle" in adm_bars,
+                                "hide: light mode missing")
+
+        # -- 同模式二次打补丁无变化（paper 为例） --------------------------
+        d = mode_dirs["paper"]
+        before_bars = snap(d)
+        r = run_self(["patch", d, "--name", "xundian", "--bars", "paper"])
+        selftest_assert(r.returncode == 0,
+                        "paper re-patch exit=%d" % r.returncode)
+        selftest_assert("no changes made" in r.stdout,
+                        "paper re-patch did not report no-changes: %r" % r.stdout)
+        selftest_assert(snap(d) == before_bars, "paper re-patch changed files")
+
+        # -- 另一模式二次打补丁：打印 NOTE 且文件不变 -----------------------
+        d = mode_dirs["hide"]
+        before_switch = snap(d)
+        r = run_self(["patch", d, "--name", "xundian", "--bars", "paper"])
+        selftest_assert(r.returncode == 0,
+                        "mode-switch re-patch exit=%d" % r.returncode)
+        selftest_assert("NOTE: already patched with mode=hide, requested paper; "
+                        "regenerate the host project to switch" in r.stdout + r.stderr,
+                        "mode-switch NOTE missing: %r" % r.stdout)
+        selftest_assert(snap(d) == before_switch,
+                        "mode-switch re-patch changed files")
+
+        # -- --bars 非法值：argparse 退出码 2 ------------------------------
+        r = run_self(["patch", ios_dir, "--name", "xundian", "--bars", "bogus"])
+        selftest_assert(r.returncode == 2,
+                        "--bars bogus exit=%d (expected 2)" % r.returncode)
 
         # -- missing anchor -> exit 1 with anchor message ------------------
         ios2 = make_fixture(os.path.join(tmp, "b"))
@@ -778,6 +930,9 @@ def main(argv=None):
     p = sub.add_parser("patch", help="patch <ios_dir> (idempotent)")
     p.add_argument("ios_dir")
     p.add_argument("--name", default="xundian")
+    p.add_argument("--bars", choices=["hide", "paper", "off"], default="paper",
+                   help="status/nav bar treatment: hide, paper, or off "
+                        "(default: paper)")
 
     p = sub.add_parser("check-app", help="verify a built .app bundle")
     p.add_argument("app_path")
@@ -794,7 +949,7 @@ def main(argv=None):
 
     args = ap.parse_args(argv)
     if args.cmd == "patch":
-        cmd_patch(args.ios_dir, args.name)
+        cmd_patch(args.ios_dir, args.name, args.bars)
     elif args.cmd == "check-app":
         cmd_check_app(args.app_path, args.name)
     elif args.cmd == "selftest":

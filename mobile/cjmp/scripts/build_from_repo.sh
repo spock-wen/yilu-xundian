@@ -30,9 +30,13 @@
 #   STEP C   xundian.cpp FindClass com/example -> com/yilu (Android)
 #   STEP C2  EntryEntryAbilityActivity system-back guard (Android)
 #   STEP C3  EntryEntryAbilityActivity setenv YILU_FILES_DIR (Android, progress save dir)
+#   STEP C4  EntryEntryAbilityActivity system bar colors (Android, paper palette;
+#            default OFF — zero visual effect on the API35 cutout-inset emulator,
+#            run only with an explicit YILU_ANDROID_BARS=on)
 #   STEP D   IPHONEOS_DEPLOYMENT_TARGET 12.0 -> 15.0 (iOS pbxproj)
 #   STEP D2  iOS host UIScene lifecycle patch (TN3187): scene manifest +
-#            SceneDelegate, window/root-VC moved out of AppDelegate
+#            SceneDelegate, window/root-VC moved out of AppDelegate,
+#            and iOS bars mode (YILU_IOS_BARS)
 #   STEP G   post-build check-app verification of the built .app (iOS)
 #
 # macOS bash 3.2 compatible (no associative arrays, no mapfile).
@@ -100,6 +104,29 @@ mkdir -p "$OUT_DIR"
 PROJ="$OUT_DIR/xundian"
 
 PENDING_BANNER=0
+
+# ---------------------------------------------------------------------------
+# 校验系统栏相关环境变量（iOS 白带处理模式 / Android 系统栏配色开关）
+#   YILU_IOS_BARS     paper（默认，保留导航栏但整体染纸色 #F3E8D6、去细线）
+#                    | hide（隐藏导航栏，Mac 实测会盖住内容，不默认）| off（不处理）
+#   YILU_ANDROID_BARS off（默认，跳过——Mac 实测 API35 挖孔 inset 下零效果）
+#                    | on（系统栏设为 paper 并用浅色图标）
+# ---------------------------------------------------------------------------
+case "${YILU_IOS_BARS:-paper}" in
+  hide|paper|off) ;;
+  *)
+    echo "ERROR: YILU_IOS_BARS must be one of hide|paper|off (got: ${YILU_IOS_BARS})" >&2
+    exit 1
+    ;;
+esac
+
+case "${YILU_ANDROID_BARS:-off}" in
+  on|off) ;;
+  *)
+    echo "ERROR: YILU_ANDROID_BARS must be one of on|off (got: ${YILU_ANDROID_BARS})" >&2
+    exit 1
+    ;;
+esac
 
 # ---------------------------------------------------------------------------
 # STEP A: Check prerequisites
@@ -268,6 +295,30 @@ if ! "$PY" "$SCRIPT_DIR/patch_android_filesdir.py" patch "$ACT"; then
 fi
 
 # ---------------------------------------------------------------------------
+# STEP C4: Patch EntryEntryAbilityActivity — Android 系统栏配色（paper 色板）
+#
+# Keels 0.2.2 生成的 Android 宿主未设置系统栏颜色，状态栏(约 48.8dp)与
+# 导航栏(约 24dp)默认为黑色，与纸色(#F3E8D6)棋盘不协调。patch_android_bars.py
+# 在 onPostCreate 中把两个系统栏颜色设为 paper 并改用浅色前景图标。
+#
+# Mac 实测（API35 模拟器，A411 挖孔）：dumpsys 证实补丁 flags 生效
+# （LIGHT_STATUS_BAR/NAVIGATION_BAR），但黑块 128px 在应用窗口之外
+# （mDisplayCutout insets top=128 > statusBars 63px，窗口被放在挖孔之下），
+# setStatusBarColor 画不到那里——零视觉变化。故默认跳过（skipping (default
+# off)），仅当显式 YILU_ANDROID_BARS=on 时执行（真机/无挖孔设备可复测）；
+# 真正消除黑块需 edge-to-edge + cutout 方案（方案 B，另议）。
+# ---------------------------------------------------------------------------
+echo "STEP C4: Patching EntryEntryAbilityActivity (system bar colors)"
+if [ "${YILU_ANDROID_BARS:-off}" = "on" ]; then
+  if ! "$PY" "$SCRIPT_DIR/patch_android_bars.py" patch "$ACT"; then
+    echo "ERROR: patch_android_bars.py patch failed (Keels template changed?)" >&2
+    exit 1
+  fi
+else
+  echo "  YILU_ANDROID_BARS=${YILU_ANDROID_BARS:-off} — skipping (default off)"
+fi
+
+# ---------------------------------------------------------------------------
 # STEP D: Patch project.pbxproj — set IPHONEOS_DEPLOYMENT_TARGET = 15.0
 # ---------------------------------------------------------------------------
 echo "STEP D: Patching IPHONEOS_DEPLOYMENT_TARGET in project.pbxproj"
@@ -310,10 +361,15 @@ echo "  Patched $count_correct occurrence(s) to 15.0."
 # patch_ios_scene.py adds the manifest, a SceneDelegate, moves window/root-VC
 # creation into the scene delegate (StageApplication init stays in
 # AppDelegate) and registers the new files in the xcodeproj.
+#
+# --bars comes from YILU_IOS_BARS (default paper: nav bar kept but repainted
+# opaque paper #F3E8D6 with no shadow hairline — Mac-measured colour-exact,
+# content start identical to off; hide covers content on iOS 27, not the
+# default; off = the template white band).
 # ---------------------------------------------------------------------------
 if [ "$BUILD_IOS" -eq 1 ]; then
   echo "STEP D2: Patching iOS host for UIScene lifecycle"
-  if ! "$PY" "$SCRIPT_DIR/patch_ios_scene.py" patch "$PROJ/ios" --name xundian; then
+  if ! "$PY" "$SCRIPT_DIR/patch_ios_scene.py" patch "$PROJ/ios" --name xundian --bars "${YILU_IOS_BARS:-paper}"; then
     echo "ERROR: patch_ios_scene.py patch failed (Keels template changed?)" >&2
     exit 1
   fi
