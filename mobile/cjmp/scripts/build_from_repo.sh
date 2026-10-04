@@ -107,12 +107,12 @@ PENDING_BANNER=0
 
 # ---------------------------------------------------------------------------
 # 校验系统栏相关环境变量（iOS 白带处理模式 / Android 系统栏配色开关）
-#   YILU_IOS_BARS     paper（默认，保留导航栏但整体染纸色 #F3E8D6、去细线）
-#                    | hide（隐藏导航栏，Mac 实测会盖住内容，不默认）| off（不处理）
+#   YILU_IOS_BARS     hide（默认，隐藏导航栏，染纸色 #F3E8D6、强制浅色；配合仓颉 safe-top/bottom）
+#                    | paper（保留导航栏但整体染纸色 #F3E8D6、去细线）| off（不处理）
 #   YILU_ANDROID_BARS off（默认，跳过——Mac 实测 API35 挖孔 inset 下零效果）
 #                    | on（系统栏设为 paper 并用浅色图标）
 # ---------------------------------------------------------------------------
-case "${YILU_IOS_BARS:-paper}" in
+case "${YILU_IOS_BARS:-hide}" in
   hide|paper|off) ;;
   *)
     echo "ERROR: YILU_IOS_BARS must be one of hide|paper|off (got: ${YILU_IOS_BARS})" >&2
@@ -362,14 +362,14 @@ echo "  Patched $count_correct occurrence(s) to 15.0."
 # creation into the scene delegate (StageApplication init stays in
 # AppDelegate) and registers the new files in the xcodeproj.
 #
-# --bars comes from YILU_IOS_BARS (default paper: nav bar kept but repainted
-# opaque paper #F3E8D6 with no shadow hairline — Mac-measured colour-exact,
-# content start identical to off; hide covers content on iOS 27, not the
-# default; off = the template white band).
+# --bars comes from YILU_IOS_BARS (default hide: nav bar hidden with
+# YiluNavigationController, status bar darkContent, paper #F3E8D6 backgrounds,
+# safeAreaInsets exported via YILU_SAFE_TOP/BOTTOM; paper = nav bar kept but
+# repainted opaque paper with no shadow hairline; off = the template white band).
 # ---------------------------------------------------------------------------
 if [ "$BUILD_IOS" -eq 1 ]; then
   echo "STEP D2: Patching iOS host for UIScene lifecycle"
-  if ! "$PY" "$SCRIPT_DIR/patch_ios_scene.py" patch "$PROJ/ios" --name xundian --bars "${YILU_IOS_BARS:-paper}"; then
+  if ! "$PY" "$SCRIPT_DIR/patch_ios_scene.py" patch "$PROJ/ios" --name xundian --bars "${YILU_IOS_BARS:-hide}"; then
     echo "ERROR: patch_ios_scene.py patch failed (Keels template changed?)" >&2
     exit 1
   fi
@@ -450,10 +450,17 @@ if [ "$BUILD_IOS" -eq 1 ]; then
     exit 1
   fi
   # Post-build check: the .app Info.plist must carry the UIScene manifest
-  # and the executable must contain the SceneDelegate class.
-  if ! "$PY" "$SCRIPT_DIR/patch_ios_scene.py" check-app "$IOS_APP" --name xundian; then
-    echo "ERROR: iOS app bundle scene-manifest check failed" >&2
-    exit 1
+  # and the executable must contain the SceneDelegate class (and YiluNavigationController when hide).
+  if [ "${YILU_IOS_BARS:-hide}" = "hide" ]; then
+    if ! "$PY" "$SCRIPT_DIR/patch_ios_scene.py" check-app "$IOS_APP" --name xundian --expect-hide; then
+      echo "ERROR: iOS app bundle scene-manifest check failed" >&2
+      exit 1
+    fi
+  else
+    if ! "$PY" "$SCRIPT_DIR/patch_ios_scene.py" check-app "$IOS_APP" --name xundian; then
+      echo "ERROR: iOS app bundle scene-manifest check failed" >&2
+      exit 1
+    fi
   fi
   echo "  iOS app: $IOS_APP"
   # Print size summary (no shasum on directories — use zip hash)

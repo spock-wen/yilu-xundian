@@ -15,14 +15,17 @@ on iOS 27. This script patches the generated host in place:
 --bars controls the status-bar / navigation-bar area of the generated host
 (the "white band" fix; see mobile/cjmp/README.md):
 
-  * paper (default) paper(#F3E8D6) window background, forced light mode,
+  * hide (default)  paper(#F3E8D6) window background, forced light mode, hidden
+           navigation bar using YiluNavigationController (preferredStatusBarStyle
+           = UIStatusBarStyleDarkContent), root VC view painted paper.
+           Must be paired with Cangjie safe-top/bottom padding (merged in the
+           same batch); if YILU_SAFE_TOP is not set, content sits right below the
+           status bar. Exports safeAreaInsets via setenv YILU_SAFE_TOP /
+           YILU_SAFE_BOTTOM (1/100 logical points).
+  * paper           paper(#F3E8D6) window background, forced light mode,
            navigation bar kept but repainted opaque paper with no shadow
            hairline — Mac-measured colour-exact (ΔRGB 0 vs paper), content
            start identical to off (the 116pt band stays, just paper-coloured)
-  * hide            paper window background, forced light mode, hidden
-           navigation bar — Mac-measured to cover content on iOS 27 (the whole
-           page moves up 116pt under the status bar), so NOT the default; only
-           usable together with a safe-top aware app (plan B)
   * off             the original template behaviour (white window background)
 
 Anchors are taken from the Keels engine sample project (same toolchain, same
@@ -141,6 +144,81 @@ PAPER_COLOR_DECL = (
     "    UIColor *paper = [UIColor colorWithRed:243.0/255.0 "
     "green:232.0/255.0 blue:214.0/255.0 alpha:1.0];")
 
+# --bars hide 模式宏定义与 safeAreaInsets 导出钩子（C 函数 + 宏）。
+# 单位 1/100 逻辑点，负数/NaN 记为 0；无任何硬编码 inset 数值常量。
+# TODO(E2): 时机与取值视图以 Mac E2 实测为准。
+HIDE_MACROS_AND_SAFE_EXPORT = """\
+#ifndef YILU_SAFE_EXPORT
+#define YILU_SAFE_EXPORT 1
+#endif
+#ifndef YILU_SAFE_TOP_FIXED_HUNDREDTHS
+// Default undefined: dynamically exported from UIView.safeAreaInsets.
+// Define to override with a fixed hundredths-of-a-point integer.
+#endif
+#ifndef YILU_SAFE_BOTTOM_FIXED_HUNDREDTHS
+// Default undefined: dynamically exported from UIView.safeAreaInsets.
+// Define to override with a fixed hundredths-of-a-point integer.
+#endif
+
+#if YILU_SAFE_EXPORT
+static inline void yilu_export_safe_insets(UIView *v) {
+    if (!v) {
+        return;
+    }
+    UIEdgeInsets insets = v.safeAreaInsets;
+    long top_h = 0;
+#ifdef YILU_SAFE_TOP_FIXED_HUNDREDTHS
+    top_h = (long)(YILU_SAFE_TOP_FIXED_HUNDREDTHS);
+#else
+    if (!isnan(insets.top) && insets.top > 0.0) {
+        top_h = (long)(insets.top * 100.0 + 0.5);
+    }
+#endif
+
+    long bottom_h = 0;
+#ifdef YILU_SAFE_BOTTOM_FIXED_HUNDREDTHS
+    bottom_h = (long)(YILU_SAFE_BOTTOM_FIXED_HUNDREDTHS);
+#else
+    if (!isnan(insets.bottom) && insets.bottom > 0.0) {
+        bottom_h = (long)(insets.bottom * 100.0 + 0.5);
+    }
+#endif
+
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%ld", top_h);
+    setenv("YILU_SAFE_TOP", buf, 1);
+
+    char buf2[32];
+    snprintf(buf2, sizeof(buf2), "%ld", bottom_h);
+    setenv("YILU_SAFE_BOTTOM", buf2, 1);
+}
+#endif
+"""
+
+# --bars hide 模式专用的 UINavigationController 子类定义（覆写深色内容状态栏）。
+YILU_NAVI_CONTROLLER_DECL = """\
+@interface YiluNavigationController : UINavigationController
+@end
+
+@implementation YiluNavigationController
+- (UIStatusBarStyle)preferredStatusBarStyle {
+    return UIStatusBarStyleDarkContent;
+}
+- (UIViewController *)childViewControllerForStatusBarStyle {
+    return nil;
+}
+- (BOOL)prefersStatusBarHidden {
+    return NO;
+}
+@end
+"""
+
+APP_DELEGATE_HIDE_HEADER = (
+    "// %s: hide-mode status bar & safe area insets export\n"
+    "%s\n"
+    "%s\n"
+) % (MARKER, HIDE_MACROS_AND_SAFE_EXPORT, YILU_NAVI_CONTROLLER_DECL)
+
 IN_SCENE_METHOD_OFF = """\
     self.window = [[UIWindow alloc] initWithWindowScene:scene];
     self.window.backgroundColor = [UIColor whiteColor];
@@ -172,7 +250,13 @@ IN_SCENE_METHOD_HIDE = """\
     self.window = [[UIWindow alloc] initWithWindowScene:scene];
     self.window.backgroundColor = paper;
     [self.window makeKeyAndVisible];
-    UINavigationController *navi = [[UINavigationController alloc]initWithRootViewController:viewController];
+#if YILU_SAFE_EXPORT
+    // TODO(E2): 时机与取值视图以 Mac E2 实测为准
+    yilu_export_safe_insets(self.window);
+#endif
+    // TODO(E3): edgesForExtendedLayout=UIRectEdgeAll in template VC if hidden-nav layout needs it
+    ((UIViewController *)viewController).view.backgroundColor = paper;
+    YiluNavigationController *navi = [[YiluNavigationController alloc]initWithRootViewController:viewController];
     self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleLight;
     navi.view.backgroundColor = paper;
     [navi setNavigationBarHidden:YES animated:NO];
@@ -188,8 +272,9 @@ def in_scene_method(bars):
     paper —— window 背景改 paper，强制浅色模式；导航栏保留，但在
              setNaviAppearance 之后重设 standardAppearance/scrollEdgeAppearance
              为 opaque paper、无阴影细线。
-    hide  —— 同 paper 的 window 背景与浅色模式，再隐藏导航栏
-             （navi.view 背景也设成 paper），不再改 appearance。
+    hide  —— window/navi/root-VC 背景改 paper，强制浅色模式，使用
+             YiluNavigationController 隐藏导航栏并提供 UIStatusBarStyleDarkContent，
+             并在 makeKeyAndVisible 后调用 safe area inset 导出钩子。
     """
     bodies = {"off": IN_SCENE_METHOD_OFF,
               "paper": IN_SCENE_METHOD_PAPER,
@@ -269,8 +354,20 @@ def patch_app_delegate_m(m_path, changed, bars):
             CONFIG_METHOD,
             "- (BOOL)application:(UIApplication *)app openURL:", m_path)
 
-    # (d) setNavRootVC:inScene: before setNaviAppearance:.
-    if "setNavRootVC:(id)viewController inScene:" in src:
+    # (d) YiluNavigationController and safe insets header (hide mode only), before @implementation AppDelegate.
+    already_patched_nav = "setNavRootVC:(id)viewController inScene:" in src
+    if bars == "hide" and not already_patched_nav:
+        if "YiluNavigationController" in src:
+            print("  already patched: YiluNavigationController in %s" % m_path)
+        else:
+            src = insert_before_line(
+                src,
+                lambda l: l.lstrip().startswith("@implementation AppDelegate"),
+                APP_DELEGATE_HIDE_HEADER,
+                "@implementation AppDelegate", m_path)
+
+    # (e) setNavRootVC:inScene: before setNaviAppearance:.
+    if already_patched_nav:
         print("  already patched: setNavRootVC:inScene: in %s" % m_path)
         # 已是补丁方法：若其中的 mode= 与本次请求不同，提示但不报错（幂等）。
         m = RE_BARS_MODE.search(src)
@@ -338,18 +435,55 @@ def scene_delegate_h_text():
 """ % MARKER
 
 
-def scene_delegate_m_text(bundle_name):
-    return """\
+def scene_delegate_m_text(bundle_name, bars="hide"):
+    if bars == "hide":
+        return """\
 //
 // SceneDelegate.m
-// %s: UIScene lifecycle delegate (TN3187). Original code written for CJMP.
+// %(m)s: UIScene lifecycle delegate (TN3187). Original code written for CJMP.
 //
 
 #import "SceneDelegate.h"
 #import "AppDelegate.h"
 #import "EntryEntryAbilityViewController.h"
 
-#define BUNDLE_NAME @"%s"
+#define BUNDLE_NAME @"%(b)s"
+
+%(safe_export)s
+
+@implementation SceneDelegate
+
+- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
+    if (![scene isKindOfClass:[UIWindowScene class]]) {
+        return;
+    }
+    NSString *instanceName = [NSString stringWithFormat:@"%%@:%%@:%%@",BUNDLE_NAME, @"entry", @"EntryAbility"];
+    EntryEntryAbilityViewController *viewController = [[EntryEntryAbilityViewController alloc] initWithInstanceName:instanceName];
+    [(AppDelegate *)UIApplication.sharedApplication.delegate setNavRootVC:viewController inScene:(UIWindowScene *)scene];
+    self.window = ((AppDelegate *)UIApplication.sharedApplication.delegate).window;
+}
+
+- (void)sceneDidBecomeActive:(UIScene *)scene {
+#if YILU_SAFE_EXPORT
+    // TODO(E2): 时机与取值视图以 Mac E2 实测为准
+    yilu_export_safe_insets(self.window);
+#endif
+}
+
+@end
+""" % {"m": MARKER, "b": bundle_name, "safe_export": HIDE_MACROS_AND_SAFE_EXPORT}
+    else:
+        return """\
+//
+// SceneDelegate.m
+// %(m)s: UIScene lifecycle delegate (TN3187). Original code written for CJMP.
+//
+
+#import "SceneDelegate.h"
+#import "AppDelegate.h"
+#import "EntryEntryAbilityViewController.h"
+
+#define BUNDLE_NAME @"%(b)s"
 
 @implementation SceneDelegate
 
@@ -364,17 +498,17 @@ def scene_delegate_m_text(bundle_name):
 }
 
 @end
-""" % (MARKER, bundle_name)
+""" % {"m": MARKER, "b": bundle_name}
 
 
-def write_scene_delegate(host_dir, bundle_name, changed):
+def write_scene_delegate(host_dir, bundle_name, changed, bars="hide"):
     h_path = os.path.join(host_dir, "SceneDelegate.h")
     m_path = os.path.join(host_dir, "SceneDelegate.m")
     if os.path.exists(h_path) and os.path.exists(m_path):
         print("  already patched: SceneDelegate.h/.m exist in %s" % host_dir)
         return
     write_text(h_path, scene_delegate_h_text())
-    write_text(m_path, scene_delegate_m_text(bundle_name))
+    write_text(m_path, scene_delegate_m_text(bundle_name, bars))
     changed.append(h_path)
     changed.append(m_path)
 
@@ -494,7 +628,7 @@ def cmd_patch(ios_dir, name, bars):
     patch_info_plist(plist_path, changed)
     bundle_name = patch_app_delegate_m(adm_path, changed, bars)
     patch_app_delegate_h(adh_path, changed)
-    write_scene_delegate(host_dir, bundle_name, changed)
+    write_scene_delegate(host_dir, bundle_name, changed, bars)
     patch_pbxproj(pbx_path, changed)
 
     if changed:
@@ -510,7 +644,7 @@ def cmd_patch(ios_dir, name, bars):
 # cmd: check-app
 # ---------------------------------------------------------------------------
 
-def cmd_check_app(app_path, name):
+def cmd_check_app(app_path, name, expect_hide=False):
     plist_path = os.path.join(app_path, "Info.plist")
     if not os.path.isfile(plist_path):
         die("FAIL: Info.plist not found in %s" % app_path)
@@ -549,6 +683,14 @@ def cmd_check_app(app_path, name):
             "(was SceneDelegate.m compiled into the app?)"
             % (delegate, exe_path))
     print("OK: %s contains scene delegate class name" % exe_path)
+
+    if expect_hide:
+        if b"YiluNavigationController" not in exe_bytes:
+            die("FAIL: class name 'YiluNavigationController' not found in executable %s "
+                "(was hide-mode navigation controller compiled into the app?)"
+                % exe_path)
+        print("OK: %s contains YiluNavigationController class name" % exe_path)
+
     print("check-app OK (%s, name=%s)" % (app_path, name))
 
 
@@ -703,7 +845,7 @@ def selftest_assert(cond, msg):
         die("selftest FAIL: %s" % msg)
 
 
-def make_fake_app(root, with_manifest=True, with_class_bytes=True):
+def make_fake_app(root, with_manifest=True, with_class_bytes=True, with_hide_bytes=True):
     app = os.path.join(root, "xundian.app")
     os.makedirs(app)
     plist = {
@@ -718,6 +860,8 @@ def make_fake_app(root, with_manifest=True, with_class_bytes=True):
     body = b"\xcf\xfa\xed\xfefake-macho"
     if with_class_bytes:
         body += b"\x00SceneDelegate\x00"
+    if with_hide_bytes:
+        body += b"\x00YiluNavigationController\x00"
     with open(os.path.join(app, "xundian"), "wb") as f:
         f.write(body)
     return app
@@ -798,18 +942,41 @@ def cmd_selftest():
                         "SceneDelegate.m not in Sources phase files")
         selftest_assert("7E5CE4E000000000000000A1" in pbx, "deterministic ID seed missing")
 
-        # -- 默认模式（不传 --bars）产出 paper --------------------------------
-        # paper = 保留导航栏但染纸色、去阴影细线、强制浅色模式、绝不隐藏。
+        # -- 默认模式（不传 --bars）产出 hide --------------------------------
         m_def = RE_BARS_MODE.search(adm)
-        selftest_assert(m_def is not None and m_def.group(1) == "paper",
-                        "default --bars must be paper (mode comment: %r)"
+        selftest_assert(m_def is not None and m_def.group(1) == "hide",
+                        "default --bars must be hide (mode comment: %r)"
                         % (m_def.group(1) if m_def else None))
-        selftest_assert("243.0/255.0" in adm and "shadowColor" in adm,
-                        "default (paper): paper colour / hairline removal missing")
-        selftest_assert("setNavigationBarHidden:YES" not in adm,
-                        "default (paper): navigation bar must not be hidden")
+        selftest_assert("YiluNavigationController" in adm,
+                        "default (hide): YiluNavigationController missing")
+        selftest_assert("UIStatusBarStyleDarkContent" in adm,
+                        "default (hide): UIStatusBarStyleDarkContent missing")
+        selftest_assert("setNavigationBarHidden:YES" in adm,
+                        "default (hide): setNavigationBarHidden:YES missing")
+        selftest_assert("243.0/255.0" in adm,
+                        "default (hide): paper color missing")
+        selftest_assert("yilu_export_safe_insets" in adm,
+                        "default (hide): yilu_export_safe_insets missing in adm")
+        selftest_assert('setenv("YILU_SAFE_TOP"' in adm,
+                        "default (hide): setenv YILU_SAFE_TOP missing in adm")
+        selftest_assert("snprintf" in adm,
+                        "default (hide): snprintf missing in adm")
         selftest_assert("overrideUserInterfaceStyle" in adm,
-                        "default (paper): forced light mode missing")
+                        "default (hide): forced light mode missing")
+        selftest_assert(not re.search(r"top_h\s*=\s*[1-9]\d*", adm),
+                        "default (hide): hardcoded number assigned to safe top")
+        selftest_assert(not re.search(r"bottom_h\s*=\s*[1-9]\d*", adm),
+                        "default (hide): hardcoded number assigned to safe bottom")
+        selftest_assert(adm.count("{") == adm.count("}"),
+                        "default (hide): AppDelegate.m braces unbalanced (%d vs %d)"
+                        % (adm.count("{"), adm.count("}")))
+        selftest_assert("sceneDidBecomeActive:" in sdm,
+                        "default (hide): sceneDidBecomeActive missing in SceneDelegate.m")
+        selftest_assert("yilu_export_safe_insets" in sdm,
+                        "default (hide): yilu_export_safe_insets missing in SceneDelegate.m")
+        selftest_assert(sdm.count("{") == sdm.count("}"),
+                        "default (hide): SceneDelegate.m braces unbalanced (%d vs %d)"
+                        % (sdm.count("{"), sdm.count("}")))
 
         # -- patch is idempotent ------------------------------------------
         def snap(d):
@@ -838,8 +1005,13 @@ def cmd_selftest():
                             % (mode, r.returncode, r.stderr))
             mode_dirs[mode] = d
             adm_bars = read_text(os.path.join(d, "xundian", "AppDelegate.m"))
+            sdm_bars = read_text(os.path.join(d, "xundian", "SceneDelegate.m"))
             selftest_assert("setNavRootVC:(id)viewController inScene:" in adm_bars,
                             "--bars %s: inScene method missing" % mode)
+            selftest_assert(adm_bars.count("{") == adm_bars.count("}"),
+                            "--bars %s: AppDelegate.m braces unbalanced" % mode)
+            selftest_assert(sdm_bars.count("{") == sdm_bars.count("}"),
+                            "--bars %s: SceneDelegate.m braces unbalanced" % mode)
             m = RE_BARS_MODE.search(adm_bars)
             selftest_assert(m is not None and m.group(1) == mode,
                             "--bars %s: mode comment wrong" % mode)
@@ -848,6 +1020,14 @@ def cmd_selftest():
                                 "off: whiteColor missing")
                 selftest_assert("setNavigationBarHidden" not in adm_bars,
                                 "off: setNavigationBarHidden present")
+                selftest_assert("YiluNavigationController" not in adm_bars,
+                                "off: YiluNavigationController present in adm")
+                selftest_assert("yilu_export_safe_insets" not in adm_bars,
+                                "off: yilu_export_safe_insets present in adm")
+                selftest_assert("UIStatusBarStyleDarkContent" not in adm_bars,
+                                "off: UIStatusBarStyleDarkContent present in adm")
+                selftest_assert("sceneDidBecomeActive:" not in sdm_bars,
+                                "off: sceneDidBecomeActive present in SceneDelegate.m")
             elif mode == "paper":
                 selftest_assert("243.0/255.0" in adm_bars,
                                 "paper: paper color missing")
@@ -855,11 +1035,39 @@ def cmd_selftest():
                                 "paper: shadowColor missing")
                 selftest_assert("setNavigationBarHidden:YES" not in adm_bars,
                                 "paper: nav bar hidden")
+                selftest_assert("YiluNavigationController" not in adm_bars,
+                                "paper: YiluNavigationController present in adm")
+                selftest_assert("yilu_export_safe_insets" not in adm_bars,
+                                "paper: yilu_export_safe_insets present in adm")
+                selftest_assert("UIStatusBarStyleDarkContent" not in adm_bars,
+                                "paper: UIStatusBarStyleDarkContent present in adm")
+                selftest_assert("sceneDidBecomeActive:" not in sdm_bars,
+                                "paper: sceneDidBecomeActive present in SceneDelegate.m")
             else:
                 selftest_assert("setNavigationBarHidden:YES" in adm_bars,
                                 "hide: nav bar not hidden")
                 selftest_assert("overrideUserInterfaceStyle" in adm_bars,
                                 "hide: light mode missing")
+                selftest_assert("YiluNavigationController" in adm_bars,
+                                "hide: YiluNavigationController missing")
+                selftest_assert("UIStatusBarStyleDarkContent" in adm_bars,
+                                "hide: UIStatusBarStyleDarkContent missing")
+                selftest_assert("243.0/255.0" in adm_bars,
+                                "hide: paper color missing")
+                selftest_assert("yilu_export_safe_insets" in adm_bars,
+                                "hide: yilu_export_safe_insets missing in adm")
+                selftest_assert('setenv("YILU_SAFE_TOP"' in adm_bars,
+                                "hide: setenv YILU_SAFE_TOP missing in adm")
+                selftest_assert("snprintf" in adm_bars,
+                                "hide: snprintf missing in adm")
+                selftest_assert(not re.search(r"top_h\s*=\s*[1-9]\d*", adm_bars),
+                                "hide: hardcoded number assigned to safe top")
+                selftest_assert(not re.search(r"bottom_h\s*=\s*[1-9]\d*", adm_bars),
+                                "hide: hardcoded number assigned to safe bottom")
+                selftest_assert("sceneDidBecomeActive:" in sdm_bars,
+                                "hide: sceneDidBecomeActive missing in SceneDelegate.m")
+                selftest_assert("yilu_export_safe_insets" in sdm_bars,
+                                "hide: yilu_export_safe_insets missing in SceneDelegate.m")
 
         # -- 同模式二次打补丁无变化（paper 为例） --------------------------
         d = mode_dirs["paper"]
@@ -903,6 +1111,18 @@ def cmd_selftest():
         rc = run_self(["check-app", app, "--name", "xundian"])
         selftest_assert(rc.returncode == 0 and "check-app OK" in rc.stdout,
                         "check-app OK case failed: %s%s" % (rc.stdout, rc.stderr))
+        rc_hide = run_self(["check-app", app, "--name", "xundian", "--expect-hide"])
+        selftest_assert(rc_hide.returncode == 0 and "contains YiluNavigationController" in rc_hide.stdout,
+                        "check-app --expect-hide failed: %s%s" % (rc_hide.stdout, rc_hide.stderr))
+
+        app_nohide = make_fake_app(os.path.join(tmp, "app-nohide"), with_hide_bytes=False)
+        rc_nohide = run_self(["check-app", app_nohide, "--name", "xundian"])
+        selftest_assert(rc_nohide.returncode == 0,
+                        "check-app without --expect-hide should pass on nohide app")
+        rc_fail_hide = run_self(["check-app", app_nohide, "--name", "xundian", "--expect-hide"])
+        selftest_assert(rc_fail_hide.returncode == 1 and "FAIL" in rc_fail_hide.stderr,
+                        "check-app with --expect-hide should fail on nohide app: %s%s" % (rc_fail_hide.stdout, rc_fail_hide.stderr))
+
         app_bad = make_fake_app(os.path.join(tmp, "app-noplist"),
                                 with_manifest=False)
         rc = run_self(["check-app", app_bad, "--name", "xundian"])
@@ -930,13 +1150,15 @@ def main(argv=None):
     p = sub.add_parser("patch", help="patch <ios_dir> (idempotent)")
     p.add_argument("ios_dir")
     p.add_argument("--name", default="xundian")
-    p.add_argument("--bars", choices=["hide", "paper", "off"], default="paper",
+    p.add_argument("--bars", choices=["hide", "paper", "off"], default="hide",
                    help="status/nav bar treatment: hide, paper, or off "
-                        "(default: paper)")
+                        "(default: hide)")
 
     p = sub.add_parser("check-app", help="verify a built .app bundle")
     p.add_argument("app_path")
     p.add_argument("--name", default="xundian")
+    p.add_argument("--expect-hide", action="store_true",
+                   help="assert YiluNavigationController is present in the executable (hide mode)")
 
     sub.add_parser("selftest", help="run the built-in test suite")
 
@@ -951,7 +1173,7 @@ def main(argv=None):
     if args.cmd == "patch":
         cmd_patch(args.ios_dir, args.name, args.bars)
     elif args.cmd == "check-app":
-        cmd_check_app(args.app_path, args.name)
+        cmd_check_app(args.app_path, args.name, args.expect_hide)
     elif args.cmd == "selftest":
         cmd_selftest()
     elif args.cmd == "fixture-from-sample":

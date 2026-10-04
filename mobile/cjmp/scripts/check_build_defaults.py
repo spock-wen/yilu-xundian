@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""check_build_defaults.py — J27 白带方案 A 的构建默认值静态检查。
+"""check_build_defaults.py — 方案 B 的构建默认值静态检查。
 
-PM 决定（依据 Mac 实测 /workspace/cjmp-smoke/fixui/MAC_RESULTS_c711f3e.md §3）：
-只合入 iOS paper；默认值改为
+PM / 设计师决定：
+iOS 默认 hide（配合仓颉 safe-top/bottom padding，edge-to-edge）；默认值：
 
-  * YILU_IOS_BARS     默认 paper（hide 保留可选、off 保留）
+  * YILU_IOS_BARS     默认 hide（paper 保留可选、off 保留）
   * YILU_ANDROID_BARS 默认 off（STEP C4 仅显式 =on 才执行）
 
 本脚本静态读取 build_from_repo.sh 与 patch_ios_scene.py，断言：
-  a) 所有 `${YILU_IOS_BARS:-X}` 默认值 == paper，且 case 允许 hide|paper|off
+  a) 所有 `${YILU_IOS_BARS:-X}` 默认值 == hide，且 case 允许 hide|paper|off
   b) 所有 `${YILU_ANDROID_BARS:-X}` 默认值 == off，且 case 允许 on|off
-  c) STEP D2 传给 patch_ios_scene.py 的 --bars 来自 `${YILU_IOS_BARS:-paper}`
+  c) STEP D2 传给 patch_ios_scene.py 的 --bars 来自 `${YILU_IOS_BARS:-hide}`
   d) STEP C4 默认路径被跳过：存在 `if [ "${YILU_ANDROID_BARS:-off}" = "on" ]`
      门（patch_android_bars.py 调用只在其 on 分支内），且打印
      "skipping (default off"
-  e) patch_ios_scene.py 的 --bars argparse default == "paper"（choices 含
+  e) patch_ios_scene.py 的 --bars argparse default == "hide"（choices 含
      hide|paper|off）
 
---selftest：对一份把默认改回 hide/on、C4 门反转、D2 传 hide、argparse 默认
-改回 hide 的合成 build_from_repo.sh / patch_ios_scene.py 能检出违规；对当前
+--selftest：对一份把默认改回 paper/on、C4 门反转、D2 传 paper、argparse 默认
+改回 paper 的合成 build_from_repo.sh / patch_ios_scene.py 能检出违规；对当前
 仓库文件通过。只用 Python 标准库。
 """
 
@@ -38,25 +38,25 @@ RE_ANDROID_DEFAULT = re.compile(r"\$\{YILU_ANDROID_BARS:-(\w+)\}")
 # STEP C4 的执行门：默认 off、显式 on 才进 patch 分支。
 ANDROID_GATE = 'if [ "${YILU_ANDROID_BARS:-off}" = "on" ]; then'
 # STEP D2 传参。
-IOS_D2_ARG = '--bars "${YILU_IOS_BARS:-paper}"'
+IOS_D2_ARG = '--bars "${YILU_IOS_BARS:-hide}"'
 RE_IOS_ARGPARSE = re.compile(
     r'add_argument\(\s*"--bars",\s*choices=\[(?:"hide",\s*"paper",\s*"off"|'
     r'"paper",\s*"hide",\s*"off"|"off",\s*"paper",\s*"hide"[^]]*)\]\s*,\s*'
-    r'default="paper"', re.S)
+    r'default="hide"', re.S)
 
 
 def check_defaults(build_sh_text, ios_py_text):
     """返回 (ok, msg)。build_sh_text / ios_py_text 是两份源文本。"""
     errors = []
 
-    # a) YILU_IOS_BARS 默认 paper + case 允许 hide|paper|off
+    # a) YILU_IOS_BARS 默认 hide + case 允许 hide|paper|off
     ios_defaults = RE_IOS_DEFAULT.findall(build_sh_text)
     if not ios_defaults:
         errors.append("build_from_repo.sh: no ${YILU_IOS_BARS:-...} default found")
     for d in ios_defaults:
-        if d != "paper":
+        if d != "hide":
             errors.append("build_from_repo.sh: YILU_IOS_BARS default is '%s', "
-                          "expected paper (J27)" % d)
+                          "expected hide (B3)" % d)
     if not re.search(r"hide\|paper\|off\)", build_sh_text):
         errors.append("build_from_repo.sh: YILU_IOS_BARS case must allow "
                       "hide|paper|off")
@@ -74,7 +74,7 @@ def check_defaults(build_sh_text, ios_py_text):
         errors.append("build_from_repo.sh: YILU_ANDROID_BARS case must allow "
                       "on|off")
 
-    # c) STEP D2 --bars 传 ${YILU_IOS_BARS:-paper}
+    # c) STEP D2 --bars 传 ${YILU_IOS_BARS:-hide}
     if IOS_D2_ARG not in build_sh_text:
         errors.append("build_from_repo.sh: STEP D2 must pass '%s' to "
                       "patch_ios_scene.py" % IOS_D2_ARG)
@@ -103,18 +103,18 @@ def check_defaults(build_sh_text, ios_py_text):
         errors.append('build_from_repo.sh: STEP C4 skip branch must print '
                       '"skipping (default off"')
 
-    # e) patch_ios_scene.py --bars argparse default == paper
+    # e) patch_ios_scene.py --bars argparse default == hide
     if not RE_IOS_ARGPARSE.search(ios_py_text):
         errors.append('patch_ios_scene.py: --bars argparse must be '
-                      'choices=[hide,paper,off] with default="paper" (J27)')
+                      'choices=[hide,paper,off] with default="hide" (B3)')
 
     if errors:
         return False, "\n    ".join(errors)
-    return True, ("YILU_IOS_BARS default paper (hide|paper|off); "
+    return True, ("YILU_IOS_BARS default hide (hide|paper|off); "
                   "YILU_ANDROID_BARS default off (on|off); "
-                  "STEP D2 passes ${YILU_IOS_BARS:-paper}; "
+                  "STEP D2 passes ${YILU_IOS_BARS:-hide}; "
                   "STEP C4 skipped on the default path (patch only in the "
-                  "on branch); patch_ios_scene.py --bars default=paper")
+                  "on branch); patch_ios_scene.py --bars default=hide")
 
 
 def selftest():
@@ -132,10 +132,10 @@ def selftest():
         assert not ok and needle in msg, \
             "selftest: %s must be detected (needle %r): %s" % (tag, needle, msg)
 
-    # ① iOS 默认改回 hide → 检出
-    bad = good_build.replace("${YILU_IOS_BARS:-paper}", "${YILU_IOS_BARS:-hide}")
+    # ① iOS 默认改回 paper → 检出
+    bad = good_build.replace("${YILU_IOS_BARS:-hide}", "${YILU_IOS_BARS:-paper}")
     assert bad != good_build
-    expect_fail(bad, good_ios, "YILU_IOS_BARS default is 'hide'", "ios default hide")
+    expect_fail(bad, good_ios, "YILU_IOS_BARS default is 'paper'", "ios default paper")
 
     # ② Android 默认改回 on → 检出
     bad = good_build.replace("${YILU_ANDROID_BARS:-off}",
@@ -144,10 +144,10 @@ def selftest():
     expect_fail(bad, good_ios, "YILU_ANDROID_BARS default is 'on'",
                 "android default on")
 
-    # ③ STEP D2 传回 hide → 检出
-    bad = good_build.replace(IOS_D2_ARG, '--bars "${YILU_IOS_BARS:-hide}"')
+    # ③ STEP D2 传回 paper → 检出
+    bad = good_build.replace(IOS_D2_ARG, '--bars "${YILU_IOS_BARS:-paper}"')
     assert bad != good_build
-    expect_fail(bad, good_ios, "STEP D2", "D2 passes hide")
+    expect_fail(bad, good_ios, "STEP D2", "D2 passes paper")
 
     # ④ C4 门反转（= "off" ] 才执行）→ 检出（门缺失）
     bad = good_build.replace(ANDROID_GATE,
@@ -168,21 +168,19 @@ def selftest():
     assert bad != good_build
     expect_fail(bad, good_ios, "skipping (default off", "skip log removed")
 
-    # ⑦ patch_ios_scene.py argparse 默认改回 hide → 检出
-    bad_ios = good_ios.replace('choices=["hide", "paper", "off"], '
-                               'default="paper"',
-                               'choices=["hide", "paper", "off"], '
-                               'default="hide"')
+    # ⑦ patch_ios_scene.py argparse 默认改回 paper → 检出
+    bad_ios = good_ios.replace('choices=["hide", "paper", "off"], default="hide"',
+                               'choices=["hide", "paper", "off"], default="paper"')
     assert bad_ios != good_ios
-    expect_fail(good_build, bad_ios, 'default="paper"', "argparse default hide")
+    expect_fail(good_build, bad_ios, 'default="hide"', "argparse default paper")
 
     print("selftest OK")
 
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Static check of the J27 build-script bars defaults "
-                    "(YILU_IOS_BARS=paper / YILU_ANDROID_BARS=off).")
+        description="Static check of the build-script bars defaults "
+                    "(YILU_IOS_BARS=hide / YILU_ANDROID_BARS=off).")
     ap.add_argument("--selftest", action="store_true",
                     help="run the built-in test suite and exit")
     ap.add_argument("--build-sh", default=BUILD_SH,
