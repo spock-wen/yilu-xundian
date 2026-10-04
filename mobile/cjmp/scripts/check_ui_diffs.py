@@ -210,7 +210,8 @@ def check_d(index_cj_text):
 
 
 def check_e(lines):
-    """e) Text('章节') chain has no .border, Text('驿程') has screen=3 onClick."""
+    """e) Text('章节') chain has no .border, Text('驿程') opens via this.openYicheng() and
+    func openYicheng sets this.screen = 3 (J21/J23: click goes through the entry hook)."""
     found_zhangjie = False
     for i, line in enumerate(lines):
         if 'Text("章节")' in line:
@@ -229,7 +230,7 @@ def check_e(lines):
         return False, 'Text("章节") not found in index.cj'
 
     found_yicheng_click = False
-    onclick_pattern = re.compile(r'\.onClick\s*\(\s*\{\s*event\s*=>\s*this\.screen\s*=\s*3\s*\}\s*\)')
+    onclick_pattern = re.compile(r'\.onClick\s*\(\s*\{\s*event\s*=>\s*this\.openYicheng\(\)\s*\}\s*\)')
     for i, line in enumerate(lines):
         if 'Text("驿程")' in line:
             chain = []
@@ -244,9 +245,33 @@ def check_e(lines):
                 break
 
     if not found_yicheng_click:
-        return False, 'Text("驿程") with .onClick({event => this.screen = 3}) modifier not found'
+        return False, 'Text("驿程") with .onClick({event => this.openYicheng()}) modifier not found'
 
-    return True, 'Text("章节") has no .border, Text("驿程") with screen=3 onClick present'
+    # func openYicheng body must set this.screen = 3
+    func_start = None
+    for i, line in enumerate(lines):
+        if re.search(r'func\s+openYicheng\s*\(', line):
+            func_start = i
+            break
+    if func_start is None:
+        return False, 'func openYicheng not found in index.cj'
+
+    depth = 0
+    opened = False
+    body_lines = []
+    for j in range(func_start, len(lines)):
+        depth += lines[j].count("{") - lines[j].count("}")
+        if "{" in lines[j]:
+            opened = True
+        if opened:
+            body_lines.append(lines[j])
+        if opened and depth <= 0:
+            break
+    body = "\n".join(body_lines)
+    if not re.search(r'this\.screen\s*=\s*3', body):
+        return False, 'func openYicheng body does not set this.screen = 3'
+
+    return True, 'Text("章节") has no .border, Text("驿程") opens via this.openYicheng() which sets screen=3'
 
 
 def check_f(index_cj_text):
@@ -983,7 +1008,45 @@ def selftest():
     ok_m_lock, msg = check_m(bad_m_index_lock, good_m_chapter)
     assert not ok_m_lock and "lockPadRight(true, this.lockW())" in msg, f"selftest m: expected lockPadRight failure, got {msg}"
 
-    # 15. Test check_n (yicheng scroll position wiring)
+    # 15. Test check_e (home screen nav wiring, J23: click goes through openYicheng)
+    good_e_lines = (
+        'Text("章节")\n'
+        '    .fontFamily(this.sansFamily())\n'
+        '    .onClick({event => this.screen = 2})\n'
+        'Text("驿程")\n'
+        '    .fontFamily(this.sansFamily())\n'
+        '    .onClick({event => this.openYicheng()})\n'
+        'func openYicheng(): Unit {\n'
+        '    this.screen = 3\n'
+        '    this.positionYichengScroll()\n'
+        '}\n'
+    ).splitlines()
+    ok_e, msg = check_e(good_e_lines)
+    assert ok_e, f"selftest e: expected pass, got {ok_e}, {msg}"
+
+    bad_e_border = [l for l in good_e_lines]
+    bad_e_border.insert(2, '    .border(width: 1, color: Theme.paperLine)')
+    ok_e_border, msg = check_e(bad_e_border)
+    assert not ok_e_border and ".border" in msg, f"selftest e: expected border failure, got {ok_e_border}, {msg}"
+
+    bad_e_click = [l.replace(".onClick({event => this.openYicheng()})", ".onClick({event => this.screen = 5})")
+                   for l in good_e_lines]
+    ok_e_click, msg = check_e(bad_e_click)
+    assert not ok_e_click and "openYicheng()" in msg, f"selftest e: expected onClick failure, got {ok_e_click}, {msg}"
+
+    bad_e_body = [l.replace("this.screen = 3", "this.screen = 4") for l in good_e_lines]
+    ok_e_body, msg = check_e(bad_e_body)
+    assert not ok_e_body and "screen = 3" in msg, f"selftest e: expected body failure, got {ok_e_body}, {msg}"
+
+    bad_e_nofunc = "\n".join(good_e_lines).replace(
+        "func openYicheng(): Unit {\n"
+        "    this.screen = 3\n"
+        "    this.positionYichengScroll()\n"
+        "}", "").splitlines()
+    ok_e_nofunc, msg = check_e(bad_e_nofunc)
+    assert not ok_e_nofunc and "func openYicheng" in msg, f"selftest e: expected missing-func failure, got {ok_e_nofunc}, {msg}"
+
+    # 16. Test check_n (yicheng scroll position wiring)
     good_n_chapter = (
         "public class ChapterCatalog {\n"
         "    public static func yichengScrollOffset(currentChapter: Int64, cleared: Int64, total: Int64): Float64 { return 0.0 }\n"
