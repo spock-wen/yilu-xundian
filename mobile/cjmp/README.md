@@ -86,7 +86,7 @@ SVG 图标（`icon-undo`、`icon-reset`）与字体的同步行为不变。
 - **安全区与状态栏**：iOS 默认启用方案 B edge-to-edge（`--bars hide`），状态栏下为各页底色（原生壳与根 VC 背景 #F3E8D6，状态栏深色文字），由仓颉 safe-top/safe-bottom padding 避开安全区；安全区 inset 由宿主在 `makeKeyAndVisible` 及 `sceneDidBecomeActive:` 导出环境变量 `YILU_SAFE_TOP` 与 `YILU_SAFE_BOTTOM`（ASCII 十进制整数，单位 1/100 逻辑点；具体时机与实测值待 Mac E2/E3/E8 核验）；详细机制见上文「已知 Keels 模板补丁」第 4 条。
 - **棋盘实现**：M2 起棋盘由 shape 组件（Rect/Line/Circle/Path 等，非 Canvas）绘制，托盘与格宽基于 BoardGeom 几何计算（间隙 6vp，见 lib/board.cj）。
 - 仓颉编译器（CJMP OpenSDK 0.2.2 cjc）偶发随机崩溃/失败，重跑即可；且构建产物不可逐字节复现，因此脚本打印的 APK / iOS 二进制 SHA-256 仅供参考（用于核对同一次构建的传递），不作为版本一致性依据。
-- **特殊机制与修缮关卡**：6 种核心特殊机制及修缮关卡暂未实现，计划在 M3 里程碑实现。
+- **特殊机制**：渡口、单向门、滑行、符闸、塌桥、负重等机制的关卡数据、求解器和规则测试，以及棋盘上的机关叠层（含拒绝闪边、负重角标）已并入 main（PR #32、#33）。塌桥与负重的专用皮肤尚未合入 main。修缮关卡在本仓库中没有实现记录，状态以后续里程碑为准。
 
 ## 字体许可
 
