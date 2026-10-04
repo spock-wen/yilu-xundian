@@ -268,10 +268,142 @@ public class ChapterCatalog {
         return n
     }
 
-    public static func isDessert(levelId: Int64): Bool {
-        /* SHIP 点心: 涿郡·中山. Mock 第5驿 = JSON id 4. */
-        return levelId == 4
+    // boards-locked 的 dessert 字段; mobile/shared/levels/levels.json 不带 dessert 键且按现有测试不得带, 所以这里是该数据的镜像, 由 scripts/check_ui_diffs.py 与 boards-locked 对账
+    public static func dessertIds(): Array<Int64> {
+        return [4, 14, 24, 34, 44, 54, 64, 74, 84, 94]
     }
+
+    public static func isDessert(levelId: Int64): Bool {
+        let ids = ChapterCatalog.dessertIds()
+        var i: Int64 = 0
+        while (i < ids.size) {
+            if (ids[i] == levelId) {
+                return true
+            }
+            i = i + 1
+        }
+        return false
+    }
+
+    public static func dessertCount(): Int64 {
+        return ChapterCatalog.dessertIds().size
+    }
+
+    public static func yichengFooter(cleared: Int64, total: Int64, currentName: String): String {
+        if (total > 0 && cleared >= total) {
+            return SummaryCopy.footer(total)
+        }
+        return "已通 ${cleared} · 当前 ${currentName}"
+    }
+
+    public static func chapterListFooterText(chapterId: Int64, cleared: Int64, levels: ArrayList<LevelDef>): String {
+        let ch = ChapterCatalog.byIndex(chapterId)
+        let n = ChapterCatalog.clearedCount(chapterId, cleared)
+        var dims = ""
+        if (ch.levelStart < levels.size) {
+            let board = levels[ch.levelStart]
+            dims = " · ${board.cols}×${board.rows}"
+        }
+        if (ch.levelCount > 0 && n >= ch.levelCount) {
+            if (chapterId < ChapterCatalog.count() - 1) {
+                let nextCh = ChapterCatalog.byIndex(chapterId + 1)
+                return "已通 ${n} · 本章全通 · 下一章 ${nextCh.name} · 共10驿${dims}"
+            } else {
+                return "已通 ${n} · 本章全通 · 驿路终章 · 共10驿${dims}"
+            }
+        }
+        var curName = ""
+        if (!ChapterCatalog.isOpen(ch.id, cleared)) {
+            curName = "未开"
+        } else if (cleared < ch.levelStart) {
+            if (ch.levelStart < levels.size) {
+                curName = levels[ch.levelStart].name
+            }
+        } else if (cleared < levels.size) {
+            curName = levels[cleared].name
+        }
+        return "已通 ${n} · 当前${curName} · 共10驿${dims}"
+    }
+
+    public static func chapterListFooterLines(
+        chapterId: Int64,
+        cleared: Int64,
+        levels: ArrayList<LevelDef>,
+        winW: Float64
+    ): Array<String> {
+        let full = ChapterCatalog.chapterListFooterText(chapterId, cleared, levels)
+        let ch = ChapterCatalog.byIndex(chapterId)
+        let n = ChapterCatalog.clearedCount(chapterId, cleared)
+        let isAllClear = (ch.levelCount > 0 && n >= ch.levelCount)
+        if (isAllClear) {
+            if (footerNeedsTwoLines(full, winW)) {
+                var dims = ""
+                if (ch.levelStart < levels.size) {
+                    let board = levels[ch.levelStart]
+                    dims = " · ${board.cols}×${board.rows}"
+                }
+                let l1 = "已通 ${n} · 本章全通"
+                var l2 = ""
+                if (chapterId < ChapterCatalog.count() - 1) {
+                    let nextCh = ChapterCatalog.byIndex(chapterId + 1)
+                    l2 = "下一章 ${nextCh.name} · 共10驿${dims}"
+                } else {
+                    l2 = "驿路终章 · 共10驿${dims}"
+                }
+                return [l1, l2]
+            }
+            return [full]
+        }
+        var curName = ""
+        if (!ChapterCatalog.isOpen(ch.id, cleared)) {
+            curName = "未开"
+        } else if (cleared < ch.levelStart) {
+            if (ch.levelStart < levels.size) {
+                curName = levels[ch.levelStart].name
+            }
+        } else if (cleared < levels.size) {
+            curName = levels[cleared].name
+        }
+        var dims = ""
+        if (ch.levelStart < levels.size) {
+            let board = levels[ch.levelStart]
+            dims = " · ${board.cols}×${board.rows}"
+        }
+        return footerCurrentLines(n, curName, dims, winW)
+    }
+
+    public static func groupState(chapterId: Int64, cleared: Int64): Int64 {
+        let ch = ChapterCatalog.byIndex(chapterId)
+        if (cleared < ch.levelStart) {
+            return 2
+        }
+        if (ch.levelCount > 0 && ChapterCatalog.clearedCount(chapterId, cleared) >= ch.levelCount) {
+            return 1
+        }
+        return 0
+    }
+
+    public static func groupHeaderRight(chapterId: Int64, cleared: Int64): String {
+        let ch = ChapterCatalog.byIndex(chapterId)
+        let st = ChapterCatalog.groupState(chapterId, cleared)
+        if (st == 1) {
+            return "全通 ${ch.levelCount} / ${ch.levelCount}"
+        }
+        if (st == 2) {
+            return "未开"
+        }
+        let n = ChapterCatalog.clearedCount(chapterId, cleared)
+        return "已通 ${n} / ${ch.levelCount}"
+    }
+
+    public static func groupIsCurrent(chapterId: Int64, cleared: Int64): Bool {
+        let ch = ChapterCatalog.byIndex(chapterId)
+        if (ch.levelCount <= 0) {
+            return false
+        }
+        return cleared >= ch.levelStart && cleared < ch.levelStart + ch.levelCount
+    }
+
 
     public static func clearedCount(chapterId: Int64, cleared: Int64): Int64 {
         let ch = ChapterCatalog.byIndex(chapterId)
@@ -315,5 +447,374 @@ public class ChapterCatalog {
             i = i + 1
         }
         return out
+    }
+
+    /* J21(设计师裁决 4b / SPEC.md「默认滚动位置」):进入驿程全表时的初始滚动偏移——
+       当前章的分组头对齐视口顶;百驿全通(SummaryCopy.summaryVisible: cleared>=total)
+       停在顶部(总结卡可见);当前章=第 1 章时为 0。
+       未全通时无总结卡,offset = 前面各章完整高度之和(每章含其前的组间距,见 YichengScrollGeom)。
+       当前章判定与 groupIsCurrent/chapterIdForLevel 一致(cleared 所在章),传入不一致时按 cleared 归一。 */
+    public static func yichengScrollOffset(currentChapter: Int64, cleared: Int64, total: Int64): Float64 {
+        if (total > 0 && cleared >= total) {
+            return 0.0
+        }
+        var curId = currentChapter
+        if (!ChapterCatalog.groupIsCurrent(curId, cleared)) {
+            curId = ChapterCatalog.chapterIdForLevel(cleared)
+        }
+        if (curId < 0 || curId >= ChapterCatalog.count()) {
+            return 0.0
+        }
+        var off: Float64 = 0.0
+        var i: Int64 = 0
+        while (i < curId) {
+            let ch = ChapterCatalog.byIndex(i)
+            if (ch.levelCount > 0) {
+                off = off + YichengScrollGeom.groupGap() + YichengScrollGeom.chapterH(ch.levelCount)
+            }
+            i = i + 1
+        }
+        return off
+    }
+}
+
+/* 驿程全表百驿全通总结卡(B7)文案集中处:render_cjmp_gaps_v1.draw_summary。
+   文案已由作家定稿(COPY_ALLCLEAR_20261004.md);若再改标题,只改 title() 这一处,
+   页脚/subtitle/sealChars 全部经它引用,index.cj 与页脚不得另写字面量。 */
+public class SummaryCopy {
+    // 作家定稿标题「驿路全通」;换文案只改这一行
+    public static func title(): String {
+        return "驿路全通"
+    }
+
+    public static func subtitle(total: Int64): String {
+        return "已通 ${total} / ${total} · 十章皆通"
+    }
+
+    public static func sealChars(): Array<String> {
+        return ["全", "通"]
+    }
+
+    public static func footer(total: Int64): String {
+        return "已通 ${total} · ${SummaryCopy.title()}"
+    }
+
+    /* 总结卡可见性:cleared >= total 且 total > 0。 */
+    public static func summaryVisible(cleared: Int64, total: Int64): Bool {
+        return cleared >= total && total > 0
+    }
+}
+
+/* 总结卡(B7)几何常量:draw_summary(SUMMARY_H=88、rrect r8、左内边 16、
+   title y+30 serif 20、line y+58 sans 12)与 make_seal(size=147px=56u, 2.625 px/u, 旋转 -8°)。
+   朱印各值按 make_seal(147px) 公式取 px/2.625 结果,注释标明公式。 */
+public class SummaryGeom {
+    public static func cardH(): Float64 { return 88.0 } /* SUMMARY_H */
+    public static func radius(): Float64 { return 8.0 } /* 卡圆角 rrect 8 */
+    public static func padLeft(): Float64 { return 16.0 }
+    public static func padRight(): Float64 { return 16.0 }
+    public static func titleCenterY(): Float64 { return 30.0 }
+    public static func lineCenterY(): Float64 { return 58.0 }
+    public static func titleFont(): Float64 { return 20.0 }
+    public static func lineFont(): Float64 { return 12.0 }
+    public static func gapBelow(): Float64 { return 12.0 }
+    /* J26b: 驿程滚动内容顶到分隔线(顶栏下 hairline)的留白,以 Scroll 内容容器
+       padding(top:) 应用(未全通/全通两态同源)。依据:设计预览滚动视口顶=topbar 下沿+12
+       (render_cjmp_gaps_v1 scr_yicheng 的 vp_top,B5/B6/B7 一致);B7 实测(seal-card-previews/
+       android-320x700-B7.png / b7_measured.json)分隔线 rows 274–276px、卡顶 306–308px,
+       间距 30px @ 2.625px/u ≈ 11.4u,取整 12 与 gapBelow 一致(设计师裁决:预览对,实现错)。 */
+    public static func gapAbove(): Float64 { return 12.0 }
+    public static func sealSize(): Float64 { return 56.0 }
+    public static func sealAngle(): Float64 { return -8.0 } /* rotate(-8) */
+
+    /* 朱印 make_seal(147px) 公式, 2.625 px/u */
+    public static func sealFrameInset(): Float64 { return 9.0 / 2.625 } /* m=max(2,147//16)=9px ≈ 3.4286u */
+    public static func sealFrameW(): Float64 { return 9.0 / 2.625 } /* max(2,147//16)=9px ≈ 3.4286u */
+    public static func sealFrameR(): Float64 { return 10.0 / 2.625 } /* 147//14=10px ≈ 3.8095u */
+    public static func sealInnerInset(): Float64 { return 25.0 / 2.625 } /* m+147//9=9+16=25px ≈ 9.5238u */
+    public static func sealInnerW(): Float64 { return 4.0 / 2.625 } /* max(1,147//30)=4px ≈ 1.5238u */
+    public static func sealInnerR(): Float64 { return 7.0 / 2.625 } /* 147//20=7px ≈ 2.6667u */
+    public static func sealFont(): Float64 { return 44.0 / 2.625 } /* int(147*0.30)=44px ≈ 16.7619u */
+    public static func sealLineStep(): Float64 { return 1.02 } /* 字间距系数 */
+    public static func sealAlpha(): Float64 { return 0.92 } /* 235/255 */
+}
+
+/* 首页「章节 · 驿程」文字链与点击区几何 (SPEC_A1_ADDENDUM §3.3 & RULINGS_ABF56B0)。
+   推导 (相对屏幕中线 x=0):
+   - 内容总宽 = blockW(64) + gap(12) + blockW(64) = 140
+   - 无偏移居中为 [-70, +70], 整行向右偏移 +2 (centerShift=2.0) 得到:
+     章节块 [chapterX0, chapterX1] = [-68, -4]
+     圆点空档 [-4, +8], 4×4 圆点居中于 dotCenterX = +2
+     驿程块 [yichengX0, yichengX1] = [+8, +72]
+   - 外层 Column 居中机制下, Row 设置 rowMarginLeft = 4 (排版槽 144 居中于 [-72, +72]),
+     使内容整体中心落在 +2, 各块精准对应上述区间, 两块互不相交。 */
+public class HomeLinkGeom {
+    public static const blockW: Int64 = 64
+    public static const blockH: Int64 = 44
+    public static const gap: Int64 = 12
+    public static const dotSize: Int64 = 4
+    public static const dotRadius: Int64 = 2
+    public static const dotMarginLR: Int64 = 4
+    public static const underlineW: Int64 = 32 // 2 chars * 16 fontSize
+    public static const underlineH: Float64 = 1.2
+    public static const underlineMarginTop: Int64 = 2
+    public static const centerShift: Float64 = 2.0
+    public static const rowMarginLeft: Int64 = 4 // 2 * centerShift = 4 to shift centered 140w content right by 2
+    public static const rowMarginTop: Int64 = 2
+
+    public static func chapterX0(): Int64 { return -68 }
+    public static func chapterX1(): Int64 { return -4 }
+    public static func yichengX0(): Int64 { return 8 }
+    public static func yichengX1(): Int64 { return 72 }
+    public static func dotCenterX(): Float64 { return 2.0 }
+    public static func rowShift(): Float64 { return 2.0 }
+}
+
+/*
+ * 页脚 Sans 12 字符 advance 表 (12u 未取整宽度 = advance / unitsPerEm * 12.0)。
+ * 字体来源: mobile/cjmp/fonts/YiluSans-Regular.ttf (unitsPerEm = 1000)
+ * 生成/验证方式 (Python TTFont / fontTools):
+ *     from fontTools.ttLib import TTFont
+ *     font = TTFont('mobile/cjmp/fonts/YiluSans-Regular.ttf')
+ *     upem = font['head'].unitsPerEm
+ *     hmtx = font['hmtx']
+ *     cmap = font.getBestCmap()
+ *     chars = '已通 0123456789·本章全下一平原徐州吕布投袁荆州赤壁入蜀汉中南北伐驿路终共×/当前'
+ *     for ch in sorted(set(chars)):
+ *         code = ord(ch)
+ *         g = cmap[code]
+ *         adv, _ = hmtx[g]
+ *         print(f'{ch} (U+{code:04X}): {adv} -> {adv/upem*12.0:.4f}')
+ * 字符 advance 数据 (12u 未取整):
+ *   ' ' (U+0020): advance=224 -> 2.688 u
+ *   '/' (U+002F): advance=392 -> 4.704 u
+ *   '0'..'9' (U+0030..U+0039): advance=555 -> 6.66 u
+ *   '·' (U+00B7): advance=1000 -> 12.0 u
+ *   '×' (U+00D7): advance=1000 -> 12.0 u
+ *   所有中文字符及全角标点: advance=1000 -> 12.0 u
+ *   不在表中的字符缺省按 12.0 u 计
+ * 校验值 (整串 12u 真实 advance 之和):
+ *   ch1 (涿郡→平原, 6×6): 282.84 u
+ *   ch8 (入蜀→汉中南中, 7×7): 306.84 u
+ *   ch10 (北伐驿路终章, 7×7): 268.152 u (~268.15 u)
+ */
+func footerRuneAdvance(r: Rune): Float64 {
+    if (r == r' ') {
+        return 2.688
+    } else if (r == r'/') {
+        return 4.704
+    } else if (r >= r'0' && r <= r'9') {
+        return 6.66
+    }
+    return 12.0
+}
+
+public func footerTextWidth(s: String): Float64 {
+    var total: Float64 = 0.0
+    for (r in s.toRuneArray()) {
+        total += footerRuneAdvance(r)
+    }
+    return total
+}
+
+public func footerSlack(): Float64 {
+    return 0.5
+}
+
+public func footerWidthOverflows(w: Float64, avail: Float64): Bool {
+    return w > avail + footerSlack()
+}
+
+public func footerNeedsTwoLines(text: String, winW: Float64): Bool {
+    return footerWidthOverflows(footerTextWidth(text), winW - 40.0)
+}
+
+func footerStrStartsWith(s: String, prefix: String): Bool {
+    if (s.size < prefix.size) {
+        return false
+    }
+    var i: Int64 = 0
+    while (i < prefix.size) {
+        match (s.get(i)) {
+            case Some(b1) => match (prefix.get(i)) {
+                case Some(b2) => if (b1 != b2) { return false }
+                case None => return false
+            }
+            case None => return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+public func footerCurrentLines(n: Int64, curName: String, dims: String, winW: Float64): Array<String> {
+    var dimsPart = dims
+    if (dimsPart.size > 0 && !footerStrStartsWith(dimsPart, " · ")) {
+        dimsPart = " · " + dimsPart
+    }
+    let full = "已通 ${n} · 当前${curName} · 共10驿${dimsPart}"
+    if (footerNeedsTwoLines(full, winW)) {
+        let l1 = "已通 ${n} · 当前${curName}"
+        let l2 = "共10驿${dimsPart}"
+        return [l1, l2]
+    }
+    return [full]
+}
+
+/* 驿程全表行与章内驿程行几何与字号规格 (SPEC B3–B7, 06-levels, RULINGS_ABF56B0, render_cjmp_gaps_v1).
+   全表(global): h64, ringR 14, ringD 28, numFont 14(Serif Bold), nameFont 20(Serif Bold),
+     metaFont 12(Sans), padLeft 14, nameGap 16, statusRightInset 16, lockRight 28 (lockCx=W-48,
+     rowRight=W-20 -> (W-20)-(W-48)=28), badgeFont 12.
+     环心 x=48 (pageInset 20 + padLeft 14 + ringR 14 = 48), 驿名左缘 x=78 (48 + 14 + 16 = 78).
+   章内(chapter): h52, ringR 13, ringD 26, numFont 13(Serif Bold), nameFont 16(Serif Bold),
+     metaFont 11(Sans), padLeft 15, nameGap 13, statusRightInset 16, lockRight 18 (lockCx=W-38,
+     rowRight=W-20 -> (W-20)-(W-38)=18), badgeFont 11.
+     环心 x=48 (pageInset 20 + padLeft 15 + ringR 13 = 48), 驿名左缘 x=74 (48 + 13 + 13 = 74). */
+public class StationRowGeom {
+    public var rowH: Int64
+    public var ringR: Int64
+    public var numFont: Int64
+    public var nameFont: Int64
+    public var metaFont: Int64
+    public var padLeft: Int64
+    public var nameGap: Int64
+    public var statusRightInset: Int64
+    public var lockRight: Int64
+    public var lockCx: Int64
+    public var badgeFont: Int64
+
+    public init(
+        rowH: Int64,
+        ringR: Int64,
+        numFont: Int64,
+        nameFont: Int64,
+        metaFont: Int64,
+        padLeft: Int64,
+        nameGap: Int64,
+        statusRightInset: Int64,
+        lockRight: Int64,
+        badgeFont: Int64
+    ) {
+        this.rowH = rowH
+        this.ringR = ringR
+        this.numFont = numFont
+        this.nameFont = nameFont
+        this.metaFont = metaFont
+        this.padLeft = padLeft
+        this.nameGap = nameGap
+        this.statusRightInset = statusRightInset
+        this.lockRight = lockRight
+        this.lockCx = lockRight
+        this.badgeFont = badgeFont
+    }
+
+    public func ringD(): Int64 {
+        return this.ringR * 2
+    }
+
+    public func ringDiameter(): Int64 {
+        return this.ringR * 2
+    }
+
+    public static func global(): StationRowGeom {
+        return StationRowGeom(
+            64, 14, 14, 20, 12, 14, 16, 16, 28, 12
+        )
+    }
+
+    public static func chapter(): StationRowGeom {
+        return StationRowGeom(
+            52, 13, 13, 16, 11, 15, 13, 16, 18, 11
+        )
+    }
+
+    // Static constants for direct access
+    public static const globalRowH: Int64 = 64
+    public static const globalRingR: Int64 = 14
+    public static const globalRingD: Int64 = 28
+    public static const globalNumFont: Int64 = 14
+    public static const globalNameFont: Int64 = 20
+    public static const globalMetaFont: Int64 = 12
+    public static const globalPadLeft: Int64 = 14
+    public static const globalNameGap: Int64 = 16
+    public static const globalStatusRightInset: Int64 = 16
+    public static const globalLockRight: Int64 = 28
+    public static const globalLockCx: Int64 = 28
+    public static const globalBadgeFont: Int64 = 12
+
+    public static const chapterRowH: Int64 = 52
+    public static const chapterRingR: Int64 = 13
+    public static const chapterRingD: Int64 = 26
+    public static const chapterNumFont: Int64 = 13
+    public static const chapterNameFont: Int64 = 16
+    public static const chapterMetaFont: Int64 = 11
+    public static const chapterPadLeft: Int64 = 15
+    public static const chapterNameGap: Int64 = 13
+    public static const chapterStatusRightInset: Int64 = 16
+    public static const chapterLockRight: Int64 = 18
+    public static const chapterLockCx: Int64 = 18
+    public static const chapterBadgeFont: Int64 = 11
+
+    /* J22: 锁定行右内边距。锁图标盒宽 lockBoxW(= lockIconBox(0.62) 的宽 9.92),行右内边距取
+       lockRight − lockBoxW/2,使锁图标中心距行右缘恰为 lockRight(全表 28 / 章内 18),即
+       lockPadRight + lockBoxW/2 == lockRight;行右缘 = W−20 -> 锁心 x = W−48(全表)/ W−38(章内)。
+       非锁定态仍用 statusRightInset 16。lockBoxW < 2*lockRight(9.92 < 36),结果恒为正。 */
+    public static func lockPadRight(isGlobal: Bool, lockBoxW: Float64): Float64 {
+        if (isGlobal) {
+            return Float64(StationRowGeom.globalLockRight) - lockBoxW / 2.0
+        }
+        return Float64(StationRowGeom.chapterLockRight) - lockBoxW / 2.0
+    }
+}
+
+
+
+/* 驿程全表(screen==3)Scroll 内容几何常量(J32/J33/J34,SPEC.md B5「视口顶与间距」)。
+   设计规格:B5(每组前加分组头,头高 40,底线在底,文字中心在顶下 22u,其下接行间距 8;
+   每行 64,行下间距 8(含组末行);组末行下边到下一章分组头上边 = 8 + 12 = 20u;
+   每章周期 = 40 + 8 + 10×72 + 12 = 780;第 1 章前无组间距 12)。
+   与 screen==3 Scroll(Column(space: 8)) 的映射关系:
+   - 列间距 space: 8 -> rowGap 8(章内行间、组末行后由 Column space 提供的 8)
+   - 分组头块高 .height(40) -> headerH 40;底线 1u 在块底(y+39.5)
+   - 分组头顶内边距 4u (headerPadTop 4) 使居中点下移 2u (headerTextShift 2,中心在顶下 22u)
+   - 分组头底间距 .margin(bottom: 8) -> rowGap 8(分组头块底到首行上边 = 8)
+   - 分组头顶间距 .margin(top: index==0 ? 0 : 12) -> headerTopMargin 12(=groupGap)
+   - 组间距 groupGap = 12;组末行底到下一章分组头顶 = rowGap 8 + groupGap 12 = 20
+   - 行 .height(StationRowGeom.globalRowH)=64 -> rowH 64
+   - 单章高度 chapterH(10) = 40 + 8 + 10×(64 + 8) = 768
+   - 单章周期 period = chapterH(10) + groupGap = 768 + 12 = 780
+   - 总结卡 SummaryGeom.cardH()=88,其后与第 1 章分组头块之间隔 Column space 8 + margin 4
+     -> 总间距 12(SummaryGeom.gapBelow);summaryBlockH 96 为卡高+行间距(对账用);
+     内容顶部另有 padding top 12(SummaryGeom.gapAbove, J26b),两态同源、在所有
+     内容坐标之前,不改变 yichengScrollOffset:章头内容坐标 = contentTopPad +
+     (k-1)*周期,scrollTo 偏移 = (k-1)*周期,对齐后章头仍在视口顶+contentTopPad */
+public class YichengScrollGeom {
+    public static func contentTopPad(): Float64 { return SummaryGeom.gapAbove() }
+    public static func headerH(): Float64 { return 40.0 }
+    public static func headerPadTop(): Float64 { return 4.0 }
+    public static func headerTextShift(): Float64 { return 2.0 }
+    public static func rowH(): Float64 { return Float64(StationRowGeom.globalRowH) }
+    public static func rowGap(): Float64 { return 8.0 }
+    public static func headerTopMargin(): Float64 { return 12.0 }
+    public static func groupGap(): Float64 { return 12.0 }
+    public static func summaryBlockH(): Float64 {
+        return SummaryGeom.cardH() + YichengScrollGeom.rowGap()
+    }
+
+    /* 单章完整高度(SPEC.md B5 / 2026-10-04 裁决):
+       分组头 40 + 头下接行间距 8 + n 行(每行高 64 + 行下间距 8,含组末行)。
+       公式含 headerH + rowGap 与 levelCount * (rowH + rowGap)。
+       10 驿章 = 40 + 8 + 10 * 72 = 768。 */
+    public static func chapterH(levelCount: Int64): Float64 {
+        if (levelCount <= 0) {
+            return 0.0
+        }
+        return YichengScrollGeom.headerH() + YichengScrollGeom.rowGap() +
+            Float64(levelCount) * (YichengScrollGeom.rowH() + YichengScrollGeom.rowGap())
+    }
+
+    /* 完整章周期:chapterH(10) + groupGap = 768 + 12 = 780。 */
+    public static func period(): Float64 {
+        return YichengScrollGeom.chapterH(10) + YichengScrollGeom.groupGap()
     }
 }

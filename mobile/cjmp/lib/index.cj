@@ -49,9 +49,13 @@ class EntryView {
     @State var rejectToX: Int64 = 0
     @State var rejectToY: Int64 = 0
     var rejectPlace: ToastPlacement = ToastPlacement(0.0, 0.0, false, 0, 0.0)
+    var rejectToastW: Float64 = 86.0
     // J13: 本次拒绝是否为单向门拒绝(改画官方 reject PNG 而非朱红 Line)
     var rejectOneWay: Bool = false
     @State var winW: Float64 = 360.0
+    @State var winH: Float64 = 0.0
+    @State var padTop: Float64 = Theme.safeTop()
+    @State var padBottom: Float64 = Theme.safeBottom()
     // A2: back button pressed ripple opacity
     @State var backPressedOpacity: Float64 = 0.0
 
@@ -68,7 +72,10 @@ class EntryView {
     @State var boardNextLabels: Array<BoardLabel> = Array<BoardLabel>()
     @State var boardDigits: Array<BoardPath> = Array<BoardPath>()
     @State var boardGates: Array<BoardImg> = Array<BoardImg>()
+    @State var boardUnder: Array<BoardPath> = Array<BoardPath>()
     var obstacleNextCnt: Int64 = 0
+    // J21(裁决 4b): 驿程全表 Scroll 的程序化滚动控制器(Keels 0.2.2 STATE.md: Scroll(scroller){})
+    let yichengScroller: Scroller = Scroller()
 
     func homeMarkFontVp(): Float64 { return 12.0 / this.getPxFactor() }
     func homeMarkTop(baseline: Float64): Float64 { return baseline - 0.88 * this.homeMarkFontVp() }
@@ -108,6 +115,14 @@ class EntryView {
             this.fontHandle = registerYiluFonts()
         }
         return Theme.sansMedium
+    }
+
+    func sansBoldFamily(): String {
+        if (!this.fontsDone) {
+            this.fontsDone = true
+            this.fontHandle = registerYiluFonts()
+        }
+        return Theme.sansBold
     }
 
     // A2: back button — device-pixel path commands for the chevron icon
@@ -175,6 +190,201 @@ class EntryView {
         })
     }
 
+    func checkIconCmds(d: Int64, i: Int64): String {
+        return checkCircleIconPaths(Float64(d) / 2.0, Float64(d) / 2.0, Float64(d) / 2.0, this.getPxFactor())[i].commands
+    }
+
+    @Builder func checkCircleIcon(d: Int64) {
+        Stack(alignContent: Alignment.TopStart) {
+            Path(width: Float64(d), height: Float64(d), commands: this.checkIconCmds(d, 0))
+                .fill(Theme.success)
+                .fillOpacity(0.0)
+                .stroke(Theme.success)
+                .strokeWidth(1.6)
+                .strokeLineCap(LineCapStyle.Round)
+                .strokeLineJoin(LineJoinStyle.Round)
+                .antiAlias(true)
+                .position(x: 0.0, y: 0.0)
+            Path(width: Float64(d), height: Float64(d), commands: this.checkIconCmds(d, 1))
+                .fill(Theme.success)
+                .fillOpacity(0.0)
+                .stroke(Theme.success)
+                .strokeWidth(1.6)
+                .strokeLineCap(LineCapStyle.Round)
+                .strokeLineJoin(LineJoinStyle.Round)
+                .antiAlias(true)
+                .position(x: 0.0, y: 0.0)
+        }
+        .width(d)
+        .height(d)
+    }
+
+    func checkMarkCmds(): String {
+        return checkMarkIconPaths(7.0, 7.0, 12.0, this.getPxFactor())[0].commands
+    }
+
+    @Builder func checkMarkIcon() {
+        Stack(alignContent: Alignment.TopStart) {
+            Path(width: 14.0, height: 14.0, commands: this.checkMarkCmds())
+                .fill(Theme.success)
+                .fillOpacity(0.0)
+                .stroke(Theme.success)
+                .strokeWidth(1.6)
+                .strokeLineCap(LineCapStyle.Round)
+                .strokeLineJoin(LineJoinStyle.Round)
+                .antiAlias(true)
+                .position(x: 0.0, y: 0.0)
+        }
+        .width(14)
+        .height(14)
+    }
+
+    func lockW(): Float64 {
+        let (w, _) = lockIconBox(0.62)
+        return w
+    }
+
+    func lockH(): Float64 {
+        let (_, h) = lockIconBox(0.62)
+        return h
+    }
+
+    func lockIconCmds(i: Int64, color: Int64): String {
+        return lockIconPaths(this.lockW() / 2.0, this.lockH() / 2.0, 0.62, color, this.getPxFactor())[i].commands
+    }
+
+    @Builder func lockIcon(color: Int64) {
+        Stack(alignContent: Alignment.TopStart) {
+            Path(width: this.lockW(), height: this.lockH(), commands: this.lockIconCmds(0, color))
+                .fill(color)
+                .fillOpacity(0.0)
+                .stroke(color)
+                .strokeWidth(1.0)
+                .strokeLineCap(LineCapStyle.Round)
+                .strokeLineJoin(LineJoinStyle.Round)
+                .antiAlias(true)
+                .position(x: 0.0, y: 0.0)
+            Path(width: this.lockW(), height: this.lockH(), commands: this.lockIconCmds(1, color))
+                .fill(color)
+                .fillOpacity(0.0)
+                .stroke(color)
+                .strokeWidth(1.0)
+                .strokeLineCap(LineCapStyle.Round)
+                .strokeLineJoin(LineJoinStyle.Round)
+                .antiAlias(true)
+                .position(x: 0.0, y: 0.0)
+        }
+        .width(this.lockW())
+        .height(this.lockH())
+    }
+
+    @Builder func dessertTag(state: Int64, font: Int64) {
+        if (state == 0) {
+            Text("点心")
+                .fontSize(font)
+                .fontColor(Theme.inkMuted)
+                .fontFamily(this.sansFamily())
+                .height(18)
+                .padding(left: 5, right: 5)
+                .textAlign(TextAlign.Center)
+                .backgroundColor(Theme.whitePaper)
+                .border(width: 1, color: Theme.paperLine)
+                .borderRadius(3)
+        } else if (state == 1) {
+            Text("点心")
+                .fontSize(font)
+                .fontColor(Theme.ink)
+                .fontFamily(this.sansFamily())
+                .height(18)
+                .padding(left: 5, right: 5)
+                .textAlign(TextAlign.Center)
+                .backgroundColor(Theme.paperShade)
+                .borderRadius(3)
+        } else {
+            Text("点心")
+                .fontSize(font)
+                .fontColor(Theme.locked)
+                .fontFamily(this.sansFamily())
+                .height(18)
+                .padding(left: 5, right: 5)
+                .textAlign(TextAlign.Center)
+                .backgroundColor(Theme.paper)
+                .border(width: 1, color: Theme.locked)
+                .borderRadius(3)
+        }
+    }
+
+    /* 驿程全表百驿全通总结卡(B7):文案只经 SummaryCopy、几何只经 SummaryGeom(chapter.cj),
+       朱印按 render_cjmp_gaps_v1.make_seal(size=56) 公式纯布局绘制(不用 Image);不可点击。 */
+    @Builder func summaryCard() {
+        Row {
+            Column {
+                Text(SummaryCopy.title())
+                    .fontSize(SummaryGeom.titleFont())
+                    .fontColor(Theme.ink)
+                    .fontFamily(this.serifBoldFamily())
+                    .fontWeight(FontWeight.Bold)
+                    .height(28)
+                    .margin(top: 16) // 中心距卡顶 30=SummaryGeom.titleCenterY():16+28/2
+                Text(SummaryCopy.subtitle(this.levels.size))
+                    .fontSize(SummaryGeom.lineFont())
+                    .fontColor(Theme.inkMuted)
+                    .fontFamily(this.sansFamily())
+                    .height(18)
+                    .margin(top: 5) // 顶部 49(16+28+5),中心 58=SummaryGeom.lineCenterY()
+            }
+            .alignItems(HorizontalAlign.Start)
+            Blank()
+            // 朱印 make_seal(size=56):外层 56×56 留白(sealFrameInset 由内层 50×50 实现)
+            Column {
+                Column {
+                    Column {
+                        ForEach(
+                            SummaryCopy.sealChars(),
+                            itemGenerator: {ch: String, index: Int64 =>
+                                Text(ch)
+                                    .fontSize(SummaryGeom.sealFont())
+                                    .fontColor(Theme.vermillion)
+                                    .fontFamily(this.serifBoldFamily())
+                                    .fontWeight(FontWeight.Bold)
+                                    .lineHeight(SummaryGeom.sealFont() * SummaryGeom.sealLineStep())
+                            }
+                        )
+                    }
+                    .width(SummaryGeom.sealSize() - 2.0 * SummaryGeom.sealInnerInset())
+                    .height(SummaryGeom.sealSize() - 2.0 * SummaryGeom.sealInnerInset())
+                    .justifyContent(FlexAlign.Center)
+                    .alignItems(HorizontalAlign.Center)
+                    .border(width: SummaryGeom.sealInnerW(), color: Theme.vermillion)
+                    .borderRadius(SummaryGeom.sealInnerR())
+                }
+                .width(SummaryGeom.sealSize() - 2.0 * SummaryGeom.sealFrameInset())
+                .height(SummaryGeom.sealSize() - 2.0 * SummaryGeom.sealFrameInset())
+                .justifyContent(FlexAlign.Center)
+                .alignItems(HorizontalAlign.Center)
+                .border(width: SummaryGeom.sealFrameW(), color: Theme.vermillion)
+                .borderRadius(SummaryGeom.sealFrameR())
+            }
+            .width(SummaryGeom.sealSize())
+            .height(SummaryGeom.sealSize())
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+            .rotate(angle: Float32(SummaryGeom.sealAngle()))
+            .opacity(SummaryGeom.sealAlpha())
+        }
+        .alignItems(VerticalAlign.Center)
+        .width(100.percent)
+        .height(SummaryGeom.cardH())
+        .padding(left: SummaryGeom.padLeft(), right: SummaryGeom.padRight())
+        .backgroundColor(Theme.whitePaper)
+        .border(width: 1, color: Theme.paperLine)
+        .borderRadius(SummaryGeom.radius())
+        // 列表父 Column space=8,补 margin 4 使卡下总间距=12(SummaryGeom.gapBelow)。
+        // 卡顶到分隔线的 12u 留白不写在卡上,由 Scroll 内容容器的 padding(top: gapAbove)
+        // 统一提供(J26b,见 Column(space: 8) 处注释),对未全通态同样生效。
+        .margin(bottom: SummaryGeom.gapBelow() - 8.0)
+    }
+
     // Android system back override (Keels CustomView page-level back)
     protected override func onBackPress(): Bool {
         if (this.screen == 0) {
@@ -201,7 +411,8 @@ class EntryView {
     }
 
     func showReject(): Unit {
-        let txt = parityToastText(this.game)
+        let txt = mechToastText(this.game)
+        this.rejectToastW = mechToastWidth(txt)
         this.parityRejectText = txt
         this.parityRejectFlash = true
         if (txt.size > 0) {
@@ -288,75 +499,14 @@ class EntryView {
         return (midX + 12.0, midY)
     }
 
-    // U3: Collect board obstacles for toast avoidance (designer ruling)
+    // U3 plan A: route boxes soft (toast pass 2); logic lives in board_mech.cj buildToastObstacles
     func collectToastObstacles(): Array<ToastBox> {
-        let list = ArrayList<ToastBox>()
-
-        // 1. Flash line: bounding box of start/end points inflated by 1.5 (3 vp stroke, round cap)
-        let (sx, sy) = this.rejectEdgeStartPoint()
-        let (ex, ey) = this.rejectEdgeEndPoint()
-        let minX = if (sx <= ex) { sx } else { ex }
-        let maxX = if (sx >= ex) { sx } else { ex }
-        let minY = if (sy <= ey) { sy } else { ey }
-        let maxY = if (sy >= ey) { sy } else { ey }
-        list.add(ToastBox(minX - 1.5, minY - 1.5, maxX + 1.5, maxY + 1.5))
-
-        // 2. Head dot: cx±(r+0.5), cy±(r+0.5)
-        for (dot in this.boardDots) {
-            let rEff = dot.r + 0.5
-            list.add(ToastBox(dot.cx - rEff, dot.cy - rEff, dot.cx + rEff, dot.cy + rEff))
-        }
-
-        // 3. Station circles: cx±(r+strokeW/2) (gold ring already has a bigger r entry)
-        for (circle in this.boardStationCircles) {
-            let extra = if (circle.hasStroke) { circle.strokeW * 0.5 } else { 0.0 }
-            let rEff = circle.r + extra
-            list.add(ToastBox(circle.cx - rEff, circle.cy - rEff, circle.cx + rEff, circle.cy + rEff))
-        }
-
-        // 4. 下一驿 labels: anchored at left edge and baseline (cy+r+12)
-        var ni: Int64 = 0
-        while (ni < this.obstacleNextCnt && ni < this.boardNextLabels.size) {
-            let lbl = this.boardNextLabels[ni]
-            let baseline = lbl.y + 0.88 * lbl.size
-            list.add(ToastBox(lbl.x - 0.5, baseline - 10.0, lbl.x + 35.0, baseline + 3.5))
-            ni = ni + 1
-        }
-
-        // 5. Parity labels: glyph centred on seam midpoint (mx, my)
-        for (lbl in this.boardParityLabels) {
-            let mx = lbl.x + 5.5
-            let my = lbl.y - 4.0 + 0.88 * lbl.size
-            list.add(ToastBox(mx - 6.5, my - 8.5, mx + 6.5, my + 5.0))
-        }
-
-
-        // 6. Walls: width/2 padding, clear = 2.0
-        for (wall in this.boardWalls) {
-            let hw = wall.width * 0.5
-            let minX = (if (wall.x1 <= wall.x2) { wall.x1 } else { wall.x2 }) - hw
-            let maxX = (if (wall.x1 >= wall.x2) { wall.x1 } else { wall.x2 }) + hw
-            let minY = (if (wall.y1 <= wall.y2) { wall.y1 } else { wall.y2 }) - hw
-            let maxY = (if (wall.y1 >= wall.y2) { wall.y1 } else { wall.y2 }) + hw
-            list.add(ToastBox(minX, minY, maxX, maxY, 2.0))
-        }
-
-        // 7. Route: width/2 padding, clear = 2.0
-        for (route in this.boardRoute) {
-            let hw = route.width * 0.5
-            let minX = (if (route.x1 <= route.x2) { route.x1 } else { route.x2 }) - hw
-            let maxX = (if (route.x1 >= route.x2) { route.x1 } else { route.x2 }) + hw
-            let minY = (if (route.y1 <= route.y2) { route.y1 } else { route.y2 }) - hw
-            let maxY = (if (route.y1 >= route.y2) { route.y1 } else { route.y2 }) + hw
-            list.add(ToastBox(minX, minY, maxX, maxY, 2.0))
-        }
-
-        return list.toArray()
+        return buildToastObstacles(this.boardGeom(), this.rejectFromX, this.rejectFromY, this.rejectToX, this.rejectToY, this.boardDots, this.boardStationCircles, this.boardNextLabels, this.obstacleNextCnt, this.boardParityLabels, this.boardWalls, this.boardRoute)
     }
 
     func rejectPlacement(): ToastPlacement {
         let (midX, midY) = this.rejectEdgeMid()
-        return toastPlace(Float64(this.boardW()), Float64(this.boardH()), midX, midY, this.collectToastObstacles())
+        return toastPlaceW(Float64(this.boardW()), Float64(this.boardH()), midX, midY, this.collectToastObstacles(), this.rejectToastW)
     }
 
     func rejectToastX(): Float64 {
@@ -377,6 +527,10 @@ class EntryView {
 
     func ladenNow(): Bool {
         return this.tick >= 0 && this.game.laden
+    }
+
+    func chipBagPaths(): Array<BoardPath> {
+        return bagPaths(16.0, 14.5, 0.62, false, this.getPxFactor())
     }
 
     func stepChipLabel(): String {
@@ -435,6 +589,7 @@ class EntryView {
         let tmpNextLabels = concatArr(nextOnly, buildBoardMechLabels(this.game, geom))
         let tmpDigits = concatArr(buildBoardDigits(this.game, geom, factor), buildBoardMechPaths(this.game, geom, factor))
         let tmpGates = buildBoardGates(this.game, geom)
+        let tmpUnder = buildBoardMechUnder(this.game, geom, factor)
         this.lastBuildUs = (MonoTime.now() - tBuild0).toMicroseconds()
 
         let tAssign0 = MonoTime.now()
@@ -447,6 +602,7 @@ class EntryView {
         this.boardNextLabels = tmpNextLabels
         this.boardDigits = tmpDigits
         this.boardGates = tmpGates
+        this.boardUnder = tmpUnder
         this.lastAssignUs = (MonoTime.now() - tAssign0).toMicroseconds()
     }
 
@@ -457,6 +613,10 @@ class EntryView {
     }
 
     protected override func aboutToAppear(): Unit {
+        let savedCleared = ProgressStore.load(makeProgressBackend(), this.levels.size)
+        if (savedCleared > this.cleared) {
+            this.cleared = savedCleared
+        }
         this.rebuildBoard()
     }
 
@@ -524,9 +684,6 @@ class EntryView {
         if (this.screen == 6) {
             return Theme.paperOf(this.chapterIndex)
         }
-        if (this.screen == 1 || this.screen == 2) {
-            return Theme.paperOf(this.chapterIndex)
-        }
         return Theme.paper
     }
 
@@ -555,35 +712,12 @@ class EntryView {
         return "${this.currentChapter().name}·驿程"
     }
 
-    func chapterCurrentName(): String {
-        let ch = this.currentChapter()
-        if (!ChapterCatalog.isOpen(ch.id, this.cleared)) {
-            return "未开"
-        }
-        if (this.cleared >= ch.levelStart + ch.levelCount) {
-            return "已通"
-        }
-        if (this.cleared < ch.levelStart) {
-            if (ch.levelStart < this.levels.size) {
-                return this.levels[ch.levelStart].name
-            }
-            return ""
-        }
-        if (this.cleared < this.levels.size) {
-            return this.levels[this.cleared].name
-        }
-        return ""
+    func chapterListFooter(): String {
+        return ChapterCatalog.chapterListFooterText(this.chapterIndex, this.cleared, this.levels)
     }
 
-    func chapterListFooter(): String {
-        let ch = this.currentChapter()
-        let n = ChapterCatalog.clearedCount(this.chapterIndex, this.cleared)
-        /* 本章尺寸取自 LevelCatalog 首驿（ch1–3 6×6，ch4–10 7×7）。 */
-        if (ch.levelStart < this.levels.size) {
-            let board = this.levels[ch.levelStart]
-            return "已通 ${n} · 当前${this.chapterCurrentName()} · 共10驿 · ${board.cols}×${board.rows}"
-        }
-        return "已通 ${n} · 当前${this.chapterCurrentName()} · 共10驿"
+    func chapterListFooterLines(): Array<String> {
+        return ChapterCatalog.chapterListFooterLines(this.chapterIndex, this.cleared, this.levels, this.winW)
     }
 
     func chapterOpenFooter(): String {
@@ -595,6 +729,35 @@ class EntryView {
     func leaveBoard(): Unit {
         this.clearParityReject()
         this.screen = this.boardBack
+        // J21(裁决 4b): 从棋盘返回驿程全表时同样把当前章分组头对齐视口顶
+        if (this.boardBack == 3) {
+            this.positionYichengScroll()
+        }
+    }
+
+    /* J21(裁决 4b / SPEC.md「默认滚动位置」): 进入驿程全表滚到当前章分组头;
+       百驿全通时 offset=0 停顶部(总结卡可见)。偏移纯函数在 YichengScrollGeom/
+       ChapterCatalog.yichengScrollOffset。scrollTo 本身无动画;触发点沿用 toast
+       清除(showReject)已验证的 animateTo-onFinish UI 线程延迟回调写法
+       (STATE.md 0.2.2 已核实 animateTo;@State 写入即在 UI 线程立即重绘,
+       onFinish 在其后的下一拍执行,此时 screen==3 的 Scroll 已建好)。 */
+    func openYicheng(): Unit {
+        this.screen = 3
+        this.positionYichengScroll()
+    }
+
+    func positionYichengScroll(): Unit {
+        let target = ChapterCatalog.yichengScrollOffset(
+            ChapterCatalog.chapterIdForLevel(this.cleared),
+            this.cleared,
+            this.levels.size
+        )
+        this.getUIContext().animateTo(
+            AnimateParam(duration: 0, onFinish: Some({ =>
+                this.yichengScroller.scrollTo(xOffset: 0.0, yOffset: target)
+            })),
+            { => }
+        )
     }
 
     func cardTitleColor(open: Bool): Int64 {
@@ -622,14 +785,24 @@ class EntryView {
         if (index == 0) {
             return Theme.whitePaper
         }
-        return Theme.ink
+        return Theme.qingDeep
     }
 
-    func cardBorder(open: Bool): Int64 {
+    func cardBorderOf(id: Int64, open: Bool): Int64 {
+        if (id == 0) {
+            return Theme.ink
+        }
         if (open) {
             return Theme.paperLine
         }
         return Theme.locked
+    }
+
+    func cardBorderW(id: Int64): Float64 {
+        if (id == 0) {
+            return 1.6
+        }
+        return 1.2
     }
 
     func nextLevel(): Unit {
@@ -677,6 +850,7 @@ class EntryView {
                     if (this.game.isWin()) {
                         if (this.levelIndex + 1 > this.cleared) {
                             this.cleared = this.levelIndex + 1
+                            ProgressStore.save(makeProgressBackend(), this.cleared)
                         }
                         this.screen = 2
                         if (PERF_LOG) {
@@ -707,11 +881,58 @@ class EntryView {
         if (index == this.cleared) {
             return Theme.ink
         }
+        return Theme.paperLine
+    }
+
+    func rowBorderW(index: Int64): Float64 {
+        if (index == this.cleared) {
+            return 1.4
+        }
+        return 1.0
+    }
+
+    func rowBg(index: Int64): Int64 {
+        if (index > this.cleared) {
+            return Theme.paper
+        }
         return Theme.whitePaper
     }
+
+    func groupChapterId(index: Int64): Int64 {
+        return ChapterCatalog.chapterIdForLevel(index)
+    }
+
+    func groupIsFirst(index: Int64): Bool {
+        let chId = this.groupChapterId(index)
+        return index == ChapterCatalog.byIndex(chId).levelStart
+    }
+
+    func groupLabelColor(chapterId: Int64): Int64 {
+        if (ChapterCatalog.groupState(chapterId, this.cleared) == 2) {
+            return Theme.locked
+        }
+        return Theme.ink
+    }
+
+    func groupLineColor(chapterId: Int64): Int64 {
+        if (ChapterCatalog.groupIsCurrent(chapterId, this.cleared)) {
+            return Theme.ink
+        }
+        return Theme.paperLine
+    }
+
+    func currentH(): Float64 {
+        if (this.winH > 0.0) {
+            return this.winH
+        } else {
+            return 800.0
+        }
+    }
+
     func build() {
-        Column {
-            if (this.screen == 0) {
+        Stack(alignContent: Alignment.TopStart) {
+            Column {
+                if (this.screen == 0) {
                 /* Home seal copy: 关防 (vermillion only). */
                 Row {
                     Blank()
@@ -742,8 +963,8 @@ class EntryView {
                 }
                 .width(44)
                 .height(44)
-                .borderRadius(22)
                 .border(width: 1, color: Theme.gold)
+                .borderRadius(22)
                 .backgroundColor(Theme.whitePaper)
                 .justifyContent(FlexAlign.Center)
                 .alignItems(HorizontalAlign.Center)
@@ -810,35 +1031,66 @@ class EntryView {
                 .height(140)
                 .opacity(0.18)
                 Blank()
-                Button("开始传书")
+                // J26 缺陷3:Button 自带胶囊形(默认 ButtonType.Capsule),.borderRadius(8) 对其无效;
+                // 换成已验证的点击容器写法(同「章节 · 驿程」Row)以落实规格 r8 / 高 52 (RULINGS §3/§4)
+                Row {
+                    Text("开始传书")
+                        .fontSize(16)
+                        .fontColor(Theme.whitePaper)
+                        .fontFamily(this.sansMediumFamily())
+                }
                     .width(100.percent)
                     .height(Theme.primaryH)
                     .backgroundColor(Theme.qingDeep)
-                    .fontColor(Theme.whitePaper)
-                    .fontSize(16)
-                    .fontFamily(this.sansMediumFamily())
+                    .borderRadius(8)
+                    .justifyContent(FlexAlign.Center)
+                    .alignItems(VerticalAlign.Center)
                     .onClick({event => this.startPlay()})
+                // 首页底部：「章节 · 驿程」文字链与点击区 (SPEC_A1_ADDENDUM §3.3 & RULINGS_ABF56B0)
+                // 几何推导 (相对屏幕中线 x=0):
+                // - 总内容宽 = 章节(64) + 间距(12: left 4 + 圆点 4 + right 4) + 驿程(64) = 140
+                // - 若无偏移居中摆放: 章节 [-70, -6], 间距 [-6, +8], 驿程 [+6, +70]
+                // - 目标相对中线右移 2 (centerShift=2.0): 章节 [-68, -4], 圆点 [0, 4](中心+2), 驿程 [+8, +72]
+                // - 外层 Column 为 alignItems(HorizontalAlign.Center), 给整行加 margin(left: 4) 后,
+                //   排版槽宽 140+4=144 在父容器中居中于 [-72, +72], 内容随 left: 4 落在 [-68, +72],
+                //   中心恰在 (-68+72)/2 = +2。两块各 64×44 点击区, 互不相交。
                 Row {
-                    Text("章节")
+                    Column {
+                        Text("章节")
+                            .fontSize(16)
+                            .fontColor(Theme.ink)
+                            .fontFamily(this.sansBoldFamily())
+                        Column() {}
+                            .width(HomeLinkGeom.underlineW)
+                            .height(HomeLinkGeom.underlineH)
+                            .backgroundColor(Theme.qingDeep)
+                            .margin(top: HomeLinkGeom.underlineMarginTop)
+                    }
+                    .width(HomeLinkGeom.blockW)
+                    .height(HomeLinkGeom.blockH)
+                    .justifyContent(FlexAlign.Center)
+                    .alignItems(HorizontalAlign.Center)
+                    .onClick({event => this.screen = 4})
+                    Column() {}
+                        .width(HomeLinkGeom.dotSize)
+                        .height(HomeLinkGeom.dotSize)
+                        .borderRadius(HomeLinkGeom.dotRadius)
+                        .backgroundColor(Theme.paperLine)
+                        .margin(left: HomeLinkGeom.dotMarginLR, right: HomeLinkGeom.dotMarginLR)
+                    Text("驿程")
                         .fontSize(16)
-                        .fontColor(Theme.ink)
+                        .fontColor(Theme.inkMuted)
                         .fontFamily(this.sansFamily())
+                        .width(HomeLinkGeom.blockW)
+                        .height(HomeLinkGeom.blockH)
+                        .textAlign(TextAlign.Center)
+                        .onClick({event => this.openYicheng()})
                 }
-                .width(100.percent)
-                .height(44)
-                .margin(top: 12)
+                .height(HomeLinkGeom.blockH)
+                // B-edge: home footer margin
+                .margin(top: HomeLinkGeom.rowMarginTop, bottom: Theme.bottomMargin(8.0, 0.0), left: HomeLinkGeom.rowMarginLeft)
                 .justifyContent(FlexAlign.Center)
                 .alignItems(VerticalAlign.Center)
-                .backgroundColor(Theme.whitePaper)
-                .borderRadius(8)
-                .border(width: 1, color: Theme.ink)
-                .onClick({event => this.screen = 4})
-                Text("驿程")
-                    .fontSize(16)
-                    .fontColor(Theme.inkMuted)
-                    .fontFamily(this.sansFamily())
-                    .margin(top: 16, bottom: 12)
-                    .onClick({event => this.screen = 3})
             } else if (this.screen == 3) {
                 Stack {
                     Row {
@@ -857,96 +1109,192 @@ class EntryView {
                 .height(Theme.topBar)
                 // Divider not in OpenSDK 0.2.2: 1vp hairline Column, same color/width as HarmonyOS
                 Column() {}.width(100.percent).height(1).backgroundColor(Theme.paperLine)
-                Scroll {
-                    Column(space: 10) {
+                // J21(裁决 4b): 挂 yichengScroller 以便进入时滚到当前章分组头(无动画)
+                Scroll(this.yichengScroller) {
+                    Column(space: 8) {
+                        // 百驿全通总结卡(B7):与分组头同属 Scroll 内容,置于第1章分组头之前
+                        if (SummaryCopy.summaryVisible(this.cleared, this.levels.size)) {
+                            this.summaryCard()
+                        }
                         ForEach(
                             this.levels,
                             itemGenerator: {item: LevelDef, index: Int64 =>
-                                Row {
-                                    if (index < this.cleared) {
-                                        Text("通")
-                                            .fontSize(14)
-                                            .fontColor(Theme.success)
-                                            .fontFamily(this.serifFamily())
-                                            .width(36)
-                                            .height(36)
-                                            .border(width: 1, color: Theme.success)
-                                            .borderRadius(18)
-                                            .textAlign(TextAlign.Center)
-                                        Text(item.name)
-                                            .fontSize(18)
-                                            .fontColor(Theme.ink)
-                                            .fontFamily(this.serifBoldFamily())
-                                            .fontWeight(FontWeight.Bold)
-                                            .margin(left: 12)
-                                        Blank()
-                                        Text("已通")
-                                            .fontSize(14)
-                                            .fontColor(Theme.success)
-                                            .fontFamily(this.sansFamily())
-                                    } else if (index == this.cleared) {
-                                        Text("${index + 1}")
-                                            .fontSize(16)
-                                            .fontColor(Theme.whitePaper)
-                                            .fontFamily(this.serifFamily())
-                                            .width(36)
-                                            .height(36)
-                                            .backgroundColor(Theme.ink)
-                                            .borderRadius(18)
-                                            .textAlign(TextAlign.Center)
-                                        Text(item.name)
-                                            .fontSize(18)
-                                            .fontColor(Theme.ink)
-                                            .fontFamily(this.serifBoldFamily())
-                                            .fontWeight(FontWeight.Bold)
-                                            .margin(left: 12)
-                                        Blank()
-                                        Text("当前")
-                                            .fontSize(14)
-                                            .fontColor(Theme.ink)
-                                            .fontFamily(this.sansFamily())
-                                    } else {
-                                        Text("${index + 1}")
-                                            .fontSize(16)
-                                            .fontColor(Theme.locked)
-                                            .fontFamily(this.serifFamily())
-                                            .width(36)
-                                            .height(36)
-                                            .border(width: 1, color: Theme.locked)
-                                            .borderRadius(18)
-                                            .textAlign(TextAlign.Center)
-                                        Text(item.name)
-                                            .fontSize(18)
-                                            .fontColor(Theme.locked)
-                                            .fontFamily(this.serifBoldFamily())
-                                            .fontWeight(FontWeight.Bold)
-                                            .margin(left: 12)
-                                        Blank()
-                                        Text("锁")
-                                            .fontSize(14)
-                                            .fontColor(Theme.locked)
-                                            .fontFamily(this.sansFamily())
+                                Column {
+                                    if (this.groupIsFirst(index)) {
+                                        Column {
+                                            Row {
+                                                Text(ChapterCatalog.byIndex(this.groupChapterId(index)).label)
+                                                    .fontSize(16)
+                                                    .fontColor(this.groupLabelColor(this.groupChapterId(index)))
+                                                    .fontFamily(this.serifBoldFamily())
+                                                    .fontWeight(FontWeight.Bold)
+                                                Blank()
+                                                if (ChapterCatalog.groupState(this.groupChapterId(index), this.cleared) == 0) {
+                                                    Text(ChapterCatalog.groupHeaderRight(this.groupChapterId(index), this.cleared))
+                                                        .fontSize(12)
+                                                        .fontColor(Theme.inkMuted)
+                                                        .fontFamily(this.sansFamily())
+                                                } else if (ChapterCatalog.groupState(this.groupChapterId(index), this.cleared) == 1) {
+                                                    Row(space: 4) {
+                                                        this.checkMarkIcon()
+                                                        Text(ChapterCatalog.groupHeaderRight(this.groupChapterId(index), this.cleared))
+                                                            .fontSize(12)
+                                                            .fontColor(Theme.success)
+                                                            .fontFamily(this.sansFamily())
+                                                    }
+                                                    .alignItems(VerticalAlign.Center)
+                                                } else {
+                                                    Row(space: 4) {
+                                                        this.lockIcon(Theme.locked)
+                                                        Text(ChapterCatalog.groupHeaderRight(this.groupChapterId(index), this.cleared))
+                                                            .fontSize(12)
+                                                            .fontColor(Theme.locked)
+                                                            .fontFamily(this.sansFamily())
+                                                    }
+                                                    .alignItems(VerticalAlign.Center)
+                                                }
+                                            }
+                                            .width(100.percent)
+                                            .height(39)
+                                            .padding(top: YichengScrollGeom.headerPadTop())
+                                            .alignItems(VerticalAlign.Center)
+                                            Column() {}.width(100.percent).height(1).backgroundColor(this.groupLineColor(this.groupChapterId(index)))
+                                        }
+                                        .width(100.percent)
+                                        .height(40)
+                                        .margin(top: if (index == 0) { 0 } else { 12 }, bottom: 8)
                                     }
+                                    Row {
+                                        if (index < this.cleared) {
+                                            this.checkCircleIcon(StationRowGeom.globalRingD)
+                                            Column {
+                                                Text(item.name)
+                                                    .fontSize(StationRowGeom.globalNameFont)
+                                                    .fontColor(Theme.ink)
+                                                    .fontFamily(this.serifBoldFamily())
+                                                    .fontWeight(FontWeight.Bold)
+                                                    .maxLines(2)
+                                                Text("${item.cols}×${item.rows}")
+                                                    .fontSize(StationRowGeom.globalMetaFont)
+                                                    .fontColor(Theme.inkMuted)
+                                                    .fontFamily(this.sansFamily())
+                                            }
+                                            .margin(left: StationRowGeom.globalNameGap)
+                                            .alignItems(HorizontalAlign.Start)
+                                            Blank()
+                                            Row(space: 10) {
+                                                if (ChapterCatalog.isDessert(item.id)) {
+                                                    this.dessertTag(0, StationRowGeom.globalBadgeFont)
+                                                }
+                                                Text("已通")
+                                                    .fontSize(StationRowGeom.globalMetaFont)
+                                                    .fontColor(Theme.success)
+                                                    .fontFamily(this.sansFamily())
+                                            }
+                                            .alignItems(VerticalAlign.Center)
+                                        } else if (index == this.cleared) {
+                                            Text("${index + 1}")
+                                                .fontSize(StationRowGeom.globalNumFont)
+                                                .fontColor(Theme.whitePaper)
+                                                .fontFamily(this.serifBoldFamily())
+                                                .fontWeight(FontWeight.Bold)
+                                                .width(StationRowGeom.globalRingD)
+                                                .height(StationRowGeom.globalRingD)
+                                                .backgroundColor(Theme.ink)
+                                                .borderRadius(StationRowGeom.globalRingR)
+                                                .textAlign(TextAlign.Center)
+                                            Column {
+                                                Text(item.name)
+                                                    .fontSize(StationRowGeom.globalNameFont)
+                                                    .fontColor(Theme.ink)
+                                                    .fontFamily(this.serifBoldFamily())
+                                                    .fontWeight(FontWeight.Bold)
+                                                    .maxLines(2)
+                                                Text("${item.cols}×${item.rows}")
+                                                    .fontSize(StationRowGeom.globalMetaFont)
+                                                    .fontColor(Theme.inkMuted)
+                                                    .fontFamily(this.sansFamily())
+                                            }
+                                            .margin(left: StationRowGeom.globalNameGap)
+                                            .alignItems(HorizontalAlign.Start)
+                                            Blank()
+                                            Row(space: 10) {
+                                                if (ChapterCatalog.isDessert(item.id)) {
+                                                    this.dessertTag(1, StationRowGeom.globalBadgeFont)
+                                                }
+                                                Text("当前")
+                                                    .fontSize(StationRowGeom.globalMetaFont)
+                                                    .fontColor(Theme.ink)
+                                                    .fontFamily(this.sansFamily())
+                                            }
+                                            .alignItems(VerticalAlign.Center)
+                                        } else {
+                                            Text("${index + 1}")
+                                                .fontSize(StationRowGeom.globalNumFont)
+                                                .fontColor(Theme.locked)
+                                                .fontFamily(this.serifBoldFamily())
+                                                .fontWeight(FontWeight.Bold)
+                                                .width(StationRowGeom.globalRingD)
+                                                .height(StationRowGeom.globalRingD)
+                                                .border(width: 1, color: Theme.locked)
+                                                .borderRadius(StationRowGeom.globalRingR)
+                                                .textAlign(TextAlign.Center)
+                                            Column {
+                                                Text(item.name)
+                                                    .fontSize(StationRowGeom.globalNameFont)
+                                                    .fontColor(Theme.locked)
+                                                    .fontFamily(this.serifBoldFamily())
+                                                    .fontWeight(FontWeight.Bold)
+                                                    .maxLines(2)
+                                                Text("${item.cols}×${item.rows}")
+                                                    .fontSize(StationRowGeom.globalMetaFont)
+                                                    .fontColor(Theme.locked)
+                                                    .fontFamily(this.sansFamily())
+                                            }
+                                            .margin(left: StationRowGeom.globalNameGap)
+                                            .alignItems(HorizontalAlign.Start)
+                                            Blank()
+                                            Row(space: 17) {
+                                                if (ChapterCatalog.isDessert(item.id)) {
+                                                    this.dessertTag(2, StationRowGeom.globalBadgeFont)
+                                                }
+                                                this.lockIcon(Theme.locked)
+                                            }
+                                            .alignItems(VerticalAlign.Center)
+                                        }
+                                    }
+                                    .width(100.percent)
+                                    .height(StationRowGeom.globalRowH)
+                                    // J22: 锁定行锁心距行右缘 28(lockCx=W-48),其余态保持 16
+                                    .padding(left: StationRowGeom.globalPadLeft, right: if (index > this.cleared) { StationRowGeom.lockPadRight(true, this.lockW()) } else { Float64(StationRowGeom.globalStatusRightInset) })
+                                    .backgroundColor(this.rowBg(index))
+                                    .border(width: this.rowBorderW(index), color: this.rowBorder(index))
+                                    .borderRadius(8)
+                                    .onClick({event => this.openFromList(index)})
                                 }
                                 .width(100.percent)
-                                .height(64)
-                                .padding(left: 14, right: 14)
-                                .backgroundColor(Theme.whitePaper)
-                                .borderRadius(10)
-                                .border(width: 1, color: this.rowBorder(index))
-                                .onClick({event => this.openFromList(index)})
                             }
                         )
                     }
                     .width(100.percent)
+                    // J26b(裁决:预览对,实现错):驿程滚动内容顶部缺 12u 留白——设计预览的滚动
+                    // 视口顶=topbar 下沿+12(B5 未全通/B6 滚动/B7 全通一致,render_cjmp_gaps_v1
+                    // scr_yicheng 的 vp_top),实机原为 0u。统一以内容容器 padding(top: 12) 补齐:
+                    // ①百驿全通:总结卡顶距分隔线 12(B7 预览 11.4u≈12);②卡底到首个分组头仍 12
+                    // (卡 margin bottom 4 + 本 Column space 8);③未全通:首屏分组头/滚动对齐的
+                    // 当前章头均落在视口顶+12(与 B5 一致)。滚动偏移公式(yichengScrollOffset)
+                    // 不需要改:章头内容坐标 = 12 + (k-1)*周期,scrollTo 偏移 = (k-1)*周期,
+                    // 对齐后章头恰在视口顶+12;cleared>=total 停顶时卡顶=视口顶+12。
+                    .padding(top: SummaryGeom.gapAbove())
                 }
                 .width(100.percent)
                 .layoutWeight(1)
-                Text("已通 ${this.cleared} · 当前 ${this.currentName()}")
+                Text(ChapterCatalog.yichengFooter(this.cleared, this.levels.size, this.currentName()))
                     .fontSize(12)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.sansFamily())
-                    .margin(top: 12, bottom: 8)
+                    // B-edge: yicheng footer margin
+                    .margin(top: 12, bottom: Theme.bottomMargin(16.0, 8.0))
                     .width(100.percent)
             } else if (this.screen == 4) {
                 Stack {
@@ -976,38 +1324,7 @@ class EntryView {
                             ChapterCatalog.all(),
                             itemGenerator: {item: ChapterDef, index: Int64 =>
                                 Column {
-                                if (item.id == 4) {
-                                    Image(rawImg("card_05_touyuan_v91"))
-                                        .width(100.percent)
-                                        .height(Theme.chapterSkinCardH)
-                                        .objectFit(ImageFit.Contain)
-                                } else if (item.id == 5) {
-                                    Image(rawImg("card_06_jingzhou_v91"))
-                                        .width(100.percent)
-                                        .height(Theme.chapterSkinCardH)
-                                        .objectFit(ImageFit.Contain)
-                                } else if (item.id == 6) {
-                                    Image(rawImg("card_07_chibi_v91"))
-                                        .width(100.percent)
-                                        .height(Theme.chapterSkinCardH)
-                                        .objectFit(ImageFit.Contain)
-                                } else if (item.id == 7) {
-                                    Image(rawImg("card_08_rushu_v91"))
-                                        .width(100.percent)
-                                        .height(Theme.chapterSkinCardH)
-                                        .objectFit(ImageFit.Contain)
-                                } else if (item.id == 8) {
-                                    Image(rawImg("card_09_hanzhong_v91"))
-                                        .width(100.percent)
-                                        .height(Theme.chapterSkinCardH)
-                                        .objectFit(ImageFit.Contain)
-                                } else if (item.id == 9) {
-                                    Image(rawImg("card_10_beifa_v91"))
-                                        .width(100.percent)
-                                        .height(Theme.chapterSkinCardH)
-                                        .objectFit(ImageFit.Contain)
-                                }
-                                Row(space: 8) {
+                                    Row(space: 8) {
                                     Row(space: 2) {
                                         if (item.id == 0) {
                                             Image(rawImg("bust_p01_cangguan"))
@@ -1174,15 +1491,19 @@ class EntryView {
                                             .height(28)
                                             .textAlign(TextAlign.Center)
                                             .backgroundColor(this.enterFill(index))
-                                            .borderRadius(6)
-                                            .border(width: 1, color: Theme.ink)
+                                            .border(width: 1.2, color: Theme.qingDeep)
+                                            .borderRadius(4)
                                     } else {
-                                        Text("未开")
-                                            .fontSize(12)
-                                            .fontColor(Theme.locked)
-                                            .fontFamily(this.sansFamily())
-                                            .width(48)
-                                            .textAlign(TextAlign.Center)
+                                        Row(space: 4) {
+                                            this.lockIcon(Theme.locked)
+                                            Text("未开")
+                                                .fontSize(12)
+                                                .fontColor(Theme.locked)
+                                                .fontFamily(this.sansFamily())
+                                        }
+                                        .width(56)
+                                        .justifyContent(FlexAlign.Center)
+                                        .alignItems(VerticalAlign.Center)
                                     }
                                 }
                                 .width(100.percent)
@@ -1191,8 +1512,8 @@ class EntryView {
                                 }
                                 .width(100.percent)
                                 .backgroundColor(Theme.whitePaper)
+                                .border(width: this.cardBorderW(item.id), color: this.cardBorderOf(item.id, this.chapterOpen(item.id)))
                                 .borderRadius(10)
-                                .border(width: 1, color: this.cardBorder(this.chapterOpen(item.id)))
                                 .clip(true)
                                 .onClick({event => this.openChapter(item.id)})
                             }
@@ -1206,7 +1527,8 @@ class EntryView {
                     .fontSize(12)
                     .fontColor(Theme.inkMuted)
                     .fontFamily(this.sansFamily())
-                    .margin(top: 8, bottom: 8)
+                    // B-edge: chapter footer margin
+                    .margin(top: 8, bottom: Theme.bottomMargin(16.0, 8.0))
                     .width(100.percent)
             } else if (this.screen == 5) {
                 Stack {
@@ -1243,133 +1565,110 @@ class EntryView {
                             itemGenerator: {item: LevelDef, index: Int64 =>
                                 Row {
                                     if (item.id < this.cleared) {
-                                        Text("通")
-                                            .fontSize(14)
-                                            .fontColor(Theme.success)
-                                            .fontFamily(this.serifFamily())
-                                            .width(32)
-                                            .height(32)
-                                            .border(width: 1, color: Theme.success)
-                                            .borderRadius(16)
-                                            .textAlign(TextAlign.Center)
+                                        this.checkCircleIcon(StationRowGeom.chapterRingD)
                                         Column {
-                                            Row(space: 6) {
-                                                Text(item.name)
-                                                    .fontSize(16)
-                                                    .fontColor(Theme.ink)
-                                                    .fontFamily(this.serifBoldFamily())
-                                                    .fontWeight(FontWeight.Bold)
-                                                if (ChapterCatalog.isDessert(item.id)) {
-                                                    Text("点心")
-                                                        .fontSize(11)
-                                                        .lineHeight(15)
-                                                        .fontColor(Theme.inkMuted)
-                                                        .fontFamily(this.sansFamily())
-                                                        .padding(left: 4, right: 4)
-                                                        .border(width: 1, color: Theme.paperLine)
-                                                        .borderRadius(4)
-                                                }
-                                            }
+                                            Text(item.name)
+                                                .fontSize(StationRowGeom.chapterNameFont)
+                                                .fontColor(Theme.ink)
+                                                .fontFamily(this.serifBoldFamily())
+                                                .fontWeight(FontWeight.Bold)
+                                                .maxLines(2)
                                             Text("${item.cols}×${item.rows}")
-                                                .fontSize(12)
+                                                .fontSize(StationRowGeom.chapterMetaFont)
                                                 .fontColor(Theme.inkMuted)
                                                 .fontFamily(this.sansFamily())
                                         }
-                                        .margin(left: 10)
+                                        .margin(left: StationRowGeom.chapterNameGap)
                                         .alignItems(HorizontalAlign.Start)
                                         Blank()
-                                        Text("已通")
-                                            .fontSize(12)
-                                            .fontColor(Theme.success)
-                                            .fontFamily(this.sansFamily())
+                                        Row(space: 10) {
+                                            if (ChapterCatalog.isDessert(item.id)) {
+                                                this.dessertTag(0, StationRowGeom.chapterBadgeFont)
+                                            }
+                                            Text("已通")
+                                                .fontSize(StationRowGeom.chapterMetaFont)
+                                                .fontColor(Theme.success)
+                                                .fontFamily(this.sansFamily())
+                                        }
+                                        .alignItems(VerticalAlign.Center)
                                     } else if (item.id == this.cleared) {
                                         Text("${index + 1}")
-                                            .fontSize(14)
+                                            .fontSize(StationRowGeom.chapterNumFont)
                                             .fontColor(Theme.whitePaper)
-                                            .fontFamily(this.serifFamily())
-                                            .width(32)
-                                            .height(32)
+                                            .fontFamily(this.serifBoldFamily())
+                                            .fontWeight(FontWeight.Bold)
+                                            .width(StationRowGeom.chapterRingD)
+                                            .height(StationRowGeom.chapterRingD)
                                             .backgroundColor(Theme.ink)
-                                            .borderRadius(16)
+                                            .borderRadius(StationRowGeom.chapterRingR)
                                             .textAlign(TextAlign.Center)
                                         Column {
-                                            Row(space: 6) {
-                                                Text(item.name)
-                                                    .fontSize(16)
-                                                    .fontColor(Theme.ink)
-                                                    .fontFamily(this.serifBoldFamily())
-                                                    .fontWeight(FontWeight.Bold)
-                                                if (ChapterCatalog.isDessert(item.id)) {
-                                                    Text("点心")
-                                                        .fontSize(11)
-                                                        .lineHeight(15)
-                                                        .fontColor(Theme.ink)
-                                                        .fontFamily(this.sansFamily())
-                                                        .padding(left: 4, right: 4)
-                                                        .border(width: 1, color: Theme.ink)
-                                                        .borderRadius(4)
-                                                }
-                                            }
+                                            Text(item.name)
+                                                .fontSize(StationRowGeom.chapterNameFont)
+                                                .fontColor(Theme.ink)
+                                                .fontFamily(this.serifBoldFamily())
+                                                .fontWeight(FontWeight.Bold)
+                                                .maxLines(2)
                                             Text("${item.cols}×${item.rows}")
-                                                .fontSize(12)
+                                                .fontSize(StationRowGeom.chapterMetaFont)
                                                 .fontColor(Theme.inkMuted)
                                                 .fontFamily(this.sansFamily())
                                         }
-                                        .margin(left: 10)
+                                        .margin(left: StationRowGeom.chapterNameGap)
                                         .alignItems(HorizontalAlign.Start)
                                         Blank()
-                                        Text("当前")
-                                            .fontSize(12)
-                                            .fontColor(Theme.ink)
-                                            .fontFamily(this.sansFamily())
+                                        Row(space: 10) {
+                                            if (ChapterCatalog.isDessert(item.id)) {
+                                                this.dessertTag(1, StationRowGeom.chapterBadgeFont)
+                                            }
+                                            Text("当前")
+                                                .fontSize(StationRowGeom.chapterMetaFont)
+                                                .fontColor(Theme.ink)
+                                                .fontFamily(this.sansFamily())
+                                        }
+                                        .alignItems(VerticalAlign.Center)
                                     } else {
                                         Text("${index + 1}")
-                                            .fontSize(14)
+                                            .fontSize(StationRowGeom.chapterNumFont)
                                             .fontColor(Theme.locked)
-                                            .fontFamily(this.serifFamily())
-                                            .width(32)
-                                            .height(32)
+                                            .fontFamily(this.serifBoldFamily())
+                                            .fontWeight(FontWeight.Bold)
+                                            .width(StationRowGeom.chapterRingD)
+                                            .height(StationRowGeom.chapterRingD)
                                             .border(width: 1, color: Theme.locked)
-                                            .borderRadius(16)
+                                            .borderRadius(StationRowGeom.chapterRingR)
                                             .textAlign(TextAlign.Center)
                                         Column {
-                                            Row(space: 6) {
-                                                Text(item.name)
-                                                    .fontSize(16)
-                                                    .fontColor(Theme.locked)
-                                                    .fontFamily(this.serifBoldFamily())
-                                                    .fontWeight(FontWeight.Bold)
-                                                if (ChapterCatalog.isDessert(item.id)) {
-                                                    Text("点心")
-                                                        .fontSize(11)
-                                                        .lineHeight(15)
-                                                        .fontColor(Theme.locked)
-                                                        .fontFamily(this.sansFamily())
-                                                        .padding(left: 4, right: 4)
-                                                        .border(width: 1, color: Theme.locked)
-                                                        .borderRadius(4)
-                                                }
-                                            }
+                                            Text(item.name)
+                                                .fontSize(StationRowGeom.chapterNameFont)
+                                                .fontColor(Theme.locked)
+                                                .fontFamily(this.serifBoldFamily())
+                                                .fontWeight(FontWeight.Bold)
+                                                .maxLines(2)
                                             Text("${item.cols}×${item.rows}")
-                                                .fontSize(12)
+                                                .fontSize(StationRowGeom.chapterMetaFont)
                                                 .fontColor(Theme.locked)
                                                 .fontFamily(this.sansFamily())
                                         }
-                                        .margin(left: 10)
+                                        .margin(left: StationRowGeom.chapterNameGap)
                                         .alignItems(HorizontalAlign.Start)
                                         Blank()
-                                        Text("锁")
-                                            .fontSize(12)
-                                            .fontColor(Theme.locked)
-                                            .fontFamily(this.sansFamily())
+                                        Row(space: 17) {
+                                            if (ChapterCatalog.isDessert(item.id)) {
+                                                this.dessertTag(2, StationRowGeom.chapterBadgeFont)
+                                            }
+                                            this.lockIcon(Theme.locked)
+                                        }
+                                        .alignItems(VerticalAlign.Center)
                                     }
                                 }
                                 .width(100.percent)
-                                .height(56)
-                                .padding(left: 12, right: 12)
-                                .backgroundColor(Theme.whitePaper)
-                                .borderRadius(10)
-                                .border(width: 1, color: this.rowBorder(item.id))
+                                .height(StationRowGeom.chapterRowH)
+                                // J22: 锁定行锁心距行右缘 18(lockCx=W-38),其余态保持 16
+                                .padding(left: StationRowGeom.chapterPadLeft, right: if (item.id > this.cleared) { StationRowGeom.lockPadRight(false, this.lockW()) } else { Float64(StationRowGeom.chapterStatusRightInset) })
+                                .backgroundColor(this.rowBg(item.id))
+                                .border(width: this.rowBorderW(item.id), color: this.rowBorder(item.id))
+                                .borderRadius(8)
                                 .onClick({event => this.openFromList(item.id)})
                             }
                         )
@@ -1380,12 +1679,25 @@ class EntryView {
                 .width(100.percent)
                 .layoutWeight(1)
                 /* 共10驿 — sizes stay ${item.cols}×${item.rows} from levels.json */
-                Text(this.chapterListFooter())
-                    .fontSize(12)
-                    .fontColor(Theme.inkMuted)
-                    .fontFamily(this.sansFamily())
-                    .margin(top: 8, bottom: 8)
-                    .width(100.percent)
+                Column {
+                    ForEach(
+                        this.chapterListFooterLines(),
+                        itemGenerator: {line: String, index: Int64 =>
+                            Text(line)
+                                .fontSize(12)
+                                .lineHeight(16)
+                                .height(16)
+                                .fontColor(Theme.inkMuted)
+                                .fontFamily(this.sansFamily())
+                                .maxLines(1)
+                                .width(this.winW - 40.0 + 1.0)
+                        }
+                    )
+                }
+                .width(100.percent)
+                .alignItems(HorizontalAlign.Start)
+                // B-edge: in-chapter yicheng footer margin
+                .margin(top: 8, bottom: Theme.bottomMargin(16.0, 8.0))
             } else if (this.screen == 6) {
                 /* Skin-only preview for locked 05–10. No boards, no gameplay. */
                 Stack {
@@ -1442,81 +1754,6 @@ class EntryView {
                         .layoutWeight(1)
                         .objectFit(ImageFit.Contain)
                 }
-            } else if (this.screen == 2) {
-                // in-page back: iOS edge swipe does not pop on Keels 0.2.2
-                Row {
-                    // A2: 48vp hit area
-                    this.backButton({ => this.leaveBoard() }, true)
-                    Blank()
-                }
-                .width(100.percent)
-                .height(48)
-                .padding(left: Theme.inset, right: Theme.inset)
-                Blank()
-                Column {
-                    Text("通关")
-                        .fontSize(14)
-                        .fontColor(Theme.inkMuted)
-                        .fontFamily(this.sansFamily())
-                        .margin(bottom: 8)
-                    Text(this.roadTitle())
-                        .fontSize(26)
-                        .fontColor(Theme.ink)
-                        .fontFamily(this.serifBoldFamily())
-                        .fontWeight(FontWeight.Bold)
-                        .margin(bottom: 16)
-                    Row {
-                        Column {
-                            Text("驿道已通")
-                                .fontSize(14)
-                                .fontColor(Theme.inkMuted)
-                                .fontFamily(this.sansFamily())
-                            Text("文书递达本驿")
-                                .fontSize(14)
-                                .fontColor(Theme.inkMuted)
-                                .fontFamily(this.sansFamily())
-                                .margin(top: 4)
-                        }
-                        .alignItems(HorizontalAlign.Start)
-                        Blank()
-                        /* Win seal copy: 文书到 (vermillion only). */
-                        Column {
-                            Text("文")
-                                .fontSize(13)
-                                .fontColor(Theme.whitePaper)
-                                .fontFamily(this.serifFamily())
-                            Text("书")
-                                .fontSize(13)
-                                .fontColor(Theme.whitePaper)
-                                .fontFamily(this.serifFamily())
-                            Text("到")
-                                .fontSize(13)
-                                .fontColor(Theme.whitePaper)
-                                .fontFamily(this.serifFamily())
-                        }
-                        .width(52)
-                        .height(52)
-                        .backgroundColor(Theme.vermillion)
-                        .justifyContent(FlexAlign.Center)
-                        .alignItems(HorizontalAlign.Center)
-                        .rotate(angle: 10.0)
-                    }
-                    .width(100.percent)
-                    .margin(bottom: 24)
-                    Button("下一驿")
-                        .width(100.percent)
-                        .height(Theme.primaryH)
-                        .backgroundColor(Theme.qingDeep)
-                        .fontColor(Theme.whitePaper)
-                        .fontSize(16)
-                        .fontFamily(this.sansMediumFamily())
-                        .onClick({event => this.nextLevel()})
-                }
-                .width(86.percent)
-                .padding(20)
-                .backgroundColor(Theme.whitePaper)
-                .borderRadius(12)
-                Blank()
             }
             // Keels 0.2.2 leaks @State subscriptions of destroyed subtrees; keep board mounted
             Column {
@@ -1548,17 +1785,6 @@ class EntryView {
                         // A2: 48vp hit area — in-page back: iOS edge swipe does not pop on Keels 0.2.2
                         this.backButton({ => this.leaveBoard() }, true)
                         Blank()
-                        Text("负重")
-                            .fontSize(12)
-                            .fontColor(if (this.ladenNow()) { Theme.whitePaper } else { Theme.ink })
-                            .fontFamily(this.sansFamily())
-                            .padding(left: 8, right: 8)
-                            .height(24)
-                            .borderRadius(4)
-                            .border(width: 1, color: Theme.qingDeep)
-                            .backgroundColor(if (this.ladenNow()) { Theme.qingDeep } else { Theme.whitePaper })
-                            .textAlign(TextAlign.Center)
-                            .visibility(if (this.hasBurden()) { Visibility.Visible } else { Visibility.None })
                     }
                     .width(100.percent)
                     .height(48)
@@ -1574,9 +1800,10 @@ class EntryView {
                     .backgroundColor(Theme.paperLine)
                     .margin(left: 20, right: 20)
 
-                if (this.hasParityBoard() || this.curLevel().stepLimit > 0) {
+                if (this.hasParityBoard() || this.curLevel().stepLimit > 0 || this.hasBurden()) {
                     Row(space: 8) {
                         if (this.hasParityBoard()) {
+                            // Keels 0.2.2: .border() resets radius to 0, so .borderRadius() MUST come after .border() (see scripts/check_border_radius.py)
                             Text(this.stepChipLabel())
                                 .fontSize(15)
                                 .fontWeight(FontWeight.Bold)
@@ -1584,8 +1811,8 @@ class EntryView {
                                 .fontFamily(this.serifBoldFamily())
                                 .padding(left: 12, right: 12)
                                 .height(28)
-                                .borderRadius(4)
                                 .border(width: 1, color: this.stepChipBorder())
+                                .borderRadius(4)
                                 .backgroundColor(Theme.whitePaper)
                         }
                         if (this.curLevel().stepLimit > 0) {
@@ -1596,9 +1823,41 @@ class EntryView {
                                 .fontFamily(this.serifBoldFamily())
                                 .padding(left: 12, right: 12)
                                 .height(28)
-                                .borderRadius(4)
                                 .border(width: this.stepLeftBorderW(), color: this.stepLeftBorderColor())
+                                .borderRadius(4)
                                 .backgroundColor(Theme.whitePaper)
+                        }
+                        if (this.hasBurden() && this.ladenNow()) {
+                            Row {
+                                Stack(alignContent: Alignment.TopStart) {
+                                    ForEach(
+                                        this.chipBagPaths(),
+                                        itemGenerator: { item: BoardPath, idx: Int64 =>
+                                            Path(width: 32.0, height: 28.0, commands: item.commands)
+                                                .fill(item.color)
+                                                .fillOpacity(item.fillOp)
+                                                .stroke(item.stroke)
+                                                .strokeWidth(item.strokeW)
+                                                .strokeLineCap(LineCapStyle.Round)
+                                                .strokeLineJoin(LineJoinStyle.Round)
+                                                .antiAlias(true)
+                                                .position(x: 0, y: 0)
+                                        },
+                                        keyGeneratorFunc: { item: BoardPath, idx: Int64 => "${idx}-${item.color}-${item.commands}" }
+                                    )
+                                }.width(32).height(28)
+                                Text("负重")
+                                    .fontSize(15)
+                                    .fontWeight(FontWeight.Bold)
+                                    .fontColor(Theme.ink)
+                                    .fontFamily(this.serifBoldFamily())
+                                    .padding(right: 12)
+                                    .height(28)
+                            }
+                            .height(28)
+                            .border(width: 1, color: Theme.paperLine)
+                            .borderRadius(4)
+                            .backgroundColor(Theme.whitePaper)
                         }
                     }
                     .justifyContent(FlexAlign.Center)
@@ -1609,6 +1868,7 @@ class EntryView {
                 /* BANDS.md composite: chapters 0..9.
                    Full-width 360×100 vp; Theme.bandClear keeps bust/flags
                    out of the Canvas grid (band.bottom ≤ board.top − 30px). */
+                Stack(alignContent: Alignment.TopStart) {
                 Column {
                     if (this.chapterIndex == 0) {
                         Image(rawImg("band_zhuojun_v91"))
@@ -1654,7 +1914,29 @@ class EntryView {
                 }
                 .width(100.percent)
                 .height(Theme.bandH)
-                .margin(top: if (this.hasParityBoard() || this.curLevel().stepLimit > 0) { 0 } else { 4 }, bottom: Theme.bandClear)
+                    // toast fallback (e): step==4 托盘外兜底 toast 渲染在棋盘 Scroll 之外(不被裁剪)。
+                    // 样式与托盘内 toast 完全一致;底边 = Stack 底边(= 托盘顶边)上方 6u;
+                    // 横向与托盘居中同参考宽度:play 屏 playInset()=0,外层 Column 内容宽 = this.winW
+                    // (boardGeomFor 同用 winW),故 x = (winW - rejectToastW) / 2.0。
+                    if (this.parityRejectText.size > 0 && this.rejectPlace.shown && toastIsOutsideTray(this.rejectPlace)) {
+                        Text(this.parityRejectText)
+                            .fontSize(14)
+                            .fontFamily(this.serifBoldFamily())
+                            .fontColor(Theme.vermillion)
+                            .maxLines(1)
+                            .width(this.rejectToastW)
+                            .height(28)
+                            .textAlign(TextAlign.Center)
+                            .padding(left: 14, right: 14)
+                            .border(width: 1, color: Theme.vermillion)
+                            .borderRadius(4)
+                            .backgroundColor(Theme.whitePaper)
+                            .position(x: (this.winW - this.rejectToastW) / 2.0, y: Float64(Theme.bandH + Theme.bandClear) - 6.0 - 28.0)
+                    }
+                }
+                .width(100.percent)
+                .height(Theme.bandH + Theme.bandClear)
+                .margin(top: if (this.hasParityBoard() || this.curLevel().stepLimit > 0 || this.hasBurden()) { 0 } else { 4 })
                 Scroll {
                     Column {
                         Stack(alignContent: Alignment.TopStart) {
@@ -1673,6 +1955,25 @@ class EntryView {
                                 // Keels 0.2.2: ForEach key label is keyGeneratorFunc (macro passes it to forEachUpdateFunction)
                                 keyGeneratorFunc: { item: BoardRect, idx: Int64 =>
                                     "${idx}-${item.x}-${item.y}-${item.color}-${item.stroke}"
+                                }
+                            )
+
+                            // Layer 2: P4 skin under-layer (hatch / bridge / notch / grain bags), Path only
+                            ForEach(
+                                this.boardUnder,
+                                itemGenerator: { item: BoardPath, idx: Int64 =>
+                                    Path(width: this.boardW(), height: this.boardH(), commands: item.commands)
+                                        .fill(item.color)
+                                        .fillOpacity(item.fillOp)
+                                        .stroke(item.stroke)
+                                        .strokeWidth(item.strokeW)
+                                        .strokeLineCap(LineCapStyle.Round)
+                                        .strokeLineJoin(LineJoinStyle.Round)
+                                        .antiAlias(true)
+                                        .position(x: 0, y: 0)
+                                },
+                                keyGeneratorFunc: { item: BoardPath, idx: Int64 =>
+                                    "${idx}-${item.color}-${item.commands}-${item.stroke}-${item.fillOp}"
                                 }
                             )
 
@@ -1778,16 +2079,17 @@ class EntryView {
                                 }
                             )
 
-                            // Layer 8: Next station label ("下一驿" 11 device px sans gold, textAlign start, baseline at cy+r+12.0)
-                            // HarmonyOS parity: 11 device px (Canvas px); readability noted in M2 report
+                            // Layer 8: Next station label ("下一驿" 12 vp Medium, 行高 16, textAlign start, baseline at cy+r+12.0)
                             ForEach(
                                 this.boardNextLabels,
                                 itemGenerator: { item: BoardLabel, idx: Int64 =>
                                     Text(item.text)
                                         .fontSize(item.size)
                                         .fontColor(item.color)
-                                        .fontFamily(this.sansFamily())
+                                        .fontFamily(this.sansMediumFamily())
                                         .width(item.w)
+                                        .height(16)
+                                        .lineHeight(16)
                                         .textAlign(TextAlign.Start)
                                         .position(x: item.x, y: item.y)
                                 },
@@ -1840,15 +2142,16 @@ class EntryView {
                                         .fontFamily(this.serifBoldFamily())
                                         .fontColor(Theme.vermillion)
                                         .maxLines(1)
-                                        .width(86)
+                                        .width(this.rejectToastW)
                                         .height(28)
                                         .textAlign(TextAlign.Center)
                                         .padding(left: 14, right: 14)
-                                        .borderRadius(4)
                                         .border(width: 1, color: Theme.vermillion)
+                                        .borderRadius(4)
                                         .backgroundColor(Theme.whitePaper)
                                         .position(x: this.rejectToastX(), y: this.rejectToastY())
-                                        .visibility(if (this.rejectPlace.shown) { Visibility.Visible } else { Visibility.None })
+                                        // (e) 托盘外兜底时不在托盘内重复显示
+                                        .visibility(if (this.rejectPlace.shown && !toastIsOutsideTray(this.rejectPlace)) { Visibility.Visible } else { Visibility.None })
                                 }
                             }
                         }
@@ -1897,8 +2200,9 @@ class EntryView {
                     .justifyContent(FlexAlign.Center)
                     .alignItems(VerticalAlign.Center)
                     .backgroundColor(Theme.whitePaper)
+                    .border(width: 1.2, color: Theme.ink)
                     .borderRadius(8)
-                    .border(width: 1, color: Theme.ink)
+                    .margin(bottom: Theme.chipMargin()) // B-edge: undo chip bottom margin
                     .onClick({event => this.doUndo()})
                     Row(space: 8) {
                         Image(rawSvg("icon-reset"))
@@ -1914,22 +2218,23 @@ class EntryView {
                     .justifyContent(FlexAlign.Center)
                     .alignItems(VerticalAlign.Center)
                     .backgroundColor(Theme.whitePaper)
+                    .border(width: 1.2, color: Theme.ink)
                     .borderRadius(8)
-                    .border(width: 1, color: Theme.ink)
+                    .margin(bottom: Theme.chipMargin()) // B-edge: reset chip bottom margin
                     .onClick({event => this.doClear()})
                 }
                 .width(100.percent)
-                .height(Theme.bottomBar)
+                .height(Theme.chipBarHeight())
                 .alignItems(VerticalAlign.Center)
                 .padding(left: Theme.inset, right: Theme.inset)
                         }
-            .visibility(if (this.screen == 1) { Visibility.Visible } else { Visibility.None })
+            .visibility(if (this.screen == 1 || this.screen == 2) { Visibility.Visible } else { Visibility.None })
             .width(100.percent)
             .layoutWeight(1)
         }
         .width(100.percent)
         .height(100.percent)
-        .padding(left: this.playInset(), right: this.playInset())
+        .padding(top: this.padTop, bottom: this.padBottom, left: this.playInset(), right: this.playInset())
         .backgroundColor(this.playPaper())
         .alignItems(HorizontalAlign.Center)
         .onAreaChange({ old, new =>
@@ -1939,6 +2244,186 @@ class EntryView {
                 this.winW = targetW
                 this.rebuildBoard()
             }
+            let h = new.height.value
+            let targetH = if (h > 0.0) { h } else { 800.0 }
+            if (targetH - this.winH > 0.5 || this.winH - targetH > 0.5) {
+                this.winH = targetH
+            }
+            // E2/E8 实测(2026-10-04 Mac, iPhone 17 402×874, iOS 27): 宿主在
+            // makeKeyAndVisible+layoutIfNeeded 与 rootViewController 赋值后各 setenv
+            // 一次, 并在 viewSafeAreaInsetsDidChange/转屏完成/sceneDidBecomeActive 补写
+            // (YILU_SAFE_TOP=6200 仓颉 getVariable 已实测可读); 此处 onAreaChange 是
+            // 宿主更晚写 env 时的重读钩子, 首帧前后的 setenv 都能被拾取。
+            let st = Theme.safeTop()
+            let sb = Theme.safeBottom()
+            if (st - this.padTop > 0.01 || this.padTop - st > 0.01) {
+                this.padTop = st
+            }
+            if (sb - this.padBottom > 0.01 || this.padBottom - sb > 0.01) {
+                this.padBottom = sb
+            }
         })
+
+        if (this.screen == 2) {
+            // 1. 遮罩: 纯色 winScrim(0x802C2A26), 从 hairline 上缘盖到屏幕最底
+            Column() {}
+                .width(100.percent)
+                .height(WinGeom.maskHeight(this.currentH(), this.padTop))
+                .backgroundColor(Theme.winScrim)
+                .position(x: 0.0, y: WinGeom.maskTop(this.padTop))
+
+            // 2. 通关卡硬阴影: 偏移 右 3、下 5, 色 paperShade, 圆角 4, 无模糊、不用 .shadow()
+            Column() {}
+                .width(WinGeom.cardW(this.winW))
+                .height(WinGeom.cardH())
+                .backgroundColor(Theme.paperShade)
+                .borderRadius(4)
+                .position(
+                    x: WinGeom.cardX() + WinGeom.cardShadowDx(),
+                    y: WinGeom.cardTop(this.currentH(), this.padTop, this.padBottom) + WinGeom.cardShadowDy()
+                )
+
+            // 3. 通关卡主体: Stack, 相对 sy=cardTop 垂直居中于 hairline 到 H-safeBottom
+            Stack(alignContent: Alignment.TopStart) {
+                // 「通关」Serif Regular 14, inkMuted, 水平居中, 中心 sy+28
+                Text("通关")
+                    .fontSize(14)
+                    .fontColor(Theme.inkMuted)
+                    .fontFamily(this.serifFamily())
+                    .width(100.percent)
+                    .height(WinGeom.passH())
+                    .lineHeight(WinGeom.passH())
+                    .textAlign(TextAlign.Center)
+                    .position(x: 0.0, y: WinGeom.passY())
+
+                // 关名 this.roadTitle() Serif Bold 22, ink, 水平居中, 中心 sy+62
+                Text(this.roadTitle())
+                    .fontSize(22)
+                    .fontColor(Theme.ink)
+                    .fontFamily(this.serifBoldFamily())
+                    .fontWeight(FontWeight.Bold)
+                    .width(100.percent)
+                    .height(WinGeom.titleH())
+                    .lineHeight(WinGeom.titleH())
+                    .textAlign(TextAlign.Center)
+                    .position(x: 0.0, y: WinGeom.titleY())
+
+                // 金线: 高 1.2, Theme.gold, 水平居中, 中心 sy+82, 宽 = 关名字宽估算
+                Column() {}
+                    .width(WinGeom.roadTitleWidth(this.roadTitle()))
+                    .height(WinGeom.goldLineH())
+                    .backgroundColor(Theme.gold)
+                    .position(x: WinGeom.goldLineX(this.winW, WinGeom.roadTitleWidth(this.roadTitle())), y: WinGeom.goldLineY())
+
+                // 「驿道已通」Serif Regular 16, qingDeep, 左对齐, 左缘 24, 中心 sy+124
+                Text("驿道已通")
+                    .fontSize(16)
+                    .fontColor(Theme.qingDeep)
+                    .fontFamily(this.serifFamily())
+                    .height(WinGeom.roadDoneH())
+                    .lineHeight(WinGeom.roadDoneH())
+                    .textAlign(TextAlign.Start)
+                    .position(x: WinGeom.roadDoneX(), y: WinGeom.roadDoneY())
+
+                // 「文书递达本驿」Sans 13, inkMuted, 左缘 24, 中心 sy+154
+                Text("文书递达本驿")
+                    .fontSize(13)
+                    .fontColor(Theme.inkMuted)
+                    .fontFamily(this.sansFamily())
+                    .height(WinGeom.docArriveH())
+                    .lineHeight(WinGeom.docArriveH())
+                    .textAlign(TextAlign.Start)
+                    .position(x: WinGeom.docArriveX(), y: WinGeom.docArriveY())
+
+                // 朱印「文书到」: 96×96 方, 旋转 -18°, 透明底双框, sealInk 框与字, 三字竖排 Serif Bold
+                Stack(alignContent: Alignment.TopStart) {
+                    // 外框: 距印边 sealOuterInset, 线宽 sealOuterStroke, 圆角 sealOuterRadius
+                    Column() {}
+                        .width(WinGeom.sealOuterSize())
+                        .height(WinGeom.sealOuterSize())
+                        .border(width: WinGeom.sealOuterStroke(), color: Theme.sealInk)
+                        .borderRadius(WinGeom.sealOuterRadius())
+                        .position(x: WinGeom.sealOuterInset(), y: WinGeom.sealOuterInset())
+
+                    // 内框: 距印边 sealInnerInset, 线宽 sealInnerStroke, 圆角 sealInnerRadius
+                    Column() {}
+                        .width(WinGeom.sealInnerSize())
+                        .height(WinGeom.sealInnerSize())
+                        .border(width: WinGeom.sealInnerStroke(), color: Theme.sealInk)
+                        .borderRadius(WinGeom.sealInnerRadius())
+                        .position(x: WinGeom.sealInnerInset(), y: WinGeom.sealInnerInset())
+
+                    // 印字三字竖排, 居中于内框
+                    Text("文")
+                        .fontSize(WinGeom.sealGlyphFont())
+                        .fontColor(Theme.sealInk)
+                        .fontFamily(this.serifBoldFamily())
+                        .fontWeight(FontWeight.Bold)
+                        .width(WinGeom.sealSize())
+                        .height(WinGeom.sealGlyphPitch())
+                        .lineHeight(WinGeom.sealGlyphPitch())
+                        .textAlign(TextAlign.Center)
+                        .position(x: 0.0, y: WinGeom.sealGlyphY(0))
+
+                    Text("书")
+                        .fontSize(WinGeom.sealGlyphFont())
+                        .fontColor(Theme.sealInk)
+                        .fontFamily(this.serifBoldFamily())
+                        .fontWeight(FontWeight.Bold)
+                        .width(WinGeom.sealSize())
+                        .height(WinGeom.sealGlyphPitch())
+                        .lineHeight(WinGeom.sealGlyphPitch())
+                        .textAlign(TextAlign.Center)
+                        .position(x: 0.0, y: WinGeom.sealGlyphY(1))
+
+                    Text("到")
+                        .fontSize(WinGeom.sealGlyphFont())
+                        .fontColor(Theme.sealInk)
+                        .fontFamily(this.serifBoldFamily())
+                        .fontWeight(FontWeight.Bold)
+                        .width(WinGeom.sealSize())
+                        .height(WinGeom.sealGlyphPitch())
+                        .lineHeight(WinGeom.sealGlyphPitch())
+                        .textAlign(TextAlign.Center)
+                        .position(x: 0.0, y: WinGeom.sealGlyphY(2))
+                }
+                .width(WinGeom.sealSize())
+                .height(WinGeom.sealSize())
+                .rotate(angle: Float32(WinGeom.sealAngle()))
+                .position(x: WinGeom.sealLeft(this.winW), y: WinGeom.sealTop())
+
+                // 「下一驿」按钮: Row 容器 r8, 高 Theme.primaryH(52), x: 20 到 W-56-20, y: 288, Sans Bold 16
+                Row {
+                    Text("下一驿")
+                        .fontSize(16)
+                        .fontColor(Theme.whitePaper)
+                        .fontFamily(this.sansBoldFamily())
+                }
+                .width(WinGeom.btnW(this.winW))
+                .height(Theme.primaryH)
+                .backgroundColor(Theme.qingDeep)
+                .borderRadius(8)
+                .justifyContent(FlexAlign.Center)
+                .alignItems(VerticalAlign.Center)
+                .position(x: WinGeom.btnX(), y: WinGeom.btnTop())
+                .onClick({event => this.nextLevel()})
+            }
+            .width(WinGeom.cardW(this.winW))
+            .height(WinGeom.cardH())
+            .backgroundColor(Theme.whitePaper)
+            .border(width: 1, color: Theme.paperLine)
+            .borderRadius(4)
+            .position(x: WinGeom.cardX(), y: WinGeom.cardTop(this.currentH(), this.padTop, this.padBottom))
+
+            // 4. 顶栏 hairline 覆盖层: 重画在遮罩之上
+            Column() {}
+                .width(this.winW - 40.0)
+                .height(1)
+                .backgroundColor(Theme.paperLine)
+                .position(x: 20.0, y: WinGeom.hairlineY(this.padTop))
+        }
     }
+    .width(100.percent)
+    .height(100.percent)
+}
 }

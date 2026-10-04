@@ -347,15 +347,15 @@ public func buildBoardStationCircles(game: PatrolGame, geom: BoardGeom): Array<B
 public func buildBoardNextLabels(game: PatrolGame, geom: BoardGeom, pxFactor: Float64): Array<BoardLabel> {
     let list = ArrayList<BoardLabel>()
     let r = 18.0 * geom.c / 43.0
-    let factor = if (pxFactor <= 0.0) { 3.0 } else { pxFactor }
-    let fontVp = 11.0 / factor
+    // 保留参数仅为兼容：按 9/29 裁定字号固定 12.0 逻辑单位（vp），不再使用 pxFactor
+    let fontVp = 12.0
     for (wp in game.level.waypoints) {
         let cx = geom.centerX(wp.x)
         let cy = geom.centerY(wp.y)
         let st = stationStateOf(game, wp.n)
         if (st == 1) {
-            // Left edge at cx, top at cy+r+12.0-0.88*fontVp (ascent offset so baseline lands at cy+r+12.0)
-            list.add(BoardLabel(cx, cy + r + 12.0 - 0.88 * fontVp, 60.0, fontVp * 1.5, "下一驿", Theme.gold, fontVp))
+            // Left edge at cx, baseline at cy+r+12.0 (top at cy+r+12.0-0.88*fontVp), height 16.0, width 60.0
+            list.add(BoardLabel(cx, cy + r + 12.0 - 0.88 * fontVp, 60.0, 16.0, "下一驿", Theme.gold, fontVp))
         }
     }
     return list.toArray()
