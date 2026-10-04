@@ -15,7 +15,15 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_CHARS = os.path.join(HERE, "yilu_sans_chars.txt")
+FONTS_DIR = (
+    HERE if os.path.exists(os.path.join(HERE, "YiluSans-Regular.ttf"))
+    else os.path.join(HERE, "..", "fonts")
+)
+DEFAULT_CHARS = (
+    os.path.join(HERE, "yilu_sans_chars.txt")
+    if os.path.exists(os.path.join(HERE, "yilu_sans_chars.txt"))
+    else os.path.join(FONTS_DIR, "yilu_sans_chars.txt")
+)
 DIGITS = "0123456789"
 
 STR_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
@@ -174,6 +182,7 @@ class Resolver:
     def __init__(self, corpus):
         self.c = corpus
         self._fn_cache = {}
+        self._fn_src_cache = {}
 
     def _rel(self, path):
         try:
@@ -181,33 +190,61 @@ class Resolver:
         except ValueError:
             return os.path.basename(path)
 
+    def get_func_return_type(self, src, name):
+        m = re.search(r"func\s+" + re.escape(name) + r"\s*\([^)]*\)\s*:\s*([A-Za-z0-9_<>]+)", src)
+        return m.group(1) if m else None
+
     # ---- functions -------------------------------------------------------
-    def func_body(self, name):
-        if name not in self._fn_cache:
+    def func_body(self, name, class_name=None):
+        key = f"{class_name}.{name}" if class_name else name
+        if key not in self._fn_cache:
             for p in self.c.cj_files:
                 with open(p, encoding="utf-8") as f:
                     src = f.read()
-                for m in re.finditer(r"func\s+" + re.escape(name) + r"\s*\(", src):
-                    brace = src.find("{", m.end())
-                    if brace == -1 or brace - m.end() > 300:
-                        continue
-                    end = find_ending_brace(src, brace)
-                    self._fn_cache[name] = (p, src[brace + 1:end])
+                if class_name:
+                    for cm in re.finditer(r"\bclass\s+" + re.escape(class_name) + r"\b", src):
+                        cbrace = src.find("{", cm.end())
+                        if cbrace == -1:
+                            continue
+                        cend = find_ending_brace(src, cbrace)
+                        class_src = src[cbrace + 1:cend]
+                        for m in re.finditer(r"func\s+" + re.escape(name) + r"\s*\(", class_src):
+                            brace = class_src.find("{", m.end())
+                            if brace == -1 or brace - m.end() > 300:
+                                continue
+                            end = find_ending_brace(class_src, brace)
+                            self._fn_cache[key] = (p, class_src[brace + 1:end])
+                            self._fn_src_cache[key] = src
+                            break
+                        if key in self._fn_cache:
+                            break
+                else:
+                    for m in re.finditer(r"func\s+" + re.escape(name) + r"\s*\(", src):
+                        brace = src.find("{", m.end())
+                        if brace == -1 or brace - m.end() > 300:
+                            continue
+                        end = find_ending_brace(src, brace)
+                        self._fn_cache[key] = (p, src[brace + 1:end])
+                        self._fn_src_cache[key] = src
+                        break
+                if key in self._fn_cache:
                     break
-                if name in self._fn_cache:
-                    break
-            if name not in self._fn_cache:
+            if key not in self._fn_cache:
+                if class_name:
+                    return self.func_body(name, class_name=None)
                 raise Unresolvable(f"function or source {name!r} not found under {self.c.root}")
-        return self._fn_cache[name]
+        return self._fn_cache[key]
 
-    def func_strings(self, name, seen):
-        if name in seen:
+    def func_strings(self, name, seen, class_name=None):
+        key = f"{class_name}.{name}" if class_name else name
+        if key in seen:
             return set()
-        seen.add(name)
-        path, body = self.func_body(name)
-        return self.strings_in_source(body, seen, path)
+        seen.add(key)
+        path, body = self.func_body(name, class_name=class_name)
+        full_src = self._fn_src_cache.get(key, "")
+        return self.strings_in_source(body, seen, path, full_src)
 
-    def strings_in_source(self, code, seen, path):
+    def strings_in_source(self, code, seen, path, full_src=""):
         out = set()
         for m in STR_RE.finditer(code):
             out |= self.expand_literal(m.group(1), seen, path)
@@ -215,24 +252,42 @@ class Resolver:
         for m in re.finditer(r"\.(name|currentName)\b", code):
             names, _cj = self.c.level_data()
             out |= set(names)
+        for m in re.finditer(r"\.(label|title|subtitle|listSubtitle|boardSubtitle|friendLine|tensionLine|cityLine)\b", code):
+            out |= set(self.c.chapter_strings())
         # resolve functions called inside the body, recursively
-        for m in re.finditer(r"\b(?:(?:this|self|[A-Z]\w*)\.)?([a-zA-Z_]\w*)\(", code):
-            fname = m.group(1)
+        for m in re.finditer(r"\b(?:(?:this|self|([A-Z]\w*))\.)?([a-zA-Z_]\w*)\s*\(", code):
+            callee_cls = m.group(1)
+            fname = m.group(2)
             if fname in ("if", "for", "while", "match", "max", "min", "String",
-                         "Int", "get", "add", "print"):
+                         "Int", "get", "add", "print", "absF"):
+                continue
+            ret = self.get_func_return_type(full_src, fname) if full_src else None
+            if ret and ret not in ("String", "Array<String>"):
                 continue
             try:
-                out |= self.func_strings(fname, seen)
+                out |= self.func_strings(fname, seen, class_name=callee_cls)
             except Unresolvable:
                 pass
         return out
 
+    def find_foreach_target(self, param):
+        for p in self.c.cj_files:
+            with open(p, encoding="utf-8") as f:
+                src = f.read()
+            for _start, _end, p_name, t_expr in find_foreach_scopes(src):
+                if p_name == param:
+                    return t_expr
+        return None
+
     # ---- expressions -------------------------------------------------------
-    def expr_strings(self, expr, seen=None):
+    def expr_strings(self, expr, seen=None, foreach_target=None):
         seen = seen or set()
         e = expr.strip()
         if e.startswith("(") and e.endswith(")"):
             e = e[1:-1].strip()
+        if e == "line" or (foreach_target and e == "line"):
+            target = foreach_target or self.find_foreach_target(e) or "this.chapterListFooterLines()"
+            return self.expr_strings(target, seen)
         if e.startswith('"'):
             if not e.endswith('"'):
                 raise Unresolvable(f"unterminated literal: {e[:80]}")
@@ -248,10 +303,36 @@ class Resolver:
             return set()
         # numeric expressions -> digits
         if re.fullmatch(r"[\w\s+\-*/.()]+", e) and re.search(
-                r"\b(n|count|index|opened|locked|cleared|done|rows|cols|len|size|"
-                r"num|\d)\b", e, re.I) and not re.search(
+                r"\b(n|count|\w*count|total|index|opened|locked|cleared|done|rows|cols|len|size|"
+                r"num|step|steps|id|\d)\b", e, re.I) and not re.search(
                 r"\.(name|label|title|subtitle|line)\b", e, re.I):
             return {DIGITS}
+
+        # Function call expression
+        m_call = re.match(r"^((?:(?:this|self|[A-Za-z_]\w*)\.)*([a-zA-Z_]\w*))\s*\(", e)
+        if m_call:
+            paren_start = m_call.end() - 1
+            try:
+                args_str, end_idx = balanced(e, paren_start, "(", ")")
+                if end_idx == len(e):
+                    fname = m_call.group(2)
+                    prefix = m_call.group(1)[:-(len(fname) + 1)] if "." in m_call.group(1) else ""
+                    cls_name = prefix.split(".")[-1] if prefix and prefix not in ("this", "self") else None
+                    if fname == "loadError":
+                        s = set(self.c.json_level_literals())
+                        try:
+                            s |= self.func_strings("loadError", set(seen), class_name=cls_name)
+                        except Unresolvable:
+                            pass
+                        if s:
+                            return s
+                    s = self.func_strings(fname, seen, class_name=cls_name)
+                    if s:
+                        return s
+                    raise Unresolvable(f"expression resolves to no strings: {e[:80]!r}")
+            except Unresolvable:
+                raise
+
         base = e.rstrip("()").strip()
         leaf = base.split(".")[-1].strip()
         if leaf in ("name", "currentName"):
@@ -292,12 +373,21 @@ class Resolver:
         if e == "ch" or ".name" in e:
             names, _cj = self.c.level_data()
             return {DIGITS} | set(names)
-        if re.fullmatch(r"[\w\s+\-*/.()]+", e) and re.fullmatch(
-                r"[\w\s+\-*/.]*", e) and re.search(
-                r"\b(n|count|index|opened|locked|cleared|done|rows|cols|len|size|\d)\b",
-                e, re.I) and not re.search(r"\.\w+|name|label|title", e, re.I):
+        if "curName" in e:
+            names, _cj = self.c.level_data()
+            return set(names) | {"未开"}
+        if "dims" in e:
+            return {"", " · 0×0"}
+        if re.search(
+                r"\b(n|count|\w*count|total|index|opened|locked|cleared|done|rows|cols|len|size|num|step|steps|id|\d)\b",
+                e, re.I) and not re.search(r"\.(name|label|title|subtitle|line)\b", e, re.I):
             return {DIGITS}
-        return self.expr_strings(e, seen)
+        try:
+            return self.expr_strings(e, seen)
+        except Unresolvable:
+            if re.fullmatch(r"[a-zA-Z_]\w*", e):
+                return {DIGITS}
+            raise
 
     def expand_literal(self, lit, seen, path):
         if "${" in lit:
@@ -312,6 +402,44 @@ class Resolver:
                         f"{lit[:60]!r}") from exc
             return out
         return {lit}
+
+
+def find_foreach_scopes(src):
+    """Find all ForEach(expr, itemGenerator: { param: Type, idx => ... }) scopes.
+    Returns list of (closure_start, closure_end, param_name, target_expr).
+    """
+    scopes = []
+    for m in re.finditer(r"\bForEach\s*\(", src):
+        paren_start = m.end() - 1
+        try:
+            args_src, paren_end = balanced(src, paren_start, "(", ")")
+        except Unresolvable:
+            continue
+        gen_match = re.search(r",\s*itemGenerator\s*:\s*\{\s*([a-zA-Z_]\w*)\s*:\s*([a-zA-Z_]\w*)", args_src)
+        if not gen_match:
+            continue
+        target_expr = args_src[1:gen_match.start()].strip()
+        param_name = gen_match.group(1)
+        arrow_pos = args_src.find("=>", gen_match.end())
+        if arrow_pos == -1:
+            continue
+        closure_start = paren_start + arrow_pos + 2
+        brace_idx = args_src.find("{", gen_match.start())
+        try:
+            _b_text, b_end = balanced(args_src, brace_idx, "{", "}")
+            closure_end = paren_start + b_end
+        except Unresolvable:
+            closure_end = paren_end
+        scopes.append((closure_start, closure_end, param_name, target_expr))
+    return scopes
+
+
+class Node(tuple):
+    def __new__(cls, line_no, kind, expr, chain, mods, foreach_target=None, foreach_param=None):
+        inst = super().__new__(cls, (line_no, kind, expr, chain, mods))
+        inst.foreach_target = foreach_target
+        inst.foreach_param = foreach_param
+        return inst
 
 
 # ---------------------------------------------------------------- node scan
@@ -359,6 +487,7 @@ def scan_nodes(path):
     """Yield (line_no, kind, expr, chain_text, mods) per Text/Button call."""
     with open(path, encoding="utf-8") as f:
         src = f.read()
+    scopes = find_foreach_scopes(src)
     results = []
     pos = 0
     while True:
@@ -388,7 +517,17 @@ def scan_nodes(path):
             continue
         chain, mods = scan_chain(src, argend)
         line_no = src.count("\n", 0, m.start()) + 1
-        results.append((line_no, kind, expr, chain, mods))
+
+        fe_target = None
+        fe_param = None
+        for s_start, s_end, p_name, t_expr in scopes:
+            if s_start <= m.start() < s_end:
+                if expr == p_name:
+                    fe_target = t_expr
+                    fe_param = p_name
+                    break
+
+        results.append(Node(line_no, kind, expr, chain, mods, fe_target, fe_param))
         pos = max(m.end(), argend)
     return results
 
@@ -479,7 +618,9 @@ def run_check(src_root, fonts_dir, chars_file, strict_family=False):
 
     for p in sorted(corpus.cj_files):
         rel = os.path.relpath(p, corpus.root)
-        for line_no, kind, expr, _chain, mods in scan_nodes(p):
+        for node in scan_nodes(p):
+            line_no, kind, expr, _chain, mods = node[:5]
+            fe_target = getattr(node, "foreach_target", None)
             total += 1
             loc = f"{rel}:{line_no}"
             # D2/D3: only this node's own top-level .fontFamily(...) counts
@@ -507,7 +648,7 @@ def run_check(src_root, fonts_dir, chars_file, strict_family=False):
             if raw.strip('"') in TRANSITIONAL:
                 trans_nodes[raw.strip('"')].append(loc)
             try:
-                strings = resolver.expr_strings(raw)
+                strings = resolver.expr_strings(raw, foreach_target=fe_target)
             except Unresolvable as exc:
                 add(f"{loc} {kind} ({expr[:120]}) unresolved expression on a "
                     f"sans node: {exc}")
@@ -720,6 +861,68 @@ def self_test():
            f"    list.add(BoardLabel(1.0, 2.0, 60.0, 12.0, \"驿{MISSING_GLYPH}\", 1, 12.0))\n"
            "}\n")
 
+    # c12: static function call with covered glyph -> 0
+    sd, cf = _mk_fixture(tmp, "c12_static_ok")
+    _write(sd, "page.cj",
+           "Text(ChapterCatalog.groupHeaderRight(0, 0)).fontFamily(Theme.sans)\n")
+    _write(sd, "catalog.cj",
+           "public class ChapterCatalog {\n"
+           "    public static func groupHeaderRight(a: Int64, b: Int64): String {\n"
+           f'        return "全通 {COVERED} 1 / 1"\n'
+           "    }\n"
+           "}\n")
+
+    # c13: static function call with missing glyph -> 1
+    sd, cf = _mk_fixture(tmp, "c13_static_missing")
+    _write(sd, "page.cj",
+           "Text(ChapterCatalog.groupHeaderRight(0, 0)).fontFamily(Theme.sans)\n")
+    _write(sd, "catalog.cj",
+           "public class ChapterCatalog {\n"
+           "    public static func groupHeaderRight(a: Int64, b: Int64): String {\n"
+           f'        return "全通 {MISSING_GLYPH} 1 / 1"\n'
+           "    }\n"
+           "}\n")
+
+    # c14: ForEach closure param traced to array with covered glyph -> 0
+    sd, cf = _mk_fixture(tmp, "c14_foreach_ok")
+    _write(sd, "page.cj",
+           "ForEach(\n"
+           "    this.chapterListFooterLines(),\n"
+           "    itemGenerator: { line: String, idx: Int64 =>\n"
+           "        Text(line)\n"
+           "            .fontFamily(Theme.sans)\n"
+           "    }\n"
+           ")\n")
+    _write(sd, "catalog.cj",
+           "public class ChapterCatalog {\n"
+           "    public static func chapterListFooterLines(): Array<String> {\n"
+           f'        return ["已通 {COVERED}"]\n'
+           "    }\n"
+           "}\n"
+           "func chapterListFooterLines(): Array<String> {\n"
+           "    return ChapterCatalog.chapterListFooterLines()\n"
+           "}\n")
+
+    # c15: ForEach closure param traced to array with missing glyph -> 1
+    sd, cf = _mk_fixture(tmp, "c15_foreach_missing")
+    _write(sd, "page.cj",
+           "ForEach(\n"
+           "    this.chapterListFooterLines(),\n"
+           "    itemGenerator: { line: String, idx: Int64 =>\n"
+           "        Text(line)\n"
+           "            .fontFamily(Theme.sans)\n"
+           "    }\n"
+           ")\n")
+    _write(sd, "catalog.cj",
+           "public class ChapterCatalog {\n"
+           "    public static func chapterListFooterLines(): Array<String> {\n"
+           f'        return ["已通 {MISSING_GLYPH}"]\n'
+           "    }\n"
+           "}\n"
+           "func chapterListFooterLines(): Array<String> {\n"
+           "    return ChapterCatalog.chapterListFooterLines()\n"
+           "}\n")
+
     # extra: helper returning Theme.serif -> serif node, glyphs not checked -> 0
     sd, cf = _mk_fixture(tmp, "t8_serif")
     _write(sd, "page.cj",
@@ -744,6 +947,10 @@ def self_test():
         ("c7", 1, "missing", False),
         ("c10_ok", 0, "family-wiring", False),
         ("c11_missing", 1, "missing", False),
+        ("c12_static_ok", 0, "family-wiring", False),
+        ("c13_static_missing", 1, "missing", False),
+        ("c14_foreach_ok", 0, "family-wiring", False),
+        ("c15_foreach_missing", 1, "missing", False),
         ("t8_serif", 0, None, False),
         ("t9_strict", 2, "family-wiring", True),
     ]
@@ -756,7 +963,7 @@ def self_test():
             cf = os.path.join(tmp, case_name, "chars.txt")
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
-                code = run_check(sd, HERE, cf, strict_family=strict)
+                code = run_check(sd, FONTS_DIR, cf, strict_family=strict)
             out = buf.getvalue()
             good = code == expected
             detail = ""
@@ -769,7 +976,7 @@ def self_test():
                 if "no fontFamily -> system font fallback" not in out:
                     good = False
                     detail = " (D2 message absent)"
-            if case_name in ("c1", "c6", "c7", "c11_missing"):
+            if case_name in ("c1", "c6", "c7", "c11_missing", "c13_static_missing", "c15_foreach_missing"):
                 if MISSING_GLYPH not in out:
                     good = False
                     detail = " (missing glyph not reported)"
@@ -789,7 +996,7 @@ def main(argv):
         print(__doc__)
         return 1
     src_root = args[0]
-    fonts_dir = HERE
+    fonts_dir = FONTS_DIR
     chars_file = DEFAULT_CHARS
     strict_family = "--strict-family" in args
     args = [a for a in args if a != "--strict-family"]

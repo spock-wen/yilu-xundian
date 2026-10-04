@@ -490,8 +490,7 @@ public class SummaryGeom {
 /*
  * 页脚 Sans 12 字符 advance 表 (12u 未取整宽度 = advance / unitsPerEm * 12.0)。
  * 字体来源: mobile/cjmp/fonts/YiluSans-Regular.ttf (unitsPerEm = 1000)
- * 生成/验证命令:
- *   python3 -c "
+ * 生成/验证方式 (Python TTFont / fontTools):
  *     from fontTools.ttLib import TTFont
  *     font = TTFont('mobile/cjmp/fonts/YiluSans-Regular.ttf')
  *     upem = font['head'].unitsPerEm
@@ -503,7 +502,6 @@ public class SummaryGeom {
  *         g = cmap[code]
  *         adv, _ = hmtx[g]
  *         print(f'{ch} (U+{code:04X}): {adv} -> {adv/upem*12.0:.4f}')
- *   "
  * 字符 advance 数据 (12u 未取整):
  *   ' ' (U+0020): advance=224 -> 2.688 u
  *   '/' (U+002F): advance=392 -> 4.704 u
