@@ -704,6 +704,10 @@ class EntryView {
         return ChapterCatalog.chapterListFooterText(this.chapterIndex, this.cleared, this.levels)
     }
 
+    func chapterListFooterLines(): Array<String> {
+        return ChapterCatalog.chapterListFooterLines(this.chapterIndex, this.cleared, this.levels, this.winW)
+    }
+
     func chapterOpenFooter(): String {
         let opened = ChapterCatalog.openCount(this.cleared)
         let locked = ChapterCatalog.count() - opened
@@ -1578,12 +1582,24 @@ class EntryView {
                 .width(100.percent)
                 .layoutWeight(1)
                 /* 共10驿 — sizes stay ${item.cols}×${item.rows} from levels.json */
-                Text(this.chapterListFooter())
-                    .fontSize(12)
-                    .fontColor(Theme.inkMuted)
-                    .fontFamily(this.sansFamily())
-                    .margin(top: 8, bottom: 8)
-                    .width(100.percent)
+                Column {
+                    ForEach(
+                        this.chapterListFooterLines(),
+                        itemGenerator: {line: String, index: Int64 =>
+                            Text(line)
+                                .fontSize(12)
+                                .lineHeight(16)
+                                .height(16)
+                                .fontColor(Theme.inkMuted)
+                                .fontFamily(this.sansFamily())
+                                .maxLines(1)
+                                .width(100.percent)
+                        }
+                    )
+                }
+                .width(100.percent)
+                .alignItems(HorizontalAlign.Start)
+                .margin(top: 8, bottom: 8)
             } else if (this.screen == 6) {
                 /* Skin-only preview for locked 05–10. No boards, no gameplay. */
                 Stack {

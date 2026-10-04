@@ -2972,6 +2972,110 @@ func j28SummaryTests(ctx: Ctx): Unit {
     println("J28 summary done checks=${ctx.checks - c0}")
 }
 
+/* ===== J29 章内驿程页脚(两行规则 + 定稿文案 + 数据驱动 N×N)自测 ===== */
+func j29FooterTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
+    let c0 = ctx.checks
+
+    let expectedFooters: Array<String> = [
+        "已通 10 · 本章全通 · 下一章 平原 · 共10驿 · 6×6",
+        "已通 10 · 本章全通 · 下一章 徐州 · 共10驿 · 6×6",
+        "已通 10 · 本章全通 · 下一章 吕布 · 共10驿 · 6×6",
+        "已通 10 · 本章全通 · 下一章 投袁 · 共10驿 · 7×7",
+        "已通 10 · 本章全通 · 下一章 荆州 · 共10驿 · 7×7",
+        "已通 10 · 本章全通 · 下一章 赤壁 · 共10驿 · 7×7",
+        "已通 10 · 本章全通 · 下一章 入蜀 · 共10驿 · 7×7",
+        "已通 10 · 本章全通 · 下一章 汉中南中 · 共10驿 · 7×7",
+        "已通 10 · 本章全通 · 下一章 北伐 · 共10驿 · 7×7",
+        "已通 10 · 本章全通 · 驿路终章 · 共10驿 · 7×7"
+    ]
+
+    var i: Int64 = 0
+    while (i < 10) {
+        let ch = ChapterCatalog.byIndex(i)
+        let cleared = ch.levelStart + 10
+        let full = ChapterCatalog.chapterListFooterText(i, cleared, levels)
+
+        // 1. 断言 N×N
+        if (i < 3) {
+            ctx.ck(j26StrContains(full, "6×6"), "J29 ch${i + 1} footer contains 6×6: '${full}'")
+        } else {
+            ctx.ck(j26StrContains(full, "7×7"), "J29 ch${i + 1} footer contains 7×7: '${full}'")
+        }
+
+        // 2. 断言 chapterListFooterText 在整章全通时逐章等于定稿文案
+        ctx.ck(full == expectedFooters[i], "J29 ch${i + 1} footer='${full}' want='${expectedFooters[i]}'")
+
+        // 3. 断言 winW=320, 360, 411.43
+        let lines320 = ChapterCatalog.chapterListFooterLines(i, cleared, levels, 320.0)
+        let lines360 = ChapterCatalog.chapterListFooterLines(i, cleared, levels, 360.0)
+        let lines411 = ChapterCatalog.chapterListFooterLines(i, cleared, levels, 411.43)
+
+        if (i < 9) {
+            ctx.ck(lines320.size == 2, "J29 ch${i + 1} winW=320 lines.size=${lines320.size} want=2")
+            if (lines320.size == 2) {
+                ctx.ck(lines320[0] == "已通 10 · 本章全通", "J29 ch${i + 1} winW=320 line1='${lines320[0]}' want='已通 10 · 本章全通'")
+                ctx.ck(j26StrStartsWith(lines320[1], "下一章 "), "J29 ch${i + 1} winW=320 line2 startsWith '下一章 ': '${lines320[1]}'")
+            }
+        } else {
+            ctx.ck(lines320.size == 1, "J29 ch10 winW=320 lines.size=${lines320.size} want=1")
+            if (lines320.size == 1) {
+                ctx.ck(lines320[0] == expectedFooters[9], "J29 ch10 winW=320 line1='${lines320[0]}'")
+            }
+        }
+
+        ctx.ck(lines360.size == 1, "J29 ch${i + 1} winW=360 lines.size=${lines360.size} want=1")
+        ctx.ck(lines411.size == 1, "J29 ch${i + 1} winW=411.43 lines.size=${lines411.size} want=1")
+
+        i = i + 1
+    }
+
+    // 4. 第一行及第二行宽度断言
+    let ch1Lines = ChapterCatalog.chapterListFooterLines(0, 10, levels, 320.0)
+    let ch8Lines = ChapterCatalog.chapterListFooterLines(7, 80, levels, 320.0)
+    let wL1 = footerTextWidth(ch1Lines[0])
+    let wCh1L2 = footerTextWidth(ch1Lines[1])
+    let wCh8L2 = footerTextWidth(ch8Lines[1])
+
+    ctx.ck(absF(wL1 - 105.38) < 0.1 || absF(wL1 - 107.05) < 0.1,
+        "J29 line1 width=${wL1} want=105.38±0.1 (or 107.05±0.1)")
+    ctx.ck(absF(wCh1L2 - 160.08) < 0.1 || absF(wCh1L2 - 162.67) < 0.1,
+        "J29 ch1 line2 width=${wCh1L2} want=160.08±0.1 (or 162.67±0.1)")
+    ctx.ck(absF(wCh8L2 - 184.08) < 0.1 || absF(wCh8L2 - 187.05) < 0.1,
+        "J29 ch8 line2 width=${wCh8L2} want=184.08±0.1 (or 187.05±0.1)")
+
+    // 5. 三个整串宽度断言 (282.84 / 306.84 / 268.15 ±0.1)
+    let wCh1Full = footerTextWidth(expectedFooters[0])
+    let wCh8Full = footerTextWidth(expectedFooters[7])
+    let wCh10Full = footerTextWidth(expectedFooters[9])
+    ctx.ck(absF(wCh1Full - 282.84) < 0.1, "J29 ch1 full width=${wCh1Full} want=282.84±0.1")
+    ctx.ck(absF(wCh8Full - 306.84) < 0.1, "J29 ch8 full width=${wCh8Full} want=306.84±0.1")
+    ctx.ck(absF(wCh10Full - 268.15) < 0.1, "J29 ch10 full width=${wCh10Full} want=268.15±0.1")
+
+    // 6. 扫描 100 关 × winW ∈ {320, 360, 411.43} 统计「当前」变体溢出
+    var overflowCases: Int64 = 0
+    let sweepWinWs: Array<Float64> = [320.0, 360.0, 411.43]
+    var clr: Int64 = 0
+    while (clr < 100) {
+        let chId = ChapterCatalog.chapterIdForLevel(clr)
+        let txt = ChapterCatalog.chapterListFooterText(chId, clr, levels)
+        let ch = ChapterCatalog.byIndex(chId)
+        let n = ChapterCatalog.clearedCount(chId, clr)
+        let isAllClear = (ch.levelCount > 0 && n >= ch.levelCount)
+        if (!isAllClear) {
+            let w = footerTextWidth(txt)
+            for (winW in sweepWinWs) {
+                if (w > winW - 40.0) {
+                    overflowCases = overflowCases + 1
+                }
+            }
+        }
+        clr = clr + 1
+    }
+
+    println("J29 footer done checks=${ctx.checks - c0}")
+    println("J29 current-variant overflow cases=${overflowCases}")
+}
+
 /* ===== P4 DUMP:按场景文件渲染 app 各板层 JSON(与设计稿 PNG 对拍,box-only) ===== */
 
 func dumpBool(v: Bool): String {
@@ -3414,6 +3518,8 @@ main(args: Array<String>): Int64 {
     j26ChapterTextTests(levels, ctx)
     /* J28 all-clear summary card copy/geom checks. */
     j28SummaryTests(ctx)
+    /* J29 chapter list footer two-line rules and copy checks. */
+    j29FooterTests(levels, ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit} fallback=${ctx.toastFallback}")
     ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")

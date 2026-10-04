@@ -325,6 +325,35 @@ public class ChapterCatalog {
         return "已通 ${n} · 当前${curName} · 共10驿${dims}"
     }
 
+    public static func chapterListFooterLines(
+        chapterId: Int64,
+        cleared: Int64,
+        levels: ArrayList<LevelDef>,
+        winW: Float64
+    ): Array<String> {
+        let full = ChapterCatalog.chapterListFooterText(chapterId, cleared, levels)
+        let ch = ChapterCatalog.byIndex(chapterId)
+        let n = ChapterCatalog.clearedCount(chapterId, cleared)
+        let isAllClear = (ch.levelCount > 0 && n >= ch.levelCount)
+        if (isAllClear && footerNeedsTwoLines(full, winW)) {
+            var dims = ""
+            if (ch.levelStart < levels.size) {
+                let board = levels[ch.levelStart]
+                dims = " · ${board.cols}×${board.rows}"
+            }
+            let l1 = "已通 ${n} · 本章全通"
+            var l2 = ""
+            if (chapterId < ChapterCatalog.count() - 1) {
+                let nextCh = ChapterCatalog.byIndex(chapterId + 1)
+                l2 = "下一章 ${nextCh.name} · 共10驿${dims}"
+            } else {
+                l2 = "驿路终章 · 共10驿${dims}"
+            }
+            return [l1, l2]
+        }
+        return [full]
+    }
+
     public static func groupState(chapterId: Int64, cleared: Int64): Int64 {
         let ch = ChapterCatalog.byIndex(chapterId)
         if (cleared < ch.levelStart) {
@@ -457,3 +486,57 @@ public class SummaryGeom {
     public static func sealLineStep(): Float64 { return 1.02 } /* 字间距系数 */
     public static func sealAlpha(): Float64 { return 0.92 } /* 235/255 */
 }
+
+/*
+ * 页脚 Sans 12 字符 advance 表 (12u 未取整宽度 = advance / unitsPerEm * 12.0)。
+ * 字体来源: mobile/cjmp/fonts/YiluSans-Regular.ttf (unitsPerEm = 1000)
+ * 生成/验证命令:
+ *   python3 -c "
+ *     from fontTools.ttLib import TTFont
+ *     font = TTFont('mobile/cjmp/fonts/YiluSans-Regular.ttf')
+ *     upem = font['head'].unitsPerEm
+ *     hmtx = font['hmtx']
+ *     cmap = font.getBestCmap()
+ *     chars = '已通 0123456789·本章全下一平原徐州吕布投袁荆州赤壁入蜀汉中南北伐驿路终共×/当前'
+ *     for ch in sorted(set(chars)):
+ *         code = ord(ch)
+ *         g = cmap[code]
+ *         adv, _ = hmtx[g]
+ *         print(f'{ch} (U+{code:04X}): {adv} -> {adv/upem*12.0:.4f}')
+ *   "
+ * 字符 advance 数据 (12u 未取整):
+ *   ' ' (U+0020): advance=224 -> 2.688 u
+ *   '/' (U+002F): advance=392 -> 4.704 u
+ *   '0'..'9' (U+0030..U+0039): advance=555 -> 6.66 u
+ *   '·' (U+00B7): advance=1000 -> 12.0 u
+ *   '×' (U+00D7): advance=1000 -> 12.0 u
+ *   所有中文字符及全角标点: advance=1000 -> 12.0 u
+ *   不在表中的字符缺省按 12.0 u 计
+ * 校验值 (整串 12u 真实 advance 之和):
+ *   ch1 (涿郡→平原, 6×6): 282.84 u
+ *   ch8 (入蜀→汉中南中, 7×7): 306.84 u
+ *   ch10 (北伐驿路终章, 7×7): 268.152 u (~268.15 u)
+ */
+func footerRuneAdvance(r: Rune): Float64 {
+    if (r == r' ') {
+        return 2.688
+    } else if (r == r'/') {
+        return 4.704
+    } else if (r >= r'0' && r <= r'9') {
+        return 6.66
+    }
+    return 12.0
+}
+
+public func footerTextWidth(s: String): Float64 {
+    var total: Float64 = 0.0
+    for (r in s.toRuneArray()) {
+        total += footerRuneAdvance(r)
+    }
+    return total
+}
+
+public func footerNeedsTwoLines(text: String, winW: Float64): Bool {
+    return footerTextWidth(text) > winW - 40.0
+}
+

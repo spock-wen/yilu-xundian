@@ -18,6 +18,8 @@ Checks:
   i) (B7) summary card: @Builder summaryCard wired via SummaryCopy.summaryVisible, copy routed
      through SummaryCopy (no 驿路全通/十章皆通/Text("全通") literals in index.cj), geometry via
      SummaryGeom, border before borderRadius inside the builder
+  j) (J13) chapter list footer: index.cj references chapterListFooterLines, single
+     Text(this.chapterListFooter()) removed
 """
 import argparse
 import json
@@ -426,6 +428,15 @@ def check_i(index_cj_text):
     return True, "summaryCard wired via SummaryCopy.summaryVisible, copy/geometry centralized, border before borderRadius"
 
 
+def check_j(index_cj_text):
+    """j) (J13) chapterListFooterLines in index.cj, single Text(this.chapterListFooter()) removed."""
+    if "chapterListFooterLines" not in index_cj_text:
+        return False, "index.cj missing 'chapterListFooterLines'"
+    if "Text(this.chapterListFooter())" in index_cj_text:
+        return False, "index.cj still contains single Text(this.chapterListFooter()) footer"
+    return True, "chapterListFooterLines present and single Text(this.chapterListFooter()) removed"
+
+
 def selftest():
     # 1. Test check_a violation detection
     bad_a_lines = [
@@ -569,6 +580,19 @@ def selftest():
     ))
     assert not ok_i_order and "before" in msg, f"selftest i: expected order failure, got {msg}"
 
+    # 5. Test check_j chapter list footer lines
+    good_j = "func chapterListFooterLines(): Array<String> {}\nColumn { ForEach(this.chapterListFooterLines()) }"
+    ok_j_good, msg = check_j(good_j)
+    assert ok_j_good, f"selftest j: expected pass, got {msg}"
+
+    bad_j_missing = "func other() {}"
+    ok_j_missing, msg = check_j(bad_j_missing)
+    assert not ok_j_missing and "missing" in msg, f"selftest j: expected missing failure, got {msg}"
+
+    bad_j_single = "func chapterListFooterLines(): Array<String> {}\nText(this.chapterListFooter())"
+    ok_j_single, msg = check_j(bad_j_single)
+    assert not ok_j_single and "single Text" in msg, f"selftest j: expected single Text failure, got {msg}"
+
     print("selftest OK")
     sys.exit(0)
 
@@ -613,6 +637,7 @@ def main():
         ("g) border_radius_values", lambda: check_g(index_cj_lines)),
         ("h) toast_fallback_outside_scroll", lambda: check_h(index_cj_text)),
         ("i) summary_card_wiring", lambda: check_i(index_cj_text)),
+        ("j) chapter_list_footer_lines", lambda: check_j(index_cj_text)),
     ]
 
     all_passed = True
