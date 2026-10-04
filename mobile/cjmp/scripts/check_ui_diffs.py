@@ -20,8 +20,11 @@ Checks:
      SummaryGeom, border before borderRadius inside the builder
   j) (J13) chapter list footer: index.cj references chapterListFooterLines, single
      Text(this.chapterListFooter()) removed
+  k) (J18) Theme.sansBold / sansBoldFamily() in lib/*.cj only at home screen Text('章节')
+     (exactly 1 .fontFamily(this.sansBoldFamily())), YiluSans-Bold.ttf sha256 prefix 7e46ee679e9d
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -437,6 +440,71 @@ def check_j(index_cj_text):
     return True, "chapterListFooterLines present and single Text(this.chapterListFooter()) removed"
 
 
+def check_k(lib_dir, fonts_dir):
+    """k) (J18) Theme.sansBold / sansBoldFamily() in lib/*.cj only at home screen Text('章节')
+    (exactly 1 .fontFamily(this.sansBoldFamily())), YiluSans-Bold.ttf sha256 prefix 7e46ee679e9d."""
+    bold_path = os.path.join(fonts_dir, "YiluSans-Bold.ttf")
+    if not os.path.isfile(bold_path):
+        return False, f"YiluSans-Bold.ttf not found at {bold_path}"
+
+    h = hashlib.sha256()
+    with open(bold_path, "rb") as f:
+        h.update(f.read())
+    digest = h.hexdigest()
+    if not digest.startswith("7e46ee679e9d"):
+        return False, f"YiluSans-Bold.ttf sha256={digest} does not start with 7e46ee679e9d"
+
+    sans_bold_call_count = 0
+    errors = []
+
+    for fn in sorted(os.listdir(lib_dir)):
+        if not fn.endswith(".cj"):
+            continue
+        fp = os.path.join(lib_dir, fn)
+        with open(fp, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        for idx, line in enumerate(lines):
+            lineno = idx + 1
+            if ".fontFamily(this.sansBoldFamily())" in line or ".fontFamily(sansBoldFamily())" in line:
+                sans_bold_call_count += 1
+                found_target = False
+                for prev in range(idx - 1, max(-1, idx - 10), -1):
+                    if 'Text("章节")' in lines[prev]:
+                        found_target = True
+                        break
+                    if lines[prev].strip().startswith("Column") or lines[prev].strip().startswith("Row"):
+                        break
+                if not found_target:
+                    errors.append(f"{fn}:{lineno} .fontFamily(this.sansBoldFamily()) not attached to Text(\"章节\")")
+
+            if "Theme.sansBold" in line:
+                is_allowed = False
+                if fn == "theme.cj" and "public static const sansBold" in line:
+                    is_allowed = True
+                elif fn == "fonts.cj" and "Theme.sansBold" in line:
+                    is_allowed = True
+                elif fn == "index.cj" and "return Theme.sansBold" in line:
+                    is_allowed = True
+                if not is_allowed:
+                    errors.append(f"{fn}:{lineno} unexpected Theme.sansBold occurrence: {line.strip()}")
+
+            if "sansBoldFamily" in line:
+                is_allowed = False
+                if fn == "index.cj" and ("func sansBoldFamily" in line or "fontFamily" in line):
+                    is_allowed = True
+                if not is_allowed:
+                    errors.append(f"{fn}:{lineno} unexpected sansBoldFamily occurrence: {line.strip()}")
+
+    if sans_bold_call_count != 1:
+        return False, f"expected exactly 1 .fontFamily(this.sansBoldFamily()), found {sans_bold_call_count}"
+
+    if errors:
+        return False, "Theme.sansBold / sansBoldFamily() violations:\n    " + "\n    ".join(errors)
+
+    return True, f"YiluSans-Bold.ttf (7e46ee679e9d) OK, .fontFamily(this.sansBoldFamily()) exactly 1 on Text('章节')"
+
+
 def selftest():
     # 1. Test check_a violation detection
     bad_a_lines = [
@@ -593,6 +661,71 @@ def selftest():
     ok_j_single, msg = check_j(bad_j_single)
     assert not ok_j_single and "single Text" in msg, f"selftest j: expected single Text failure, got {msg}"
 
+    # 6. Test check_k sans-bold font and usage
+    import shutil
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_lib = os.path.join(tmpdir, "lib")
+        tmp_fonts = os.path.join(tmpdir, "fonts")
+        os.makedirs(tmp_lib)
+        os.makedirs(tmp_fonts)
+
+        real_bold = os.path.join(CJMP_DIR, "fonts", "YiluSans-Bold.ttf")
+        dummy_bold = os.path.join(tmp_fonts, "YiluSans-Bold.ttf")
+        shutil.copyfile(real_bold, dummy_bold)
+
+        with open(os.path.join(tmp_lib, "theme.cj"), "w", encoding="utf-8") as f:
+            f.write('public static const sansBold: String = "YiluSansBold"\n')
+        with open(os.path.join(tmp_lib, "fonts.cj"), "w", encoding="utf-8") as f:
+            f.write('let nameE = LibC.mallocCString(Theme.sansBold)\n')
+        with open(os.path.join(tmp_lib, "index.cj"), "w", encoding="utf-8") as f:
+            f.write('func sansBoldFamily(): String { return Theme.sansBold }\n'
+                    'Column {\n'
+                    '    Text("章节")\n'
+                    '        .fontFamily(this.sansBoldFamily())\n'
+                    '}\n')
+
+        ok_k_good, msg = check_k(tmp_lib, tmp_fonts)
+        assert ok_k_good, f"selftest k: expected pass, got {msg}"
+
+        # Negative 1: font file missing
+        ok_k_nofont, msg = check_k(tmp_lib, os.path.join(tmpdir, "nonexistent"))
+        assert not ok_k_nofont and "not found" in msg, f"selftest k: expected font missing failure, got {msg}"
+
+        # Negative 2: wrong sha256
+        with open(dummy_bold, "wb") as f:
+            f.write(b"bad font data")
+        ok_k_badsha, msg = check_k(tmp_lib, tmp_fonts)
+        assert not ok_k_badsha and "sha256" in msg, f"selftest k: expected bad sha failure, got {msg}"
+        shutil.copyfile(real_bold, dummy_bold)
+
+        # Negative 3: extra fontFamily call
+        with open(os.path.join(tmp_lib, "index.cj"), "a", encoding="utf-8") as f:
+            f.write('Text("章节").fontFamily(this.sansBoldFamily())\n')
+        ok_k_extra, msg = check_k(tmp_lib, tmp_fonts)
+        assert not ok_k_extra and "expected exactly 1" in msg, f"selftest k: expected extra call failure, got {msg}"
+
+        # Negative 4: used on non-"章节" Text
+        with open(os.path.join(tmp_lib, "index.cj"), "w", encoding="utf-8") as f:
+            f.write('func sansBoldFamily(): String { return Theme.sansBold }\n'
+                    'Column {\n'
+                    '    Text("其他")\n'
+                    '        .fontFamily(this.sansBoldFamily())\n'
+                    '}\n')
+        ok_k_wrong_text, msg = check_k(tmp_lib, tmp_fonts)
+        assert not ok_k_wrong_text and "not attached to Text" in msg, f"selftest k: expected wrong text failure, got {msg}"
+
+        # Negative 5: unexpected Theme.sansBold in other file
+        with open(os.path.join(tmp_lib, "index.cj"), "w", encoding="utf-8") as f:
+            f.write('func sansBoldFamily(): String { return Theme.sansBold }\n'
+                    'Column {\n'
+                    '    Text("章节")\n'
+                    '        .fontFamily(this.sansBoldFamily())\n'
+                    '}\n')
+        with open(os.path.join(tmp_lib, "other.cj"), "w", encoding="utf-8") as f:
+            f.write('let x = Theme.sansBold\n')
+        ok_k_other, msg = check_k(tmp_lib, tmp_fonts)
+        assert not ok_k_other and "unexpected Theme.sansBold" in msg, f"selftest k: expected other file failure, got {msg}"
+
     print("selftest OK")
     sys.exit(0)
 
@@ -610,6 +743,7 @@ def main():
     repo_root = os.path.abspath(args.repo_root)
     cjmp_dir = os.path.abspath(args.cjmp)
     lib_dir = os.path.join(cjmp_dir, "lib")
+    fonts_dir = os.path.join(cjmp_dir, "fonts")
     index_cj_path = os.path.join(lib_dir, "index.cj")
     chapter_cj_path = os.path.join(lib_dir, "chapter.cj")
     boards_locked_dir = os.path.join(repo_root, "boards-locked")
@@ -638,6 +772,7 @@ def main():
         ("h) toast_fallback_outside_scroll", lambda: check_h(index_cj_text)),
         ("i) summary_card_wiring", lambda: check_i(index_cj_text)),
         ("j) chapter_list_footer_lines", lambda: check_j(index_cj_text)),
+        ("k) sans_bold_font_and_usage", lambda: check_k(lib_dir, fonts_dir)),
     ]
 
     all_passed = True

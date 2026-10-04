@@ -2,13 +2,15 @@
 """check_fonts.py — strict per-family glyph coverage check for CJMP (Keels 0.2.2).
 
 Families:
-  serif  → fonts/YiluSerif-Regular.otf + fonts/YiluSerif-Bold.otf
-  sans   → fonts/YiluSans-Regular.otf  + fonts/YiluSans-Medium.otf
+  serif     → fonts/YiluSerif-Regular.otf + fonts/YiluSerif-Bold.otf
+  sans      → fonts/YiluSans-Regular.ttf  + fonts/YiluSans-Medium.ttf
+  sans-bold → fonts/YiluSans-Bold.ttf
 
 Font family markers parsed from mobile/cjmp/lib/*.cj:
-  serif  ← serifFamily()  / serifBoldFamily()  / Theme.serif  / Theme.serifBold
-  sans   ← sansFamily()   / sansMediumFamily() / Theme.sansRegular / Theme.sansMedium
-             / Theme.sans  (alias for sansRegular)
+  serif     ← serifFamily()    / serifBoldFamily()  / Theme.serif  / Theme.serifBold
+  sans      ← sansFamily()     / sansMediumFamily() / Theme.sansRegular / Theme.sansMedium
+              / Theme.sans     (alias for sansRegular)
+  sans-bold ← sansBoldFamily() / Theme.sansBold
 
 For each Text(<arg>) or Button(<arg>) call, the chained .fontFamily(...) that
 follows (before the next component call) determines which family that text
@@ -64,6 +66,7 @@ SANS_FILES = [
     FONTS_DIR / "YiluSans-Regular.ttf",
     FONTS_DIR / "YiluSans-Medium.ttf",
 ]
+SANS_BOLD_FILE = FONTS_DIR / "YiluSans-Bold.ttf"
 
 # ---------------------------------------------------------------------------
 # Dynamic data charset
@@ -100,7 +103,7 @@ def build_dynamic_charset() -> set:
 # ---------------------------------------------------------------------------
 
 def classify_family(marker: str) -> str:
-    """Return 'serif' or 'sans' for a recognised fontFamily marker, else ''.
+    """Return 'serif', 'sans', or 'sans-bold' for a recognised fontFamily marker, else ''.
 
     Marker may be a bare method call ('serifFamily()', possibly prefixed
     with 'this.') or a Theme constant ('Theme.serif' etc.).
@@ -115,12 +118,16 @@ def classify_family(marker: str) -> str:
             return "serif"
         if name in ("sansFamily", "sansMediumFamily"):
             return "sans"
+        if name == "sansBoldFamily":
+            return "sans-bold"
         return ""
 
     if marker in ("Theme.serif", "Theme.serifBold"):
         return "serif"
     if marker in ("Theme.sansRegular", "Theme.sansMedium", "Theme.sans"):
         return "sans"
+    if marker == "Theme.sansBold":
+        return "sans-bold"
     return ""
 
 
@@ -260,6 +267,7 @@ def main() -> int:
     # ------------------------------------------------------------------
     serif_missing = [p for p in SERIF_FILES if not p.exists()]
     sans_missing = [p for p in SANS_FILES if not p.exists()]
+    sans_bold_missing = [SANS_BOLD_FILE] if not SANS_BOLD_FILE.exists() else []
 
     all_sans_missing = len(sans_missing) == len(SANS_FILES)
     any_sans_missing = len(sans_missing) > 0
@@ -276,6 +284,12 @@ def main() -> int:
         if args.pending_sans_ok:
             print("--pending-sans-ok ignored: sans fonts are delivered")
         for p in sans_missing:
+            msg = f"MISSING_FONT_FILE {p.relative_to(REPO)}"
+            print(msg)
+            failures.append(msg)
+
+    if sans_bold_missing:
+        for p in sans_bold_missing:
             msg = f"MISSING_FONT_FILE {p.relative_to(REPO)}"
             print(msg)
             failures.append(msg)
@@ -305,12 +319,21 @@ def main() -> int:
         return dynamic_charset
 
     required = {"serif": set(), "sans": set()}
+    sans_bold_chars = set()
     no_family_errors = []
 
     for use in all_uses:
         fam = use["family"]
         if fam == "MISSING":
             no_family_errors.append(use)
+            continue
+        if fam == "sans-bold":
+            if use["is_dynamic"] or use["literal_chars"] is None:
+                msg = f"DYNAMIC_SANS_BOLD_NOT_ALLOWED {use['file']}:{use['lineno']} — dynamic expression not allowed with sans-bold: {use['arg_text'][:60]}"
+                print(msg)
+                failures.append(msg)
+            else:
+                sans_bold_chars.update(use["literal_chars"])
             continue
         if fam not in required:
             continue
@@ -407,6 +430,19 @@ def main() -> int:
                     failures.append(f"sans coverage: {len(sans_bad)} missing glyphs")
                 else:
                     print(f"sans: PASS ({sans_count} chars covered)")
+
+        # Sans-Bold (check YiluSans-Bold.ttf coverage for literal chars)
+        if not sans_bold_missing:
+            sans_bold_count = len(sans_bold_chars)
+            print(f"sans-bold: {sans_bold_count} required chars")
+            sans_bold_bad = check_family_coverage("sans-bold", [SANS_BOLD_FILE], sans_bold_chars)
+            if sans_bold_bad:
+                failures.append(f"sans-bold coverage: {len(sans_bold_bad)} missing glyphs")
+            else:
+                print(f"sans-bold: PASS ({sans_bold_count} chars covered)")
+        else:
+            names = SANS_BOLD_FILE.name
+            print(f"sans-bold: NOT CHECKED (missing font file: {names})")
 
     # ------------------------------------------------------------------
     # Result

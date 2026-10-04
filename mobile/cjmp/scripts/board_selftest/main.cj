@@ -3159,6 +3159,44 @@ func j29FooterTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
     println("J29 current-variant overflow cases=${overflowCases}")
 }
 
+/* ===== J30 首页「章节 · 驿程」点击区几何自测 (SPEC_A1_ADDENDUM §3.3 & RULINGS_ABF56B0) ===== */
+func j30HomeLinkTests(ctx: Ctx): Unit {
+    let c0 = ctx.checks
+
+    // 1. 章节块 [−68, −4]
+    ctx.ck(HomeLinkGeom.chapterX0() == -68, "J30 chapterX0=${HomeLinkGeom.chapterX0()} want=-68")
+    ctx.ck(HomeLinkGeom.chapterX1() == -4, "J30 chapterX1=${HomeLinkGeom.chapterX1()} want=-4")
+
+    // 2. 驿程块 [8, 72]
+    ctx.ck(HomeLinkGeom.yichengX0() == 8, "J30 yichengX0=${HomeLinkGeom.yichengX0()} want=8")
+    ctx.ck(HomeLinkGeom.yichengX1() == 72, "J30 yichengX1=${HomeLinkGeom.yichengX1()} want=72")
+
+    // 3. 两块不相交 (chapterX1 < yichengX0, 且中间空档为 gap)
+    ctx.ck(HomeLinkGeom.chapterX1() < HomeLinkGeom.yichengX0(), "J30 blocks do not intersect: ${HomeLinkGeom.chapterX1()} < ${HomeLinkGeom.yichengX0()}")
+    ctx.ck(HomeLinkGeom.yichengX0() - HomeLinkGeom.chapterX1() == HomeLinkGeom.gap, "J30 gap=${HomeLinkGeom.yichengX0() - HomeLinkGeom.chapterX1()} want=${HomeLinkGeom.gap}")
+    ctx.ck(HomeLinkGeom.gap == 12, "J30 gap=${HomeLinkGeom.gap} want=12")
+
+    // 4. 各 64×44
+    ctx.ck(HomeLinkGeom.chapterX1() - HomeLinkGeom.chapterX0() == HomeLinkGeom.blockW, "J30 chapter width=${HomeLinkGeom.chapterX1() - HomeLinkGeom.chapterX0()} want=${HomeLinkGeom.blockW}")
+    ctx.ck(HomeLinkGeom.yichengX1() - HomeLinkGeom.yichengX0() == HomeLinkGeom.blockW, "J30 yicheng width=${HomeLinkGeom.yichengX1() - HomeLinkGeom.yichengX0()} want=${HomeLinkGeom.blockW}")
+    ctx.ck(HomeLinkGeom.blockW == 64, "J30 blockW=${HomeLinkGeom.blockW} want=64")
+    ctx.ck(HomeLinkGeom.blockH == 44, "J30 blockH=${HomeLinkGeom.blockH} want=44")
+
+    // 5. 整行相对中线偏移 +2
+    let contentLeft = HomeLinkGeom.chapterX0()
+    let contentRight = HomeLinkGeom.yichengX1()
+    let contentCenter = Float64(contentLeft + contentRight) / 2.0
+    ctx.ck(contentCenter == 2.0, "J30 contentCenter=${contentCenter} want=2.0")
+    ctx.ck(HomeLinkGeom.centerShift == 2.0, "J30 centerShift=${HomeLinkGeom.centerShift} want=2.0")
+    ctx.ck(HomeLinkGeom.rowMarginLeft == 4, "J30 rowMarginLeft=${HomeLinkGeom.rowMarginLeft} want=4")
+
+    // 6. 下划线宽 32 = 2×16
+    ctx.ck(HomeLinkGeom.underlineW == 32, "J30 underlineW=${HomeLinkGeom.underlineW} want=32")
+    ctx.ck(HomeLinkGeom.underlineW == 2 * 16, "J30 underlineW=2*16")
+
+    println("J30 home links done checks=${ctx.checks - c0}")
+}
+
 /* ===== P4 DUMP:按场景文件渲染 app 各板层 JSON(与设计稿 PNG 对拍,box-only) ===== */
 
 func dumpBool(v: Bool): String {
@@ -3605,6 +3643,8 @@ main(args: Array<String>): Int64 {
     j28SummaryTests(ctx)
     /* J29 chapter list footer two-line rules and copy checks. */
     j29FooterTests(levels, ctx)
+    /* J30 home screen links geometry checks. */
+    j30HomeLinkTests(ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit} fallback=${ctx.toastFallback}")
     ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")

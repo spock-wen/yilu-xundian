@@ -487,6 +487,37 @@ public class SummaryGeom {
     public static func sealAlpha(): Float64 { return 0.92 } /* 235/255 */
 }
 
+/* 首页「章节 · 驿程」文字链与点击区几何 (SPEC_A1_ADDENDUM §3.3 & RULINGS_ABF56B0)。
+   推导 (相对屏幕中线 x=0):
+   - 内容总宽 = blockW(64) + gap(12) + blockW(64) = 140
+   - 无偏移居中为 [-70, +70], 整行向右偏移 +2 (centerShift=2.0) 得到:
+     章节块 [chapterX0, chapterX1] = [-68, -4]
+     圆点空档 [-4, +8], 4×4 圆点居中于 dotCenterX = +2
+     驿程块 [yichengX0, yichengX1] = [+8, +72]
+   - 外层 Column 居中机制下, Row 设置 rowMarginLeft = 4 (排版槽 144 居中于 [-72, +72]),
+     使内容整体中心落在 +2, 各块精准对应上述区间, 两块互不相交。 */
+public class HomeLinkGeom {
+    public static const blockW: Int64 = 64
+    public static const blockH: Int64 = 44
+    public static const gap: Int64 = 12
+    public static const dotSize: Int64 = 4
+    public static const dotRadius: Int64 = 2
+    public static const dotMarginLR: Int64 = 4
+    public static const underlineW: Int64 = 32 // 2 chars * 16 fontSize
+    public static const underlineH: Float64 = 1.2
+    public static const underlineMarginTop: Int64 = 2
+    public static const centerShift: Float64 = 2.0
+    public static const rowMarginLeft: Int64 = 4 // 2 * centerShift = 4 to shift centered 140w content right by 2
+    public static const rowMarginTop: Int64 = 2
+
+    public static func chapterX0(): Int64 { return -68 }
+    public static func chapterX1(): Int64 { return -4 }
+    public static func yichengX0(): Int64 { return 8 }
+    public static func yichengX1(): Int64 { return 72 }
+    public static func dotCenterX(): Float64 { return 2.0 }
+    public static func rowShift(): Float64 { return 2.0 }
+}
+
 /*
  * 页脚 Sans 12 字符 advance 表 (12u 未取整宽度 = advance / unitsPerEm * 12.0)。
  * 字体来源: mobile/cjmp/fonts/YiluSans-Regular.ttf (unitsPerEm = 1000)

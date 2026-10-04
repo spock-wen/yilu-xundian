@@ -5,7 +5,7 @@
 # Copies only PNGs referenced by code (rawImg("name") in mobile/cjmp/lib/*.cj).
 # Removes stale unreferenced PNGs from the project rawfile dirs.
 # Fonts: always copies YiluSerif-Regular.otf + YiluSerif-Bold.otf;
-#        also copies YiluSans-Regular.otf and YiluSans-Medium.otf if present.
+#        also copies YiluSans-Regular.ttf, YiluSans-Medium.ttf, and YiluSans-Bold.ttf if present.
 #
 # macOS bash 3.2 compatible (no associative arrays, no mapfile).
 set -euo pipefail

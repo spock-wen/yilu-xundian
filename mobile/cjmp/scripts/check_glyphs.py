@@ -34,7 +34,7 @@ THEME_CONST = re.compile(
     r'(?:static\s+)?(?:const|let)\s+([A-Za-z_]\w*)\s*:\s*String\s*=\s*"([^"]*)"')
 RETURN_THEME = re.compile(r"\breturn\s+(?:Theme|this|self)\.(\w+)\b")
 SERIF_NAMES = ("serif", "serifBold", "stationSerif")
-SANS_NAMES = ("sans", "sansMedium")  # PR#30: engine cannot hold 2 weights in 1 family -> YiluSans / YiluSansMedium
+SANS_NAMES = ("sans", "sansMedium", "sansBold")  # PR#30 / J18: YiluSans / YiluSansMedium / YiluSansBold
 TRANSITIONAL = {"〈": "D-03 ruling: 〈 literal -> Path2D icon-back",
                 "传书过驿": "D-03 ruling: 传书过驿 -> serif"}
 
@@ -170,7 +170,8 @@ class Corpus:
             for m in THEME_CONST.finditer(src):
                 name, val = m.group(1), m.group(2)
                 values[name] = val
-                roles[name] = ("sans" if name in SANS_NAMES
+                roles[name] = ("sansBold" if name == "sansBold"
+                               else "sans" if name in SANS_NAMES
                                else "serif" if name in SERIF_NAMES
                                else "unknown")
         return values, roles
@@ -572,19 +573,22 @@ class FamilyTable:
         if m:
             name = m.group(1)
             role = self.roles.get(name)
-            if role in ("sans", "serif"):
+            if role in ("sans", "sansBold", "serif"):
                 return role, f"Theme.{name} = {self.values.get(name)!r}"
             raise Unresolvable(unknown_family_msg(a))
         leaf = a.rstrip("()").split(".")[-1].strip()
         if leaf in self._helper_cache:
             return self._helper_cache[leaf], f"helper {leaf}()"
+        if leaf == "sansBoldFamily":
+            self._helper_cache[leaf] = "sansBold"
+            return "sansBold", "helper sansBoldFamily()"
         try:
             _p, body = self._resolver.func_body(leaf)
         except Unresolvable as exc:
             raise Unresolvable(unknown_family_msg(a, exc))
         for name in RETURN_THEME.findall(body):
             role = self.roles.get(name)
-            if role in ("sans", "serif"):
+            if role in ("sans", "sansBold", "serif"):
                 self._helper_cache[leaf] = role
                 return role, f"helper {leaf}() -> Theme.{name}"
         raise Unresolvable(unknown_family_msg(a))
@@ -594,7 +598,7 @@ def unknown_family_msg(arg, inner=None):
     brief = " ".join(arg.strip().split())[:80]
     base = (f"unknown family {brief} -> cannot verify; not a known AppTheme "
             f"family or a helper returning one "
-            f"(D-03: known = Theme.sans / sansMedium / Theme.serif / serifBold / stationSerif)")
+            f"(D-03: known = Theme.sans / sansMedium / sansBold / Theme.serif / serifBold / stationSerif)")
     if inner:
         base += f" ({inner})"
     return base
@@ -609,6 +613,7 @@ def run_check(src_root, fonts_dir, chars_file, strict_family=False):
     resolver = Resolver(corpus)
     fam = FamilyTable(corpus, resolver)
     required = {}                     # char -> sorted [file:line]
+    required_bold = {}                # char -> sorted [file:line] for sans-bold
     sans_nodes = serif_nodes = no_family = unknown_family = total = 0
     findings = []                     # FAIL lines from the node scan
     trans_nodes = {k: [] for k in TRANSITIONAL}
@@ -653,13 +658,14 @@ def run_check(src_root, fonts_dir, chars_file, strict_family=False):
                 add(f"{loc} {kind} ({expr[:120]}) unresolved expression on a "
                     f"sans node: {exc}")
                 continue
+            target_req = required_bold if role == "sansBold" else required
             for s in strings:
                 for ch in s:
                     if ch in "\n\t\r":
                         continue
-                    required.setdefault(ch, [])
-                    if loc not in required[ch]:
-                        required[ch].append(loc)
+                    target_req.setdefault(ch, [])
+                    if loc not in target_req[ch]:
+                        target_req[ch].append(loc)
 
     # --chars file: SPEC-only strings are also covered
     with open(chars_file, encoding="utf-8") as f:
@@ -681,6 +687,20 @@ def run_check(src_root, fonts_dir, chars_file, strict_family=False):
                 continue
             if ord(ch) not in cmap:
                 missing.append((ch, fname, list(required[ch])))
+
+    # glyph coverage for YiluSans-Bold.ttf
+    if required_bold:
+        fname = "YiluSans-Bold.ttf"
+        path = os.path.join(fonts_dir, fname)
+        if not os.path.exists(path):
+            findings.append(f"FAIL missing font file: {path}")
+        else:
+            cmap = TTFont(path).getBestCmap()
+            for ch in required_bold:
+                if ch in "\n\t\r":
+                    continue
+                if ord(ch) not in cmap:
+                    missing.append((ch, fname, list(required_bold[ch])))
 
     # D5 wiring checks ------------------------------------------------------
     family_warn = False
@@ -749,6 +769,7 @@ SELF_THEME = (
     '    public static const serif: String = "YiluSerif"\n'
     '    public static const serifBold: String = "YiluSerifBold"\n'
     '    public static const sans: String = "sans-serif"\n'
+    '    public static const sansBold: String = "YiluSansBold"\n'
     '    public static const stationSerif: String = "YiluSerifBold"\n'
     '    public static const uiFont: String = "system-ui"\n'
     "}\n")
@@ -935,6 +956,22 @@ def self_test():
     sd, cf = _mk_fixture(tmp, "t9_strict")
     _write(sd, "page.cj", f'Text("{COVERED}").fontFamily(Theme.sans)\n')
 
+    # bold_ok: bold node with covered glyph -> 0 (family-wiring WARN)
+    sd, cf = _mk_fixture(tmp, "bold_ok")
+    _write(sd, "page.cj",
+           "func sansBoldFamily(): String {\n"
+           "    return Theme.sansBold\n"
+           "}\n"
+           f'Text("{COVERED}").fontFamily(this.sansBoldFamily())\n')
+
+    # bold_missing: missing glyph on a bold node -> 1
+    sd, cf = _mk_fixture(tmp, "bold_missing")
+    _write(sd, "page.cj",
+           "func sansBoldFamily(): String {\n"
+           "    return Theme.sansBold\n"
+           "}\n"
+           f'Text("{COVERED}{MISSING_GLYPH}").fontFamily(this.sansBoldFamily())\n')
+
     cases = [
         # (case, expected exit, required message substring, strict_family)
         ("base", 0, "family-wiring", False),
@@ -953,6 +990,8 @@ def self_test():
         ("c15_foreach_missing", 1, "missing", False),
         ("t8_serif", 0, None, False),
         ("t9_strict", 2, "family-wiring", True),
+        ("bold_ok", 0, "family-wiring", False),
+        ("bold_missing", 1, "missing", False),
     ]
     import io
     import contextlib
@@ -976,7 +1015,7 @@ def self_test():
                 if "no fontFamily -> system font fallback" not in out:
                     good = False
                     detail = " (D2 message absent)"
-            if case_name in ("c1", "c6", "c7", "c11_missing", "c13_static_missing", "c15_foreach_missing"):
+            if case_name in ("c1", "c6", "c7", "c11_missing", "c13_static_missing", "c15_foreach_missing", "bold_missing"):
                 if MISSING_GLYPH not in out:
                     good = False
                     detail = " (missing glyph not reported)"

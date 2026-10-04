@@ -7,7 +7,7 @@
 ## 目录结构
 
 - `lib/`：应用源码与模块逻辑。包含页面入口、关卡数据加载及与引擎交互的逻辑。
-- `fonts/`：精简后的字形子集字体文件（`YiluSerif-Regular.otf`、`YiluSerif-Bold.otf`；`YiluSans-Regular.ttf`、`YiluSans-Medium.ttf`）、字表定义（`charset.txt`；`charset_serif.txt` / `yilu_sans_chars.txt` 由 `check_fonts.py` 自动生成）与开源许可（`OFL.txt`）。
+- `fonts/`：精简后的字形子集字体文件（`YiluSerif-Regular.otf`、`YiluSerif-Bold.otf`；`YiluSans-Regular.ttf`、`YiluSans-Medium.ttf`、`YiluSans-Bold.ttf`）、字表定义（`charset.txt`；`charset_serif.txt` / `yilu_sans_chars.txt` 由 `check_fonts.py` 自动生成）与开源许可（`OFL.txt`）。
 - `scripts/`：工具脚本。
   - `build_from_repo.sh`：**唯一文档化的构建命令**（见下文）。
   - `sync_to_keels.sh`：将源码、共用引擎、关卡 JSON 与资源同步至 Keels 工程（仅拷贝代码引用到的 PNG，并清除 rawfile 目录中过期的未引用 PNG）。
@@ -64,7 +64,7 @@ SVG 图标（`icon-undo`、`icon-reset`）与字体的同步行为不变。
 ## 逐字族字体检查（无回退）
 
 - serif ← `serifFamily()` / `serifBoldFamily()` / `Theme.serif` / `Theme.serifBold`
-- sans ← `sansFamily()` / `sansMediumFamily()` / `Theme.sans` / `Theme.sansMedium`
+- sans ← `sansFamily()` / `sansMediumFamily()` / `sansBoldFamily()` / `Theme.sans` / `Theme.sansMedium` / `Theme.sansBold`（`sansBold` 校验由专用 sans-bold 子族对 YiluSans-Bold.ttf 执行，仅用于首页「章节」）
 
 可选中的字符集来自解析 `Text(...)` / `Button(...)` 及其后链式 `.fontFamily(...)`：静态字符串按其字面字符计入；含 `${...}` 插值或非字面量表达式则计入「动态数据字符集」（chapter.cj 全部字符串字面量 + levels.json 所有关卡 `name` + 数字 0-9 + 全部可打印 ASCII）。任何未被 `.fontFamily(...)` 覆盖的 `Text`/`Button` 视为错误（`NO_FAMILY` —— 全部文字必须使用内置字体，绝不允许系统字体）。
 
@@ -91,7 +91,7 @@ SVG 图标（`icon-undo`、`icon-reset`）与字体的同步行为不变。
 
 字体基于 Noto Serif SC 与 Noto Sans SC，遵循 SIL Open Font License 1.1 开源协议。详情请参阅 `fonts/OFL.txt`。
 - **YiluSerif**（Regular / Bold，CFF OTF）：Noto Serif SC 子集。
-- **YiluSans**（Regular 400 / Medium 500，TrueType）：Noto Sans SC 可变字体实例化 400/500 后的子集，沿用设计交付的做法（`check_glyphs.py` 为设计交付件原样 vendored，sha256: 37976c86df12）。
+- **YiluSans**（Regular 400 / Medium 500 / Bold 700，TrueType）：Noto Sans SC 可变字体实例化 400/500 后的子集；Bold 700（TrueType，136672 字节）来自 addendum-d04 外部来源（sha256 前缀 `7e46ee679e9d`），仅用于首页「章节」。
 
 ### 字体子集化（可复现）
 
@@ -119,4 +119,5 @@ python3 mobile/cjmp/scripts/subset_yilu_fonts.py verify --old-dir <旧字体目�
 
 字表在保留原有全部字符的基础上新增 13 个字：`甲乙符滑渡负塌泽停闸门禁此`（YiluSerif 与 YiluSans 均已收录；`此` 原本已在 YiluSerif 中，故 YiluSerif 实际新增 12 字、YiluSans 新增 13 字）。`verify` 结果：原有字符（serif 357、sans 346）的字形轮廓与横/纵向 advance 与旧子集逐字一致（0 差异），OpenType 特性标签不变。以后增字只需在字表文件中追加字符后重跑 `build`。
 
-字体大小（字节）：YiluSerif-Regular 89780→93508，YiluSerif-Bold 89336→93132，YiluSans-Regular 134796→138048，YiluSans-Medium 134732→137984。
+字体大小（字节）：YiluSerif-Regular 89780→93508，YiluSerif-Bold 89336→93132，YiluSans-Regular 134796→138048，YiluSans-Medium 134732→137984，YiluSans-Bold 136672（外部来源 addendum-d04）。
+

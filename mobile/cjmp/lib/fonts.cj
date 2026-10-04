@@ -70,6 +70,12 @@ public func registerYiluFonts(): Int64 {
             regFont(nameD, srcD)
             LibC.free(nameD)
             LibC.free(srcD)
+
+            let nameE = LibC.mallocCString(Theme.sansBold)
+            let srcE = LibC.mallocCString("resource://RAWFILE/YiluSans-Bold.ttf")
+            regFont(nameE, srcE)
+            LibC.free(nameE)
+            LibC.free(srcE)
         }
 
         LibC.free(symName)

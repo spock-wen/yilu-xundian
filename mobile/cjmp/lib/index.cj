@@ -112,6 +112,14 @@ class EntryView {
         return Theme.sansMedium
     }
 
+    func sansBoldFamily(): String {
+        if (!this.fontsDone) {
+            this.fontsDone = true
+            this.fontHandle = registerYiluFonts()
+        }
+        return Theme.sansBold
+    }
+
     // A2: back button — device-pixel path commands for the chevron icon
     func getPxFactor(): Float64 {
         if (this.pxFactor > 0.0) {
@@ -983,40 +991,48 @@ class EntryView {
                     .fontSize(16)
                     .fontFamily(this.sansMediumFamily())
                     .onClick({event => this.startPlay()})
+                // 首页底部：「章节 · 驿程」文字链与点击区 (SPEC_A1_ADDENDUM §3.3 & RULINGS_ABF56B0)
+                // 几何推导 (相对屏幕中线 x=0):
+                // - 总内容宽 = 章节(64) + 间距(12: left 4 + 圆点 4 + right 4) + 驿程(64) = 140
+                // - 若无偏移居中摆放: 章节 [-70, -6], 间距 [-6, +8], 驿程 [+6, +70]
+                // - 目标相对中线右移 2 (centerShift=2.0): 章节 [-68, -4], 圆点 [0, 4](中心+2), 驿程 [+8, +72]
+                // - 外层 Column 为 alignItems(HorizontalAlign.Center), 给整行加 margin(left: 4) 后,
+                //   排版槽宽 140+4=144 在父容器中居中于 [-72, +72], 内容随 left: 4 落在 [-68, +72],
+                //   中心恰在 (-68+72)/2 = +2。两块各 64×44 点击区, 互不相交。
                 Row {
                     Column {
                         Text("章节")
                             .fontSize(16)
                             .fontColor(Theme.ink)
-                            .fontFamily(this.sansFamily())
+                            .fontFamily(this.sansBoldFamily())
                         Column() {}
-                            .width(32)
-                            .height(1.2)
+                            .width(HomeLinkGeom.underlineW)
+                            .height(HomeLinkGeom.underlineH)
                             .backgroundColor(Theme.qingDeep)
-                            .margin(top: 2)
+                            .margin(top: HomeLinkGeom.underlineMarginTop)
                     }
-                    .width(64)
-                    .height(44)
+                    .width(HomeLinkGeom.blockW)
+                    .height(HomeLinkGeom.blockH)
                     .justifyContent(FlexAlign.Center)
                     .alignItems(HorizontalAlign.Center)
                     .onClick({event => this.screen = 4})
                     Column() {}
-                        .width(4)
-                        .height(4)
-                        .borderRadius(2)
+                        .width(HomeLinkGeom.dotSize)
+                        .height(HomeLinkGeom.dotSize)
+                        .borderRadius(HomeLinkGeom.dotRadius)
                         .backgroundColor(Theme.paperLine)
-                        .margin(left: 4, right: 4)
+                        .margin(left: HomeLinkGeom.dotMarginLR, right: HomeLinkGeom.dotMarginLR)
                     Text("驿程")
                         .fontSize(16)
                         .fontColor(Theme.inkMuted)
                         .fontFamily(this.sansFamily())
-                        .width(64)
-                        .height(44)
+                        .width(HomeLinkGeom.blockW)
+                        .height(HomeLinkGeom.blockH)
                         .textAlign(TextAlign.Center)
                         .onClick({event => this.screen = 3})
                 }
-                .height(44)
-                .margin(top: 2)
+                .height(HomeLinkGeom.blockH)
+                .margin(top: HomeLinkGeom.rowMarginTop, left: HomeLinkGeom.rowMarginLeft)
                 .justifyContent(FlexAlign.Center)
                 .alignItems(VerticalAlign.Center)
             } else if (this.screen == 3) {
