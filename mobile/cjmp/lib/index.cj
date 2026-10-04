@@ -2056,16 +2056,17 @@ class EntryView {
                                 }
                             )
 
-                            // Layer 8: Next station label ("下一驿" 11 device px sans gold, textAlign start, baseline at cy+r+12.0)
-                            // HarmonyOS parity: 11 device px (Canvas px); readability noted in M2 report
+                            // Layer 8: Next station label ("下一驿" 12 vp Medium, 行高 16, textAlign start, baseline at cy+r+12.0)
                             ForEach(
                                 this.boardNextLabels,
                                 itemGenerator: { item: BoardLabel, idx: Int64 =>
                                     Text(item.text)
                                         .fontSize(item.size)
                                         .fontColor(item.color)
-                                        .fontFamily(this.sansFamily())
+                                        .fontFamily(this.sansMediumFamily())
                                         .width(item.w)
+                                        .height(16)
+                                        .lineHeight(16)
                                         .textAlign(TextAlign.Start)
                                         .position(x: item.x, y: item.y)
                                 },

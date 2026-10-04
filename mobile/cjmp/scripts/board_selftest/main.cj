@@ -209,6 +209,30 @@ func checkAll(game: PatrolGame, geom: BoardGeom, lv: LevelDef, id: Int64, step: 
     }
     base = base + lv.tokenCells.size
     ctx.ck(labels.size == base, "${tag} labels=${labels.size} base=${base}")
+    /* 6b. J14 下一驿标签：字号固定 12.0、高度 16.0、宽 60.0、基线 cy+r+12.0 */
+    let nextLabels = buildBoardNextLabels(game, geom, 3.0)
+    let nr = 18.0 * geom.c / 43.0
+    for (nl in nextLabels) {
+        ctx.ck(absF(nl.size - 12.0) < 1e-9, "${tag} nextLabel size=${nl.size} want=12.0")
+        ctx.ck(absF(nl.h - 16.0) < 1e-9, "${tag} nextLabel h=${nl.h} want=16.0")
+        ctx.ck(absF(nl.w - 60.0) < 1e-9, "${tag} nextLabel w=${nl.w} want=60.0")
+        ctx.ck(nl.text == "下一驿", "${tag} nextLabel text=${nl.text} want=下一驿")
+        ctx.ck(nl.color == Theme.gold, "${tag} nextLabel color=${nl.color} want=gold")
+        var foundWp = false
+        for (wp in lv.waypoints) {
+            if (stationStateOf(game, wp.n) == 1) {
+                let cx = geom.centerX(wp.x)
+                let cy = geom.centerY(wp.y)
+                if (absF(nl.x - cx) < 1e-9) {
+                    let baseline = nl.y + 0.88 * nl.size
+                    let wantBaseline = cy + nr + 12.0
+                    ctx.ck(absF(baseline - wantBaseline) < 1e-9, "${tag} nextLabel baseline=${baseline} want=${wantBaseline}")
+                    foundWp = true
+                }
+            }
+        }
+        ctx.ck(foundWp, "${tag} nextLabel waypoint not found for x=${nl.x}")
+    }
     /* 7. paths：commands 非空且以 M 起头 */
     let paths = buildBoardMechPaths(game, geom, 3.0)
     for (p in paths) {
@@ -966,6 +990,59 @@ func j14SlideGeomTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
         li = li + 1
     }
     ctx.ck(found, "J14 no slide level in catalog")
+}
+
+/* ===== J14 定向检查：下一驿标签（字号 12 vp Medium、行高 16、基线 cy+r+12 不变） ===== */
+func j14NextLabelTests(levels: ArrayList<LevelDef>, ctx: Ctx): Unit {
+    let testIds = [90, 93, 0, 1, 10, 45, 95, 97, 99]
+    let widths = [320.0, 360.0, 393.0, 411.0]
+    let factors = [1.0, 2.0, 3.0, 3.5]
+    for (tid in testIds) {
+        var optLv: Option<LevelDef> = None
+        var li: Int64 = 0
+        while (li < levels.size) {
+            let lv = levels.get(li).getOrThrow()
+            if (lv.id == tid) {
+                optLv = Some(lv)
+                break
+            }
+            li = li + 1
+        }
+        match (optLv) {
+            case Some(lv) =>
+                let g = PatrolGame(lv)
+                for (w in widths) {
+                    let geom = boardGeomFor(lv.cols, lv.rows, w)
+                    let r = 18.0 * geom.c / 43.0
+                    for (f in factors) {
+                        let nexts = buildBoardNextLabels(g, geom, f)
+                        ctx.ck(nexts.size > 0, "J14 id=${tid} w=${w} f=${f} nexts.size=${nexts.size} want>0")
+                        for (lbl in nexts) {
+                            ctx.ck(absF(lbl.size - 12.0) < 1e-9, "J14 id=${tid} size=${lbl.size} want=12.0")
+                            ctx.ck(absF(lbl.h - 16.0) < 1e-9, "J14 id=${tid} h=${lbl.h} want=16.0")
+                            ctx.ck(absF(lbl.w - 60.0) < 1e-9, "J14 id=${tid} w=${lbl.w} want=60.0")
+                            ctx.ck(lbl.text == "下一驿", "J14 id=${tid} text=${lbl.text}")
+                            ctx.ck(lbl.color == Theme.gold, "J14 id=${tid} color=${lbl.color}")
+                            var matched = false
+                            for (wp in lv.waypoints) {
+                                if (stationStateOf(g, wp.n) == 1) {
+                                    let cx = geom.centerX(wp.x)
+                                    let cy = geom.centerY(wp.y)
+                                    if (absF(lbl.x - cx) < 1e-9) {
+                                        let baseline = lbl.y + 0.88 * lbl.size
+                                        let wantBaseline = cy + r + 12.0
+                                        ctx.ck(absF(baseline - wantBaseline) < 1e-9, "J14 id=${tid} baseline=${baseline} want=${wantBaseline}")
+                                        matched = true
+                                    }
+                                }
+                            }
+                            ctx.ck(matched, "J14 id=${tid} matched wp for x=${lbl.x}")
+                        }
+                    }
+                }
+            case None => ctx.ck(false, "J14 level ${tid} not found in catalog")
+        }
+    }
 }
 
 /* ===== K2 定向检查：caption 3 行规则（design §3, caption.cj） ===== */
@@ -3498,6 +3575,8 @@ main(args: Array<String>): Int64 {
     j13RejectGateTests(levels, ctx)
     /* J14 定向几何/滑行检查。 */
     j14SlideGeomTests(levels, ctx)
+    /* J14 下一驿标签检查。 */
+    j14NextLabelTests(levels, ctx)
     /* K2 定向 caption 3 行规则检查。 */
     captionTests(ctx)
     /* J20 塌桥/负重皮肤几何检查。 */
