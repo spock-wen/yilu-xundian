@@ -460,8 +460,8 @@ public class SummaryCopy {
 }
 
 /* 总结卡(B7)几何常量:draw_summary(SUMMARY_H=88、rrect r8、左内边 16、
-   title y+30 serif 20、line y+58 sans 12)与 make_seal(size=56、旋转 -8°)。
-   朱印各值均按 make_seal 公式取 size=56 的结果,注释标明公式。 */
+   title y+30 serif 20、line y+58 sans 12)与 make_seal(size=147px=56u, 2.625 px/u, 旋转 -8°)。
+   朱印各值按 make_seal(147px) 公式取 px/2.625 结果,注释标明公式。 */
 public class SummaryGeom {
     public static func cardH(): Float64 { return 88.0 } /* SUMMARY_H */
     public static func radius(): Float64 { return 8.0 } /* 卡圆角 rrect 8 */
@@ -475,14 +475,14 @@ public class SummaryGeom {
     public static func sealSize(): Float64 { return 56.0 }
     public static func sealAngle(): Float64 { return -8.0 } /* rotate(-8) */
 
-    /* 朱印 make_seal 公式,size=56 */
-    public static func sealFrameInset(): Float64 { return 3.0 } /* m=max(2,size//16) */
-    public static func sealFrameW(): Float64 { return 3.0 } /* max(2,size//16) */
-    public static func sealFrameR(): Float64 { return 4.0 } /* size//14 */
-    public static func sealInnerInset(): Float64 { return 9.0 } /* m+size//9 */
-    public static func sealInnerW(): Float64 { return 1.0 } /* max(1,size//30) */
-    public static func sealInnerR(): Float64 { return 2.0 } /* size//20 */
-    public static func sealFont(): Float64 { return 16.8 } /* 0.30*size,两字 */
+    /* 朱印 make_seal(147px) 公式, 2.625 px/u */
+    public static func sealFrameInset(): Float64 { return 9.0 / 2.625 } /* m=max(2,147//16)=9px ≈ 3.4286u */
+    public static func sealFrameW(): Float64 { return 9.0 / 2.625 } /* max(2,147//16)=9px ≈ 3.4286u */
+    public static func sealFrameR(): Float64 { return 10.0 / 2.625 } /* 147//14=10px ≈ 3.8095u */
+    public static func sealInnerInset(): Float64 { return 25.0 / 2.625 } /* m+147//9=9+16=25px ≈ 9.5238u */
+    public static func sealInnerW(): Float64 { return 4.0 / 2.625 } /* max(1,147//30)=4px ≈ 1.5238u */
+    public static func sealInnerR(): Float64 { return 7.0 / 2.625 } /* 147//20=7px ≈ 2.6667u */
+    public static func sealFont(): Float64 { return 44.0 / 2.625 } /* int(147*0.30)=44px ≈ 16.7619u */
     public static func sealLineStep(): Float64 { return 1.02 } /* 字间距系数 */
     public static func sealAlpha(): Float64 { return 0.92 } /* 235/255 */
 }
