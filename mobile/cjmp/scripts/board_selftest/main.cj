@@ -3485,6 +3485,102 @@ func j33YichengScrollTests(ctx: Ctx): Unit {
     println("J33 yicheng scroll done checks=${ctx.checks - c0}")
 }
 
+func checkCardCenter(ctx: Ctx, h: Float64, st: Float64, sb: Float64): Unit {
+    let hl = WinGeom.hairlineY(st)
+    let ct = WinGeom.cardTop(h, st, sb)
+    let topGap = ct - hl
+    let botGap = (h - sb) - (ct + 360.0)
+    ctx.ck(absF(topGap - botGap) < 1e-9, "WinGeom center symmetry H=${h} st=${st} sb=${sb}")
+    ctx.ck(ct + 360.0 <= (h - sb) + 1e-9, "WinGeom card within bottom safe bounds H=${h} sb=${sb}")
+}
+
+/* ===== B-edge safe area / bottom margin / WinGeom 几何与边界检查 ===== */
+func bEdgeGeomTests(ctx: Ctx): Unit {
+    let c0 = ctx.checks
+
+    // 1. parseHundredths: "6200"→6200、"0"→0、""→0、"12a"→0、"-5"→0、"+5"→0、" 5"→0、"3400"→3400、"123456789"→123456789、"1234567890"(10 位)→0、None→0
+    ctx.ck(parseHundredths(Some("6200")) == 6200, "parseHundredths 6200")
+    ctx.ck(parseHundredths(Some("0")) == 0, "parseHundredths 0")
+    ctx.ck(parseHundredths(Some("")) == 0, "parseHundredths empty")
+    ctx.ck(parseHundredths(Some("12a")) == 0, "parseHundredths 12a")
+    ctx.ck(parseHundredths(Some("-5")) == 0, "parseHundredths -5")
+    ctx.ck(parseHundredths(Some("+5")) == 0, "parseHundredths +5")
+    ctx.ck(parseHundredths(Some(" 5")) == 0, "parseHundredths space 5")
+    ctx.ck(parseHundredths(Some("3400")) == 3400, "parseHundredths 3400")
+    ctx.ck(parseHundredths(Some("123456789")) == 123456789, "parseHundredths 123456789")
+    ctx.ck(parseHundredths(Some("1234567890")) == 0, "parseHundredths 1234567890 overflow 10 digits")
+    ctx.ck(parseHundredths(None) == 0, "parseHundredths None")
+
+    // 2. Theme.safeTop()/safeBottom() 在测试环境(未 setenv)→ 0.0
+    ctx.ck(absF(Theme.safeTop() - 0.0) < 1e-9, "Theme.safeTop() default 0.0")
+    ctx.ck(absF(Theme.safeBottom() - 0.0) < 1e-9, "Theme.safeBottom() default 0.0")
+
+    // 3. bottomMarginFor 对 (8,0)→24、(8,34)→8、(16,0)→24、(16,34)→16、(16,10)→16
+    ctx.ck(absF(bottomMarginFor(8.0, 0.0) - 24.0) < 1e-9, "bottomMarginFor(8, 0) == 24")
+    ctx.ck(absF(bottomMarginFor(8.0, 34.0) - 8.0) < 1e-9, "bottomMarginFor(8, 34) == 8")
+    ctx.ck(absF(bottomMarginFor(16.0, 0.0) - 24.0) < 1e-9, "bottomMarginFor(16, 0) == 24")
+    ctx.ck(absF(bottomMarginFor(16.0, 34.0) - 16.0) < 1e-9, "bottomMarginFor(16, 34) == 16")
+    ctx.ck(absF(bottomMarginFor(16.0, 10.0) - 16.0) < 1e-9, "bottomMarginFor(16, 10) == 16")
+
+    // 4. chipMarginFor 对 (0)→16、(34)→4、(10)→6、(20)→4
+    ctx.ck(absF(chipMarginFor(0.0) - 16.0) < 1e-9, "chipMarginFor(0) == 16")
+    ctx.ck(absF(chipMarginFor(34.0) - 4.0) < 1e-9, "chipMarginFor(34) == 4")
+    ctx.ck(absF(chipMarginFor(10.0) - 6.0) < 1e-9, "chipMarginFor(10) == 6")
+    ctx.ck(absF(chipMarginFor(20.0) - 4.0) < 1e-9, "chipMarginFor(20) == 4")
+
+    // 5. WinGeom: 遮罩 y 范围
+    // W=393, H=852, st=59, sb=34: maskTop=115, maskHeight=737, maskTop+maskHeight==H
+    ctx.ck(absF(WinGeom.maskTop(59.0) - 115.0) < 1e-9, "WinGeom maskTop(59) == 115")
+    ctx.ck(absF(WinGeom.maskHeight(852.0, 59.0) - 737.0) < 1e-9, "WinGeom maskHeight(852, 59) == 737")
+    ctx.ck(absF((WinGeom.maskTop(59.0) + WinGeom.maskHeight(852.0, 59.0)) - 852.0) < 1e-9, "WinGeom mask reach bottom 852")
+
+    // st=0, sb=0, H=800: maskTop=56, maskHeight=744
+    ctx.ck(absF(WinGeom.maskTop(0.0) - 56.0) < 1e-9, "WinGeom maskTop(0) == 56")
+    ctx.ck(absF(WinGeom.maskHeight(800.0, 0.0) - 744.0) < 1e-9, "WinGeom maskHeight(800, 0) == 744")
+    ctx.ck(absF((WinGeom.maskTop(0.0) + WinGeom.maskHeight(800.0, 0.0)) - 800.0) < 1e-9, "WinGeom mask reach bottom 800")
+
+    // 6. WinGeom: 卡垂直居中公式
+    // 对若干 (H,st,sb) 断言 cardTop-(hairline) == (H-sb)-(cardTop+360), 且 cardTop+360 <= H-sb
+    checkCardCenter(ctx, 852.0, 59.0, 34.0)
+    checkCardCenter(ctx, 800.0, 0.0, 0.0)
+    checkCardCenter(ctx, 667.0, 20.0, 0.0)
+    checkCardCenter(ctx, 932.0, 59.0, 34.0)
+    checkCardCenter(ctx, 844.0, 47.0, 34.0)
+
+    // 7. 卡 x=28、宽=W−56、高=360
+    ctx.ck(absF(WinGeom.cardX() - 28.0) < 1e-9, "WinGeom cardX == 28")
+    ctx.ck(absF(WinGeom.cardW(393.0) - (393.0 - 56.0)) < 1e-9, "WinGeom cardW(393) == 337")
+    ctx.ck(absF(WinGeom.cardW(360.0) - (360.0 - 56.0)) < 1e-9, "WinGeom cardW(360) == 304")
+    ctx.ck(absF(WinGeom.cardH() - 360.0) < 1e-9, "WinGeom cardH == 360")
+
+    // 8. 阴影偏移 (3,5)
+    ctx.ck(absF(WinGeom.cardShadowDx() - 3.0) < 1e-9, "WinGeom cardShadowDx == 3")
+    ctx.ck(absF(WinGeom.cardShadowDy() - 5.0) < 1e-9, "WinGeom cardShadowDy == 5")
+
+    // 9. 朱印: 右缘 = 卡宽−24 (未旋转)、顶=100、角度 −18
+    ctx.ck(absF(WinGeom.sealAngle() - (-18.0)) < 1e-9, "WinGeom sealAngle == -18")
+    ctx.ck(absF(WinGeom.sealTop() - 100.0) < 1e-9, "WinGeom sealTop == 100")
+    ctx.ck(absF(WinGeom.sealSize() - 96.0) < 1e-9, "WinGeom sealSize == 96")
+    ctx.ck(absF((WinGeom.sealLeft(393.0) + WinGeom.sealSize()) - (WinGeom.cardW(393.0) - 24.0)) < 1e-9, "WinGeom seal right edge 393")
+    ctx.ck(absF((WinGeom.sealLeft(360.0) + WinGeom.sealSize()) - (WinGeom.cardW(360.0) - 24.0)) < 1e-9, "WinGeom seal right edge 360")
+
+    // 10. 按钮: x=20、宽=卡宽−40、底距卡底 20 (btnTop+52+20==360)
+    ctx.ck(absF(WinGeom.btnX() - 20.0) < 1e-9, "WinGeom btnX == 20")
+    ctx.ck(absF(WinGeom.btnW(393.0) - (WinGeom.cardW(393.0) - 40.0)) < 1e-9, "WinGeom btnW(393) == cardW-40")
+    ctx.ck(absF(WinGeom.btnTop() - 288.0) < 1e-9, "WinGeom btnTop == 288")
+    ctx.ck(absF(WinGeom.btnH() - 52.0) < 1e-9, "WinGeom btnH == 52")
+    ctx.ck(absF((WinGeom.btnTop() + WinGeom.btnH() + 20.0) - 360.0) < 1e-9, "WinGeom btn bottom margin 20 to card bottom")
+
+    // 11. 各文字中心偏移 28/62/82/124/154
+    ctx.ck(absF(WinGeom.passCenterY() - 28.0) < 1e-9, "WinGeom passCenterY == 28")
+    ctx.ck(absF(WinGeom.titleCenterY() - 62.0) < 1e-9, "WinGeom titleCenterY == 62")
+    ctx.ck(absF(WinGeom.goldLineCenterY() - 82.0) < 1e-9, "WinGeom goldLineCenterY == 82")
+    ctx.ck(absF(WinGeom.roadDoneCenterY() - 124.0) < 1e-9, "WinGeom roadDoneCenterY == 124")
+    ctx.ck(absF(WinGeom.docArriveCenterY() - 154.0) < 1e-9, "WinGeom docArriveCenterY == 154")
+
+    println("B-edge geom done checks=${ctx.checks - c0}")
+}
+
 /* ===== P4 DUMP:按场景文件渲染 app 各板层 JSON(与设计稿 PNG 对拍,box-only) ===== */
 
 func dumpBool(v: Bool): String {
@@ -3939,6 +4035,8 @@ main(args: Array<String>): Int64 {
     j32StationRowTests(ctx)
     /* J33 yicheng full-list initial scroll offset checks. */
     j33YichengScrollTests(ctx)
+    /* B-edge geom checks. */
+    bEdgeGeomTests(ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit} fallback=${ctx.toastFallback}")
     ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")

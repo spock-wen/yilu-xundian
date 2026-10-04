@@ -42,6 +42,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -482,8 +483,8 @@ def check_j(index_cj_text):
 
 
 def check_k(lib_dir, fonts_dir):
-    """k) (J18) Theme.sansBold / sansBoldFamily() in lib/*.cj only at home screen Text('章节')
-    (exactly 1 .fontFamily(this.sansBoldFamily())), YiluSans-Bold.ttf sha256 prefix 7e46ee679e9d."""
+    """k) (J18/B5) Theme.sansBold / sansBoldFamily() in lib/*.cj only at home screen Text('章节')
+    and win card Text('下一驿') (exactly 2 .fontFamily(this.sansBoldFamily())), YiluSans-Bold.ttf sha256 prefix 7e46ee679e9d."""
     bold_path = os.path.join(fonts_dir, "YiluSans-Bold.ttf")
     if not os.path.isfile(bold_path):
         return False, f"YiluSans-Bold.ttf not found at {bold_path}"
@@ -511,13 +512,15 @@ def check_k(lib_dir, fonts_dir):
                 sans_bold_call_count += 1
                 found_target = False
                 for prev in range(idx - 1, max(-1, idx - 10), -1):
-                    if 'Text("章节")' in lines[prev]:
-                        found_target = True
+                    s = lines[prev].strip()
+                    if s.startswith('Text('):
+                        if 'Text("章节")' in s or 'Text("下一驿")' in s:
+                            found_target = True
                         break
-                    if lines[prev].strip().startswith("Column") or lines[prev].strip().startswith("Row"):
+                    if s.startswith("Column") or s.startswith("Row") or s.startswith("}"):
                         break
                 if not found_target:
-                    errors.append(f"{fn}:{lineno} .fontFamily(this.sansBoldFamily()) not attached to Text(\"章节\")")
+                    errors.append(f"{fn}:{lineno} .fontFamily(this.sansBoldFamily()) not attached to Text(\"章节\") or Text(\"下一驿\")")
 
             if "Theme.sansBold" in line:
                 is_allowed = False
@@ -537,13 +540,13 @@ def check_k(lib_dir, fonts_dir):
                 if not is_allowed:
                     errors.append(f"{fn}:{lineno} unexpected sansBoldFamily occurrence: {line.strip()}")
 
-    if sans_bold_call_count != 1:
-        return False, f"expected exactly 1 .fontFamily(this.sansBoldFamily()), found {sans_bold_call_count}"
+    if sans_bold_call_count != 2:
+        return False, f"expected exactly 2 .fontFamily(this.sansBoldFamily()), found {sans_bold_call_count}"
 
     if errors:
         return False, "Theme.sansBold / sansBoldFamily() violations:\n    " + "\n    ".join(errors)
 
-    return True, f"YiluSans-Bold.ttf (7e46ee679e9d) OK, .fontFamily(this.sansBoldFamily()) exactly 1 on Text('章节')"
+    return True, f"YiluSans-Bold.ttf (7e46ee679e9d) OK, .fontFamily(this.sansBoldFamily()) exactly 2 on Text('章节') and Text('下一驿')"
 
 
 def check_l(index_cj_text, chapter_cj_text):
@@ -692,21 +695,26 @@ def _button_chain(lines, i):
     return chain, j
 
 
-def _container_chain_after(index_cj_text, anchor):
+def _container_chain_after(index_cj_text, anchor, skip_closes=1):
     """Return the modifier chain (dot lines) of the container whose body closes right after
     the first `}` line following anchor (the container's own chain, not the anchor Text's)."""
-    lines = index_cj_text[index_cj_text.find(anchor):].splitlines()[1:]
+    idx = index_cj_text.find(anchor)
+    if idx < 0:
+        return ""
+    lines = index_cj_text[idx:].splitlines()[1:]
     chain = []
-    seen_close = False
+    seen_closes = 0
     for ln in lines:
         s = ln.strip()
-        if not seen_close:
-            if s == "}":
-                seen_close = True
+        if seen_closes < skip_closes:
+            if s == "}" or s.endswith("}"):
+                seen_closes += 1
+            continue
+        if s.startswith("//"):
             continue
         if s.startswith("."):
             chain.append(s)
-        else:
+        elif chain:
             break
     return "\n".join(chain)
 
@@ -746,7 +754,10 @@ def check_o(index_cj_text):
             errors.append(f'Text("{label}") not found (expected container-row button form)')
             continue
         chain_txt = _container_chain_after(index_cj_text, f'Text("{label}")')
-        for req in (".width(100.percent)", ".height(Theme.primaryH)",
+        width_options = [".width(100.percent)"] if label == "开始传书" else [".width(WinGeom.btnW(this.winW))", ".width(100.percent)"]
+        if not any(w in chain_txt for w in width_options):
+            errors.append(f'"{label}" container chain missing {" or ".join(width_options)}')
+        for req in (".height(Theme.primaryH)",
                     ".backgroundColor(Theme.qingDeep)", ".borderRadius(8)",
                     ".justifyContent(FlexAlign.Center)", f".onClick({{event => {onclick}}}"):
             if req not in chain_txt:
@@ -821,6 +832,299 @@ def check_p(index_cj_text, chapter_cj_text):
     return True, ("yicheng scroll content top whitespace 12 (gapAbove, content Column padding, both states); "
                   "summary card bottom to first group header stays 12 (gapBelow, Column space 8 + margin 4); "
                   "offset formula unchanged via YichengScrollGeom.contentTopPad")
+
+
+def check_q(index_cj_text):
+    """q) Root padding & safe area: build() outer container is Stack, first child is root Column;
+    root Column modifier chain has .padding(top: this.padTop, bottom: this.padBottom, left: this.playInset(), right: this.playInset());
+    @State var padTop/padBottom initialized from Theme.safeTop()/Theme.safeBottom();
+    root background is this.playPaper(); onAreaChange re-reads safeTop/safeBottom."""
+    errors = []
+    if not re.search(r'@State\s+var\s+padTop\s*:\s*Float64\s*=\s*Theme\.safeTop\(\)', index_cj_text):
+        errors.append("padTop @State var missing or not initialized with Theme.safeTop()")
+    if not re.search(r'@State\s+var\s+padBottom\s*:\s*Float64\s*=\s*Theme\.safeBottom\(\)', index_cj_text):
+        errors.append("padBottom @State var missing or not initialized with Theme.safeBottom()")
+
+    m_build = re.search(r'func\s+build\s*\(\s*\)', index_cj_text)
+    if not m_build:
+        return False, "func build() not found in index.cj"
+    build_body = _extract_brace_body(index_cj_text, m_build.end())
+    cleaned_build = "\n".join(l for l in build_body.splitlines() if not l.strip().startswith("//"))
+    m_stack = re.search(r'\bStack\s*(\([^)]*\))?\s*\{', cleaned_build)
+    if not m_stack:
+        return False, "build() outermost container is not Stack"
+
+    stack_content = _extract_brace_body(cleaned_build, m_stack.start())
+    m_col = re.search(r'^\s*Column\s*\{', stack_content, re.MULTILINE)
+    if not m_col:
+        return False, "first child of outer Stack is not root Column"
+
+    col_open, col_close = _brace_span(stack_content, m_col.start())
+    root_col_chain = stack_content[col_close + 1:].split("if (this.screen == 2)")[0]
+
+    m_pad = re.search(r'\.padding\s*\((.+?)\)\s*(?:\.|\n|\Z)', root_col_chain)
+    if not m_pad:
+        errors.append("root Column missing .padding(...) modifier")
+    else:
+        pad_args = m_pad.group(1)
+        for req in ("top: this.padTop", "bottom: this.padBottom", "left: this.playInset()", "right: this.playInset()"):
+            if req not in pad_args:
+                errors.append(f"root Column .padding missing '{req}'")
+
+    if ".backgroundColor(this.playPaper())" not in root_col_chain:
+        errors.append("root Column missing .backgroundColor(this.playPaper())")
+
+    if ".onAreaChange(" not in root_col_chain:
+        errors.append("root Column missing .onAreaChange(...) modifier")
+    else:
+        if "Theme.safeTop()" not in root_col_chain or "this.padTop" not in root_col_chain:
+            errors.append("onAreaChange does not re-read Theme.safeTop() into this.padTop")
+        if "Theme.safeBottom()" not in root_col_chain or "this.padBottom" not in root_col_chain:
+            errors.append("onAreaChange does not re-read Theme.safeBottom() into this.padBottom")
+
+    if errors:
+        return False, "; ".join(errors)
+    return True, ("build() outermost Stack with root Column padding (padTop/padBottom/playInset), "
+                  "@State safeTop/safeBottom, playPaper background, onAreaChange re-read verified")
+
+
+def check_r(index_cj_text):
+    """r) 5 bottom margins use Theme.bottomMargin/chipMargin:
+    1. Home screen '章节·驿程' Row has Theme.bottomMargin(8.0)
+    2. Chapter screen Text(this.chapterOpenFooter()) has Theme.bottomMargin(16.0)
+    3. Yicheng full list ChapterCatalog.yichengFooter has Theme.bottomMargin(16.0)
+    4. In-chapter yicheng chapterListFooterLines footer Column has Theme.bottomMargin(16.0)
+    5. Board chips '撤销' and '重绘驿道' Rows have Theme.chipMargin()
+    None of these 5 locations may use legacy 'bottom: 8' (or unadapted constants)."""
+    errors = []
+
+    # 1. Home '章节·驿程' Row
+    home_chain = _container_chain_after(index_cj_text, 'Text("驿程")', skip_closes=1)
+    if not home_chain:
+        errors.append("home '章节·驿程' Row modifier chain not found")
+    else:
+        if "Theme.bottomMargin(8.0)" not in home_chain and "Theme.bottomMargin(8)" not in home_chain:
+            errors.append("home '章节·驿程' Row missing Theme.bottomMargin(8.0)")
+        if re.search(r'bottom:\s*8(?!\.0)\b', home_chain):
+            errors.append("home '章节·驿程' Row still contains legacy bottom: 8")
+
+    # 2. Chapter page chapterOpenFooter
+    ch_chain = _container_chain_after(index_cj_text, "Text(this.chapterOpenFooter())", skip_closes=0)
+    if not ch_chain:
+        errors.append("Text(this.chapterOpenFooter()) modifier chain not found")
+    else:
+        if "Theme.bottomMargin(16.0)" not in ch_chain and "Theme.bottomMargin(16)" not in ch_chain:
+            errors.append("Text(this.chapterOpenFooter()) missing Theme.bottomMargin(16.0)")
+        if re.search(r'bottom:\s*8\b', ch_chain):
+            errors.append("Text(this.chapterOpenFooter()) still contains legacy bottom: 8")
+
+    # 3. Yicheng full list yichengFooter
+    yc_chain = _container_chain_after(index_cj_text, "ChapterCatalog.yichengFooter", skip_closes=0)
+    if not yc_chain:
+        errors.append("Text(ChapterCatalog.yichengFooter(...)) modifier chain not found")
+    else:
+        if "Theme.bottomMargin(16.0)" not in yc_chain and "Theme.bottomMargin(16)" not in yc_chain:
+            errors.append("Text(ChapterCatalog.yichengFooter(...)) missing Theme.bottomMargin(16.0)")
+        if re.search(r'bottom:\s*8\b', yc_chain):
+            errors.append("Text(ChapterCatalog.yichengFooter(...)) still contains legacy bottom: 8")
+
+    # 4. In-chapter yicheng chapterListFooterLines footer Column
+    cl_chain = _container_chain_after(index_cj_text, "this.chapterListFooterLines()", skip_closes=2)
+    if not cl_chain:
+        errors.append("chapterListFooterLines footer Column modifier chain not found")
+    else:
+        if "Theme.bottomMargin(16.0)" not in cl_chain and "Theme.bottomMargin(16)" not in cl_chain:
+            errors.append("chapterListFooterLines footer Column missing Theme.bottomMargin(16.0)")
+        if re.search(r'bottom:\s*8\b', cl_chain):
+            errors.append("chapterListFooterLines footer Column still contains legacy bottom: 8")
+
+    # 5. Board chips: '撤销' and '重绘驿道'
+    for chip in ("撤销", "重绘驿道"):
+        chip_chain = _container_chain_after(index_cj_text, f'Text("{chip}")', skip_closes=1)
+        if not chip_chain:
+            errors.append(f"chip '{chip}' Row modifier chain not found")
+        else:
+            if "Theme.chipMargin()" not in chip_chain:
+                errors.append(f"chip '{chip}' Row missing Theme.chipMargin()")
+            if re.search(r'bottom:\s*8\b', chip_chain):
+                errors.append(f"chip '{chip}' Row still contains legacy bottom: 8")
+
+    if errors:
+        return False, "; ".join(errors)
+    return True, "5 bottom margins use Theme.bottomMargin(8.0/16.0) and Theme.chipMargin(), legacy bottom: 8 removed"
+
+
+def check_s(index_cj_text, theme_cj_text):
+    """s) Win popup scrim/card layers and styling: theme.cj contains winScrim (0x802C2A26);
+    screen == 2 branch removed from root Column; outer Stack order: root Column -> mask (winScrim, maskTop)
+    -> shadow (paperShade, dx/dy) -> card (Stack, WinGeom geometry, border before borderRadius(4))
+    -> hairline overlay; mask has NO onClick; board Column visibility contains screen == 1 || screen == 2;
+    leaveBoard() intact; card uses WinGeom.* (no bare magic numbers 28/360/62/124/154/288 in code);
+    shadow avoids .shadow(); seal rotate explicit Float32; 下一驿 uses sansBoldFamily."""
+    errors = []
+
+    # 1. theme.cj winScrim
+    if not re.search(r'winScrim\s*:\s*Int64\s*=\s*0x802C2A26\b', theme_cj_text):
+        errors.append("theme.cj missing winScrim = 0x802C2A26")
+
+    # 2. index.cj build() root Column vs win block
+    m_build = re.search(r'func\s+build\s*\(\s*\)', index_cj_text)
+    if not m_build:
+        return False, "func build() not found in index.cj"
+    build_body = _extract_brace_body(index_cj_text, m_build.end())
+    cleaned_build = "\n".join(l for l in build_body.splitlines() if not l.strip().startswith("//"))
+    m_stack = re.search(r'\bStack\s*(\([^)]*\))?\s*\{', cleaned_build)
+    if not m_stack:
+        return False, "build() outermost container is not Stack"
+    stack_content = _extract_brace_body(cleaned_build, m_stack.start())
+
+    m_col = re.search(r'^\s*Column\s*\{', stack_content, re.MULTILINE)
+    if not m_col:
+        return False, "root Column not found in outer Stack"
+    col_open, col_close = _brace_span(stack_content, m_col.start())
+    root_col_body = stack_content[col_open + 1:col_close]
+
+    if "else if (this.screen == 2)" in root_col_body or "else if (screen == 2)" in root_col_body or "if (this.screen == 2)" in root_col_body:
+        errors.append("root Column still contains screen == 2 branch (must be outside root Column)")
+
+    # Outer stack remainder after root Column
+    outer_after_root = stack_content[col_close + 1:]
+    m_win_block = re.search(r'if\s*\((?:this\.)?screen\s*==\s*2\)\s*\{', outer_after_root)
+    if not m_win_block:
+        errors.append("outer Stack missing if (this.screen == 2) block outside root Column")
+        return False, "; ".join(errors)
+
+    win_body = _extract_brace_body(outer_after_root, m_win_block.start())
+
+    # Layer order: mask -> shadow -> card -> hairline
+    # Mask
+    pos_mask = win_body.find("Theme.winScrim")
+    if pos_mask < 0 or "WinGeom.maskTop" not in win_body:
+        errors.append("win block missing mask with Theme.winScrim and WinGeom.maskTop")
+    # Check mask has no onClick
+    mask_chain = win_body[pos_mask:pos_mask + 300]
+    if ".onClick(" in mask_chain:
+        errors.append("mask has unexpected .onClick(...)")
+
+    # Shadow
+    pos_shadow = win_body.find("WinGeom.cardShadowDx")
+    if pos_shadow < 0 or "Theme.paperShade" not in win_body:
+        errors.append("win block missing card shadow with Theme.paperShade")
+    if ".shadow(" in win_body:
+        errors.append("win block uses .shadow() (hard shadow required)")
+
+    # Card
+    pos_card = win_body.find("WinGeom.cardTop")
+    if pos_card < 0 or "WinGeom.cardW" not in win_body or "WinGeom.cardH" not in win_body:
+        errors.append("win block missing card with WinGeom geometry")
+
+    # Hairline
+    pos_hairline = win_body.find("WinGeom.hairlineY")
+    if pos_hairline < 0 or "Theme.paperLine" not in win_body:
+        errors.append("win block missing hairline overlay at WinGeom.hairlineY")
+
+    if not (pos_mask < pos_shadow < pos_card < pos_hairline):
+        errors.append("outer Stack layers not in expected order (mask < shadow < card < hairline)")
+
+    # Board column visibility: screen == 1 || this.screen == 2
+    if not re.search(r'\.visibility\s*\(\s*if\s*\((?:this\.)?screen\s*==\s*1\s*\|\|\s*(?:this\.)?screen\s*==\s*2\)', index_cj_text):
+        errors.append("board Column visibility missing screen == 1 || this.screen == 2")
+
+    # Board leaveBoard()
+    if "this.leaveBoard()" not in index_cj_text:
+        errors.append("board topbar back button missing this.leaveBoard()")
+
+    # Card border before borderRadius(4)
+    idx_card_w = win_body.find(".width(WinGeom.cardW(this.winW))\n            .height(WinGeom.cardH())\n            .backgroundColor(Theme.whitePaper)")
+    if idx_card_w < 0:
+        idx_card_w = win_body.find(".backgroundColor(Theme.whitePaper)")
+    if idx_card_w >= 0:
+        card_chain = win_body[idx_card_w:idx_card_w + 300]
+        pos_b = card_chain.find(".border(")
+        pos_r = card_chain.find(".borderRadius(4)")
+        if pos_b < 0 or pos_r < 0 or pos_b > pos_r:
+            errors.append("card modifier chain must place .border before .borderRadius(4)")
+    else:
+        errors.append("card modifier chain not identified in win body")
+
+    # Seal explicit Float32
+    if not re.search(r'\.rotate\s*\(\s*angle\s*:\s*Float32\s*\(\s*WinGeom\.sealAngle\(\)\s*\)\s*\)', win_body):
+        errors.append("seal rotate angle missing explicit Float32(WinGeom.sealAngle())")
+
+    # 下一驿 sansBoldFamily
+    if 'Text("下一驿")' not in win_body or "sansBoldFamily" not in win_body:
+        errors.append('Text("下一驿") missing sansBoldFamily()')
+
+    # Magic numbers in win block (excluding comments)
+    win_code = "\n".join(l.split("//")[0] for l in win_body.splitlines())
+    win_code = re.sub(r'/\*[\s\S]*?\*/', "", win_code)
+    m_magic = re.findall(r'\b(28|360|62|124|154|288)\b', win_code)
+    if m_magic:
+        errors.append(f"magic numbers {m_magic} found in win block code")
+
+    if errors:
+        return False, "; ".join(errors)
+    return True, "win scrim, card stack, layers, geometry, and styling OK"
+
+
+def check_t(theme_cj_text, lib_dir):
+    """t) safeTop/safeBottom implementation constraints: theme.cj section does not use
+    .toString(), Int64.parse, .parse(), or \"${ on Ints; YILU_SAFE_TOP and YILU_SAFE_BOTTOM
+    are each read inside a try-catch block; Theme.safeAreaTop does not appear in any lib file."""
+    errors = []
+    idx_parse = theme_cj_text.find("func parseHundredths")
+    idx_end = theme_cj_text.find("public static const inset")
+    if idx_parse < 0 or idx_end < 0:
+        return False, "parseHundredths or Theme.safeTop/Bottom segment not found in theme.cj"
+    seg = theme_cj_text[idx_parse:idx_end]
+    for banned in (".toString(", "Int64.parse", ".parse(", '"${'):
+        if banned in seg:
+            errors.append(f"theme.cj safeTop/safeBottom contains banned construct: {banned}")
+
+    if not re.search(r'try\s*\{[\s\S]*?getVariable\("YILU_SAFE_TOP"\)[\s\S]*?\}\s*catch', theme_cj_text):
+        errors.append('getVariable("YILU_SAFE_TOP") missing or not enclosed in try { ... } catch')
+    if not re.search(r'try\s*\{[\s\S]*?getVariable\("YILU_SAFE_BOTTOM"\)[\s\S]*?\}\s*catch', theme_cj_text):
+        errors.append('getVariable("YILU_SAFE_BOTTOM") missing or not enclosed in try { ... } catch')
+
+    for fn in os.listdir(lib_dir):
+        if fn.endswith(".cj"):
+            with open(os.path.join(lib_dir, fn), "r", encoding="utf-8") as f:
+                content = f.read()
+            if "safeAreaTop" in content:
+                errors.append(f"{fn} contains deprecated safeAreaTop")
+
+    if errors:
+        return False, "; ".join(errors)
+    return True, "safeTop/safeBottom safe implementation, getVariable in try-catch, 0 safeAreaTop references"
+
+
+def check_u(index_cj_text):
+    """u) Play paper colors: playPaper() returns Theme.paperOf( only for screen == 6,
+    all other screens return Theme.paper; paperOf( called exactly once in index.cj."""
+    errors = []
+    m = re.search(r'func\s+playPaper\s*\(\s*\)\s*:\s*Int64\s*\{([\s\S]*?)\}', index_cj_text)
+    if not m:
+        return False, "func playPaper() not found in index.cj"
+    body = m.group(1)
+    if "this.screen == 6" not in body:
+        errors.append("playPaper() missing screen == 6 check")
+    if "return Theme.paperOf(" not in body:
+        errors.append("playPaper() missing Theme.paperOf for screen 6")
+    if "return Theme.paper" not in body:
+        errors.append("playPaper() default return must be Theme.paper")
+
+    screens_with_paper_of = re.findall(r'if\s*\(([^)]+)\)\s*\{[^}]*?paperOf', body)
+    for cond in screens_with_paper_of:
+        if "6" not in cond:
+            errors.append(f"playPaper() returns paperOf on non-screen-6 condition: {cond.strip()}")
+
+    call_count = len(re.findall(r'\bpaperOf\(', index_cj_text))
+    if call_count != 1:
+        errors.append(f"expected exactly 1 paperOf( call in index.cj, found {call_count}")
+
+    if errors:
+        return False, "; ".join(errors)
+    return True, "playPaper() uses Theme.paperOf only for screen 6, paperOf() called exactly once in index.cj"
 
 
 def selftest():
@@ -1000,6 +1304,8 @@ def selftest():
                     'Column {\n'
                     '    Text("章节")\n'
                     '        .fontFamily(this.sansBoldFamily())\n'
+                    '    Text("下一驿")\n'
+                    '        .fontFamily(this.sansBoldFamily())\n'
                     '}\n')
 
         ok_k_good, msg = check_k(tmp_lib, tmp_fonts)
@@ -1016,16 +1322,28 @@ def selftest():
         assert not ok_k_badsha and "sha256" in msg, f"selftest k: expected bad sha failure, got {msg}"
         shutil.copyfile(real_bold, dummy_bold)
 
-        # Negative 3: extra fontFamily call
+        # Negative 3: extra fontFamily call (3 calls, expected 2)
         with open(os.path.join(tmp_lib, "index.cj"), "a", encoding="utf-8") as f:
             f.write('Text("章节").fontFamily(this.sansBoldFamily())\n')
         ok_k_extra, msg = check_k(tmp_lib, tmp_fonts)
-        assert not ok_k_extra and "expected exactly 1" in msg, f"selftest k: expected extra call failure, got {msg}"
+        assert not ok_k_extra and "expected exactly 2" in msg, f"selftest k: expected extra call failure, got {msg}"
 
-        # Negative 4: used on non-"章节" Text
+        # Negative 3b: only 1 call (missing 下一驿)
         with open(os.path.join(tmp_lib, "index.cj"), "w", encoding="utf-8") as f:
             f.write('func sansBoldFamily(): String { return Theme.sansBold }\n'
                     'Column {\n'
+                    '    Text("章节")\n'
+                    '        .fontFamily(this.sansBoldFamily())\n'
+                    '}\n')
+        ok_k_under, msg = check_k(tmp_lib, tmp_fonts)
+        assert not ok_k_under and "expected exactly 2" in msg, f"selftest k: expected under call failure, got {msg}"
+
+        # Negative 4: used on non-authorized Text
+        with open(os.path.join(tmp_lib, "index.cj"), "w", encoding="utf-8") as f:
+            f.write('func sansBoldFamily(): String { return Theme.sansBold }\n'
+                    'Column {\n'
+                    '    Text("章节")\n'
+                    '        .fontFamily(this.sansBoldFamily())\n'
                     '    Text("其他")\n'
                     '        .fontFamily(this.sansBoldFamily())\n'
                     '}\n')
@@ -1037,6 +1355,8 @@ def selftest():
             f.write('func sansBoldFamily(): String { return Theme.sansBold }\n'
                     'Column {\n'
                     '    Text("章节")\n'
+                    '        .fontFamily(this.sansBoldFamily())\n'
+                    '    Text("下一驿")\n'
                     '        .fontFamily(this.sansBoldFamily())\n'
                     '}\n')
         with open(os.path.join(tmp_lib, "other.cj"), "w", encoding="utf-8") as f:
@@ -1349,6 +1669,262 @@ def selftest():
     assert not ok_p_space and "Column(space: 8)" in msg, \
         f"selftest p: expected Column(space: 8) violation, got {ok_p_space}, {msg}"
 
+    # 17. Test check_q: root padding & safe area
+    good_q_index = (
+        '@State var padTop: Float64 = Theme.safeTop()\n'
+        '@State var padBottom: Float64 = Theme.safeBottom()\n'
+        'func build() {\n'
+        '    Stack(alignContent: Alignment.TopStart) {\n'
+        '        Column {\n'
+        '            Text("content")\n'
+        '        }\n'
+        '        .width(100.percent)\n'
+        '        .height(100.percent)\n'
+        '        .padding(top: this.padTop, bottom: this.padBottom, left: this.playInset(), right: this.playInset())\n'
+        '        .backgroundColor(this.playPaper())\n'
+        '        .onAreaChange({ old, new =>\n'
+        '            let st = Theme.safeTop()\n'
+        '            let sb = Theme.safeBottom()\n'
+        '            this.padTop = st\n'
+        '            this.padBottom = sb\n'
+        '        })\n'
+        '    }\n'
+        '}\n'
+    )
+    ok_q, msg = check_q(good_q_index)
+    assert ok_q, f"selftest q: expected pass, got {msg}"
+
+    bad_q_nobottom = good_q_index.replace("bottom: this.padBottom, ", "")
+    ok_q_nobot, msg = check_q(bad_q_nobottom)
+    assert not ok_q_nobot and "bottom: this.padBottom" in msg, f"selftest q: expected missing bottom, got {msg}"
+
+    bad_q_nostate = good_q_index.replace("@State var padBottom: Float64 = Theme.safeBottom()\n", "")
+    ok_q_nostate, msg = check_q(bad_q_nostate)
+    assert not ok_q_nostate and "padBottom @State" in msg, f"selftest q: expected missing state, got {msg}"
+
+    bad_q_nostack = (
+        '@State var padTop: Float64 = Theme.safeTop()\n'
+        '@State var padBottom: Float64 = Theme.safeBottom()\n'
+        'func build() {\n'
+        '    Column {\n'
+        '        Text("content")\n'
+        '    }\n'
+        '    .padding(top: this.padTop, bottom: this.padBottom, left: this.playInset(), right: this.playInset())\n'
+        '    .backgroundColor(this.playPaper())\n'
+        '    .onAreaChange({ old, new =>\n'
+        '        this.padTop = Theme.safeTop()\n'
+        '        this.padBottom = Theme.safeBottom()\n'
+        '    })\n'
+        '}\n'
+    )
+    ok_q_nostack, msg = check_q(bad_q_nostack)
+    assert not ok_q_nostack and "Stack" in msg, f"selftest q: expected missing Stack, got {msg}"
+
+    # 18. Test check_r: 5 bottom margins
+    good_r_index = (
+        'Row {\n'
+        '    Text("章节")\n'
+        '    Text("驿程")\n'
+        '        .onClick({event => this.openYicheng()})\n'
+        '}\n'
+        '.height(HomeLinkGeom.blockH)\n'
+        '.margin(top: HomeLinkGeom.rowMarginTop, bottom: Theme.bottomMargin(8.0), left: HomeLinkGeom.rowMarginLeft)\n'
+        'Text(ChapterCatalog.yichengFooter(this.cleared, 10, "名"))\n'
+        '    .margin(top: 12, bottom: Theme.bottomMargin(16.0))\n'
+        'Text(this.chapterOpenFooter())\n'
+        '    .margin(top: 8, bottom: Theme.bottomMargin(16.0))\n'
+        'Column {\n'
+        '    ForEach(\n'
+        '        this.chapterListFooterLines(),\n'
+        '        itemGenerator: {line: String =>\n'
+        '            Text(line)\n'
+        '        }\n'
+        '    )\n'
+        '}\n'
+        '.margin(top: 8, bottom: Theme.bottomMargin(16.0))\n'
+        'Row {\n'
+        '    Text("撤销")\n'
+        '}\n'
+        '.borderRadius(8)\n'
+        '.margin(bottom: Theme.chipMargin())\n'
+        '.onClick({event => this.doUndo()})\n'
+        'Row {\n'
+        '    Text("重绘驿道")\n'
+        '}\n'
+        '.borderRadius(8)\n'
+        '.margin(bottom: Theme.chipMargin())\n'
+        '.onClick({event => this.doClear()})\n'
+    )
+    ok_r, msg = check_r(good_r_index)
+    assert ok_r, f"selftest r: expected pass, got {msg}"
+
+    bad_r_legacy = good_r_index.replace("bottom: Theme.bottomMargin(16.0)", "bottom: 8", 1)
+    ok_r_leg, msg = check_r(bad_r_legacy)
+    assert not ok_r_leg and "bottom: 8" in msg, f"selftest r: expected legacy bottom:8 failure, got {msg}"
+
+    bad_r_chip = good_r_index.replace(".margin(bottom: Theme.chipMargin())\n.onClick({event => this.doUndo()})",
+                                     ".onClick({event => this.doUndo()})")
+    ok_r_chip, msg = check_r(bad_r_chip)
+    assert not ok_r_chip and "Theme.chipMargin()" in msg, f"selftest r: expected missing chip margin, got {msg}"
+
+    # 19. Test check_s: win popup scrim/card
+    good_s_theme = "public static const winScrim: Int64 = 0x802C2A26\n"
+    good_s_index = (
+        'func build() {\n'
+        '    Stack(alignContent: Alignment.TopStart) {\n'
+        '        Column {\n'
+        '            Column() {}\n'
+        '                .visibility(if (this.screen == 1 || this.screen == 2) { Visibility.Visible } else { Visibility.None })\n'
+        '            this.backButton({ => this.leaveBoard() }, true)\n'
+        '        }\n'
+        '        .width(100.percent)\n'
+        '        if (this.screen == 2) {\n'
+        '            Column() {}\n'
+        '                .backgroundColor(Theme.winScrim)\n'
+        '                .position(x: 0.0, y: WinGeom.maskTop(this.padTop))\n'
+        '            Column() {}\n'
+        '                .backgroundColor(Theme.paperShade)\n'
+        '                .borderRadius(4)\n'
+        '                .position(x: WinGeom.cardX() + WinGeom.cardShadowDx(), y: WinGeom.cardTop(currentH, this.padTop, this.padBottom) + WinGeom.cardShadowDy())\n'
+        '            Stack(alignContent: Alignment.TopStart) {\n'
+        '                Column() {}\n'
+        '                    .rotate(angle: Float32(WinGeom.sealAngle()))\n'
+        '                Row {\n'
+        '                    Text("下一驿")\n'
+        '                        .fontFamily(this.sansBoldFamily())\n'
+        '                }\n'
+        '            }\n'
+        '            .width(WinGeom.cardW(this.winW))\n'
+        '            .height(WinGeom.cardH())\n'
+        '            .backgroundColor(Theme.whitePaper)\n'
+        '            .border(width: 1, color: Theme.paperLine)\n'
+        '            .borderRadius(4)\n'
+        '            .position(x: WinGeom.cardX(), y: WinGeom.cardTop(currentH, this.padTop, this.padBottom))\n'
+        '            Column() {}\n'
+        '                .backgroundColor(Theme.paperLine)\n'
+        '                .position(x: 20.0, y: WinGeom.hairlineY(this.padTop))\n'
+        '        }\n'
+        '    }\n'
+        '}\n'
+    )
+    ok_s, msg = check_s(good_s_index, good_s_theme)
+    assert ok_s, f"selftest s: expected pass, got {msg}"
+
+    bad_s_incol = (
+        'func build() {\n'
+        '    Stack {\n'
+        '        Column {\n'
+        '            if (this.screen == 0) {}\n'
+        '            else if (this.screen == 2) {\n'
+        '                Text("win")\n'
+        '            }\n'
+        '        }\n'
+        '    }\n'
+        '}\n'
+    )
+    ok_s_incol, msg = check_s(bad_s_incol, good_s_theme)
+    assert not ok_s_incol and "root Column still contains screen == 2 branch" in msg, f"selftest s: expected in-column failure, got {msg}"
+
+    bad_s_onclick = good_s_index.replace(".position(x: 0.0, y: WinGeom.maskTop(this.padTop))\n",
+                                         ".position(x: 0.0, y: WinGeom.maskTop(this.padTop))\n                .onClick({event => ()})\n")
+    ok_s_click, msg = check_s(bad_s_onclick, good_s_theme)
+    assert not ok_s_click and ".onClick" in msg, f"selftest s: expected mask onClick failure, got {msg}"
+
+    bad_s_theme = "public static const winScrim: Int64 = 0xFF000000\n"
+    ok_s_theme, msg = check_s(good_s_index, bad_s_theme)
+    assert not ok_s_theme and "winScrim = 0x802C2A26" in msg, f"selftest s: expected winScrim failure, got {msg}"
+
+    # 20. Test check_t: safeTop/safeBottom implementation
+    good_t_theme = (
+        'func parseHundredths(s: ?String): Int64 {\n'
+        '    return 0\n'
+        '}\n'
+        'class Theme {\n'
+        '    public static func safeTop(): Float64 {\n'
+        '        var opt: ?String = None\n'
+        '        try { opt = getVariable("YILU_SAFE_TOP") } catch (e: Exception) { opt = None }\n'
+        '        return Float64(parseHundredths(opt)) / 100.0\n'
+        '    }\n'
+        '    public static func safeBottom(): Float64 {\n'
+        '        var opt: ?String = None\n'
+        '        try { opt = getVariable("YILU_SAFE_BOTTOM") } catch (e: Exception) { opt = None }\n'
+        '        return Float64(parseHundredths(opt)) / 100.0\n'
+        '    }\n'
+        '    public static const inset: Int64 = 20\n'
+        '}\n'
+    )
+    with tempfile.TemporaryDirectory() as tmp_lib:
+        with open(os.path.join(tmp_lib, "theme.cj"), "w", encoding="utf-8") as f:
+            f.write(good_t_theme)
+        ok_t, msg = check_t(good_t_theme, tmp_lib)
+        assert ok_t, f"selftest t: expected pass, got {msg}"
+
+        bad_t_tostring = good_t_theme.replace("return 0\n", "return 0.toString()\n")
+        ok_t_str, msg = check_t(bad_t_tostring, tmp_lib)
+        assert not ok_t_str and "toString" in msg, f"selftest t: expected toString failure, got {msg}"
+
+        bad_t_notry = good_t_theme.replace('try { opt = getVariable("YILU_SAFE_TOP") } catch (e: Exception) { opt = None }',
+                                           'opt = getVariable("YILU_SAFE_TOP")')
+        ok_t_try, msg = check_t(bad_t_notry, tmp_lib)
+        assert not ok_t_try and "try" in msg, f"selftest t: expected try-catch failure, got {msg}"
+
+        with open(os.path.join(tmp_lib, "other.cj"), "w", encoding="utf-8") as f:
+            f.write("let x = Theme.safeAreaTop\n")
+        ok_t_dep, msg = check_t(good_t_theme, tmp_lib)
+        assert not ok_t_dep and "safeAreaTop" in msg, f"selftest t: expected safeAreaTop failure, got {msg}"
+
+    # 21. Test check_u: playPaper
+    good_u_index = (
+        'func playPaper(): Int64 {\n'
+        '    if (this.screen == 6) {\n'
+        '        return Theme.paperOf(this.chapterIndex)\n'
+        '    }\n'
+        '    return Theme.paper\n'
+        '}\n'
+    )
+    ok_u, msg = check_u(good_u_index)
+    assert ok_u, f"selftest u: expected pass, got {msg}"
+
+    bad_u_screen2 = (
+        'func playPaper(): Int64 {\n'
+        '    if (this.screen == 6) {\n'
+        '        return Theme.paperOf(this.chapterIndex)\n'
+        '    }\n'
+        '    if (this.screen == 2) {\n'
+        '        return Theme.paperOf(this.chapterIndex)\n'
+        '    }\n'
+        '    return Theme.paper\n'
+        '}\n'
+    )
+    ok_u_s2, msg = check_u(bad_u_screen2)
+    assert not ok_u_s2, f"selftest u: expected screen 2 paperOf failure, got {msg}"
+
+    bad_u_extra = good_u_index + 'let p = Theme.paperOf(0)\n'
+    ok_u_ext, msg = check_u(bad_u_extra)
+    assert not ok_u_ext and "expected exactly 1" in msg, f"selftest u: expected extra call failure, got {msg}"
+
+    # 22. Baseline regression assertions: cec0712 must fail at least (q), (r), (s), (u)
+    try:
+        cec_text = subprocess.check_output(
+            ["git", "-C", REPO_ROOT, "show", "cec0712:mobile/cjmp/lib/index.cj"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except Exception:
+        cec_text = None
+
+    if cec_text is not None:
+        q_pass, q_err = check_q(cec_text)
+        assert not q_pass, f"selftest regression: cec0712 must fail check_q, but passed: {q_err}"
+        r_pass, r_err = check_r(cec_text)
+        assert not r_pass, f"selftest regression: cec0712 must fail check_r, but passed: {r_err}"
+        s_pass, s_err = check_s(cec_text, good_s_theme)
+        assert not s_pass, f"selftest regression: cec0712 must fail check_s, but passed: {s_err}"
+        u_pass, u_err = check_u(cec_text)
+        assert not u_pass, f"selftest regression: cec0712 must fail check_u, but passed: {u_err}"
+    else:
+        print("SKIP baseline regression check (cannot read cec0712)")
+
     print("selftest OK")
     sys.exit(0)
 
@@ -1369,6 +1945,7 @@ def main():
     fonts_dir = os.path.join(cjmp_dir, "fonts")
     index_cj_path = os.path.join(lib_dir, "index.cj")
     chapter_cj_path = os.path.join(lib_dir, "chapter.cj")
+    theme_cj_path = os.path.join(lib_dir, "theme.cj")
     boards_locked_dir = os.path.join(repo_root, "boards-locked")
     selftest_main_path = os.path.join(cjmp_dir, "scripts", "board_selftest", "main.cj")
 
@@ -1383,6 +1960,11 @@ def main():
     if os.path.exists(chapter_cj_path):
         with open(chapter_cj_path, "r", encoding="utf-8") as f:
             chapter_cj_text = f.read()
+
+    theme_cj_text = ""
+    if os.path.exists(theme_cj_path):
+        with open(theme_cj_path, "r", encoding="utf-8") as f:
+            theme_cj_text = f.read()
 
     checks = [
         ("a) border_radius_order", lambda: check_a(index_cj_lines, name="index.cj")),
@@ -1401,6 +1983,11 @@ def main():
         ("n) yicheng_scroll_position", lambda: check_n(index_cj_text, chapter_cj_text)),
         ("o) primary_button_r8_containers", lambda: check_o(index_cj_text)),
         ("p) summary_card_top_whitespace", lambda: check_p(index_cj_text, chapter_cj_text)),
+        ("q) root_padding_and_safe_area", lambda: check_q(index_cj_text)),
+        ("r) bottom_margins_use_theme", lambda: check_r(index_cj_text)),
+        ("s) win_scrim_and_card_stack", lambda: check_s(index_cj_text, theme_cj_text)),
+        ("t) safe_area_implementation", lambda: check_t(theme_cj_text, lib_dir)),
+        ("u) play_paper_colors", lambda: check_u(index_cj_text)),
     ]
 
     all_passed = True
