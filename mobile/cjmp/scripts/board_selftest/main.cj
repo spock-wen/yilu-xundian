@@ -3395,6 +3395,60 @@ func j32StationRowTests(ctx: Ctx): Unit {
     println("J32 station rows done checks=${ctx.checks - c0}")
 }
 
+/* ===== J33 驿程全表初始滚动偏移自测 (J21 设计师裁决 4b / SPEC.md「默认滚动位置」) ===== */
+func j33YichengScrollTests(ctx: Ctx): Unit {
+    let c0 = ctx.checks
+
+    // 1. YichengScrollGeom 常量与 index.cj screen==3 Scroll 实际布局逐项对账
+    ctx.ck(YichengScrollGeom.headerH() == 40.0, "J33 headerH=${YichengScrollGeom.headerH()} want=40")
+    ctx.ck(YichengScrollGeom.rowH() == Float64(StationRowGeom.globalRowH), "J33 rowH==StationRowGeom.globalRowH")
+    ctx.ck(YichengScrollGeom.rowH() == 64.0, "J33 rowH=${YichengScrollGeom.rowH()} want=64")
+    ctx.ck(YichengScrollGeom.rowGap() == 8.0, "J33 rowGap=${YichengScrollGeom.rowGap()} want=8")
+    ctx.ck(YichengScrollGeom.headerTopMargin() == 4.0, "J33 headerTopMargin=${YichengScrollGeom.headerTopMargin()} want=4")
+    ctx.ck(YichengScrollGeom.groupGap() == 12.0, "J33 groupGap=${YichengScrollGeom.groupGap()} want=12(8+4)")
+    ctx.ck(YichengScrollGeom.summaryBlockH() == SummaryGeom.cardH() + YichengScrollGeom.rowGap(), "J33 summaryBlockH==cardH(88)+rowGap(8)")
+    ctx.ck(YichengScrollGeom.summaryBlockH() == 96.0, "J33 summaryBlockH=${YichengScrollGeom.summaryBlockH()} want=96")
+
+    // 2. 整章高度展开式: 分组头40 + 10×行高64 + 9×行间距8 = 752(章内只有 9 个行间距);
+    //    加组间距 12 的完整章周期 = 764
+    let full10 = YichengScrollGeom.chapterH(10)
+    ctx.ck(full10 == YichengScrollGeom.headerH() + 10.0 * YichengScrollGeom.rowH() + 9.0 * YichengScrollGeom.rowGap(), "J33 chapterH(10) expansion headerH+10*rowH+9*rowGap")
+    ctx.ck(full10 == 752.0, "J33 chapterH(10)=${full10} want=752")
+    let cycle = full10 + YichengScrollGeom.groupGap()
+    ctx.ck(cycle == 764.0, "J33 chapter cycle(header+rows+gaps+groupGap)=${cycle} want=764")
+    ctx.ck(YichengScrollGeom.chapterH(0) == 0.0, "J33 chapterH(0)==0")
+
+    // 3. cleared=0 → 当前章=第 1 章 → offset 0
+    ctx.ck(ChapterCatalog.yichengScrollOffset(ChapterCatalog.chapterIdForLevel(0), 0, 100) == 0.0, "J33 cleared=0 offset==0")
+
+    // 4. cleared 落在第 k 章(k=1..10, 1-based)→ offset = (k-1)×整章周期,与逐项展开式一致
+    var k: Int64 = 1
+    while (k <= 10) {
+        let cleared = (k - 1) * 10
+        let ch = ChapterCatalog.chapterIdForLevel(cleared)
+        let got = ChapterCatalog.yichengScrollOffset(ch, cleared, 100)
+        let want = Float64(k - 1) * (YichengScrollGeom.headerH() + 10.0 * YichengScrollGeom.rowH() +
+            9.0 * YichengScrollGeom.rowGap() + YichengScrollGeom.groupGap())
+        ctx.ck(got == want, "J33 ch${k} cleared=${cleared} offset=${got} want=${want}")
+        ctx.ck(ChapterCatalog.groupIsCurrent(ch, cleared), "J33 ch${k} cleared=${cleared} groupIsCurrent")
+        k = k + 1
+    }
+    // 章中关卡也落对本章头(第 5 章第 3 关 cleared=42 → 第 5 章 offset = 4×764)
+    ctx.ck(ChapterCatalog.yichengScrollOffset(4, 42, 100) == 4.0 * cycle, "J33 mid-level cleared=42 offset==4*764")
+    // 传入的章号与 cleared 不一致时按 groupIsCurrent/chapterIdForLevel 归一
+    ctx.ck(ChapterCatalog.yichengScrollOffset(0, 42, 100) == 4.0 * cycle, "J33 mismatched chapter arg normalized to cleared's chapter")
+
+    // 5. 百驿全通(cleared=100)停顶部: 总结卡可见,offset 0
+    ctx.ck(ChapterCatalog.yichengScrollOffset(9, 100, 100) == 0.0, "J33 cleared=100 offset==0")
+    ctx.ck(ChapterCatalog.yichengScrollOffset(0, 100, 100) == 0.0, "J33 cleared=100 any chapter arg offset==0")
+
+    // 6. cleared=99(第 10 章最后一关)→ 第 10 章分组头 offset = 9×764
+    ctx.ck(ChapterCatalog.chapterIdForLevel(99) == 9, "J33 chapterIdForLevel(99)==9")
+    ctx.ck(ChapterCatalog.yichengScrollOffset(9, 99, 100) == 9.0 * cycle, "J33 cleared=99 offset==9*764=${9.0 * cycle}")
+
+    println("J33 yicheng scroll done checks=${ctx.checks - c0}")
+}
+
 /* ===== P4 DUMP:按场景文件渲染 app 各板层 JSON(与设计稿 PNG 对拍,box-only) ===== */
 
 func dumpBool(v: Bool): String {
@@ -3847,6 +3901,8 @@ main(args: Array<String>): Int64 {
     j31FooterSlackTests(levels, ctx)
     /* J32 station rows geometry checks. */
     j32StationRowTests(ctx)
+    /* J33 yicheng full-list initial scroll offset checks. */
+    j33YichengScrollTests(ctx)
     ctx.checks = ctx.checks + dStat.checks
     println("J21 toast sweep cases=${ctx.toastN} shown=${ctx.toastShown} relaxed=${ctx.toastRelaxed} notShown=${ctx.toastNot} intersections=${ctx.toastHit} fallback=${ctx.toastFallback}")
     ctx.ck(ctx.toastHit == 0, "J21 toast intersections=${ctx.toastHit} want=0")

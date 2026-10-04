@@ -71,6 +71,8 @@ class EntryView {
     @State var boardGates: Array<BoardImg> = Array<BoardImg>()
     @State var boardUnder: Array<BoardPath> = Array<BoardPath>()
     var obstacleNextCnt: Int64 = 0
+    // J21(裁决 4b): 驿程全表 Scroll 的程序化滚动控制器(Keels 0.2.2 STATE.md: Scroll(scroller){})
+    let yichengScroller: Scroller = Scroller()
 
     func homeMarkFontVp(): Float64 { return 12.0 / this.getPxFactor() }
     func homeMarkTop(baseline: Float64): Float64 { return baseline - 0.88 * this.homeMarkFontVp() }
@@ -725,6 +727,35 @@ class EntryView {
     func leaveBoard(): Unit {
         this.clearParityReject()
         this.screen = this.boardBack
+        // J21(裁决 4b): 从棋盘返回驿程全表时同样把当前章分组头对齐视口顶
+        if (this.boardBack == 3) {
+            this.positionYichengScroll()
+        }
+    }
+
+    /* J21(裁决 4b / SPEC.md「默认滚动位置」): 进入驿程全表滚到当前章分组头;
+       百驿全通时 offset=0 停顶部(总结卡可见)。偏移纯函数在 YichengScrollGeom/
+       ChapterCatalog.yichengScrollOffset。scrollTo 本身无动画;触发点沿用 toast
+       清除(showReject)已验证的 animateTo-onFinish UI 线程延迟回调写法
+       (STATE.md 0.2.2 已核实 animateTo;@State 写入即在 UI 线程立即重绘,
+       onFinish 在其后的下一拍执行,此时 screen==3 的 Scroll 已建好)。 */
+    func openYicheng(): Unit {
+        this.screen = 3
+        this.positionYichengScroll()
+    }
+
+    func positionYichengScroll(): Unit {
+        let target = ChapterCatalog.yichengScrollOffset(
+            ChapterCatalog.chapterIdForLevel(this.cleared),
+            this.cleared,
+            this.levels.size
+        )
+        this.getUIContext().animateTo(
+            AnimateParam(duration: 0, onFinish: Some({ =>
+                this.yichengScroller.scrollTo(xOffset: 0.0, yOffset: target)
+            })),
+            { => }
+        )
     }
 
     func cardTitleColor(open: Bool): Int64 {
@@ -1036,7 +1067,7 @@ class EntryView {
                         .width(HomeLinkGeom.blockW)
                         .height(HomeLinkGeom.blockH)
                         .textAlign(TextAlign.Center)
-                        .onClick({event => this.screen = 3})
+                        .onClick({event => this.openYicheng()})
                 }
                 .height(HomeLinkGeom.blockH)
                 .margin(top: HomeLinkGeom.rowMarginTop, left: HomeLinkGeom.rowMarginLeft)
@@ -1060,7 +1091,8 @@ class EntryView {
                 .height(Theme.topBar)
                 // Divider not in OpenSDK 0.2.2: 1vp hairline Column, same color/width as HarmonyOS
                 Column() {}.width(100.percent).height(1).backgroundColor(Theme.paperLine)
-                Scroll {
+                // J21(裁决 4b): 挂 yichengScroller 以便进入时滚到当前章分组头(无动画)
+                Scroll(this.yichengScroller) {
                     Column(space: 8) {
                         // 百驿全通总结卡(B7):与分组头同属 Scroll 内容,置于第1章分组头之前
                         if (SummaryCopy.summaryVisible(this.cleared, this.levels.size)) {

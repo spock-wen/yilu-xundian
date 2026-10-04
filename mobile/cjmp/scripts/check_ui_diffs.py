@@ -607,6 +607,35 @@ def check_m(index_cj_text, chapter_cj_text):
     return True, "index.cj references StationRowGeom global/chapter constants, old r18/18pt patterns removed, border order maintained"
 
 
+def check_n(index_cj_text, chapter_cj_text):
+    """n) (J21) yicheng full-list initial scroll position: pure geometry (YichengScrollGeom +
+    ChapterCatalog.yichengScrollOffset) in chapter.cj; index.cj wires a Scroller member into
+    Scroll(this.yichengScroller) and calls scrollTo once on entering screen 3."""
+    if "class YichengScrollGeom" not in chapter_cj_text:
+        return False, "chapter.cj missing 'class YichengScrollGeom'"
+    if "func yichengScrollOffset" not in chapter_cj_text:
+        return False, "chapter.cj missing 'func yichengScrollOffset'"
+    if "groupGap" not in chapter_cj_text:
+        return False, "chapter.cj YichengScrollGeom missing 'groupGap'"
+
+    if "let yichengScroller: Scroller = Scroller()" not in index_cj_text:
+        return False, "index.cj missing 'let yichengScroller: Scroller = Scroller()'"
+    if "Scroll(this.yichengScroller)" not in index_cj_text:
+        return False, "index.cj missing 'Scroll(this.yichengScroller)'"
+    if "yichengScroller.scrollTo(" not in index_cj_text:
+        return False, "index.cj missing 'yichengScroller.scrollTo('"
+    if "ChapterCatalog.yichengScrollOffset(" not in index_cj_text:
+        return False, "index.cj missing 'ChapterCatalog.yichengScrollOffset('"
+
+    # Entry hook: scrollTo must be wired to entering screen 3, not dead code
+    if "this.openYicheng()" not in index_cj_text:
+        return False, "index.cj missing 'this.openYicheng()' entry hook"
+    if ".onClick({event => this.screen = 3})" in index_cj_text:
+        return False, "index.cj still opens screen 3 directly (expected this.openYicheng())"
+
+    return True, "yicheng scroll-to-current-chapter wired via Scroller/scrollTo, geometry in YichengScrollGeom/yichengScrollOffset"
+
+
 def selftest():
     # 1. Test check_a violation detection
     bad_a_lines = [
@@ -935,6 +964,45 @@ def selftest():
     ok_m_order, msg = check_m(bad_m_index_order, good_m_chapter)
     assert not ok_m_order and ".borderRadius before .border" in msg, f"selftest m: expected order failure, got {msg}"
 
+    # 15. Test check_n (yicheng scroll position wiring)
+    good_n_chapter = (
+        "public class ChapterCatalog {\n"
+        "    public static func yichengScrollOffset(currentChapter: Int64, cleared: Int64, total: Int64): Float64 { return 0.0 }\n"
+        "}\n"
+        "public class YichengScrollGeom {\n"
+        "    public static func groupGap(): Float64 { return 12.0 }\n"
+        "}\n"
+    )
+    good_n_index = (
+        "class EntryView {\n"
+        "    let yichengScroller: Scroller = Scroller()\n"
+        "    func openYicheng(): Unit {\n"
+        "        this.screen = 3\n"
+        "        let t = ChapterCatalog.yichengScrollOffset(0, this.cleared, this.levels.size)\n"
+        "        this.yichengScroller.scrollTo(xOffset: 0.0, yOffset: t)\n"
+        "    }\n"
+        "}\n"
+        "Scroll(this.yichengScroller) { Column(space: 8) { } }\n"
+        ".onClick({event => this.openYicheng()})\n"
+    )
+    ok_n, msg = check_n(good_n_index, good_n_chapter)
+    assert ok_n, f"selftest n: expected pass, got {msg}"
+
+    ok_n_nochapter, msg = check_n(good_n_index, "public func foo(): Int64 { return 1 }\n")
+    assert not ok_n_nochapter and "YichengScrollGeom" in msg, f"selftest n: expected chapter geom failure, got {msg}"
+
+    bad_n_index_noscroll = good_n_index.replace("Scroll(this.yichengScroller)", "Scroll")
+    ok_n_noscroll, msg = check_n(bad_n_index_noscroll, good_n_chapter)
+    assert not ok_n_noscroll and "Scroll(this.yichengScroller)" in msg, f"selftest n: expected Scroll wiring failure, got {msg}"
+
+    bad_n_index_deadcode = good_n_index.replace(".onClick({event => this.openYicheng()})", ".onClick({event => this.screen = 3})")
+    ok_n_deadcode, msg = check_n(bad_n_index_deadcode, good_n_chapter)
+    assert not ok_n_deadcode and "openYicheng" in msg, f"selftest n: expected entry-hook failure, got {msg}"
+
+    bad_n_index_noscrollto = good_n_index.replace("this.yichengScroller.scrollTo(xOffset: 0.0, yOffset: t)", "()")
+    ok_n_noscrollto, msg = check_n(bad_n_index_noscrollto, good_n_chapter)
+    assert not ok_n_noscrollto and "scrollTo" in msg, f"selftest n: expected scrollTo failure, got {msg}"
+
     print("selftest OK")
     sys.exit(0)
 
@@ -984,6 +1052,7 @@ def main():
         ("k) sans_bold_font_and_usage", lambda: check_k(lib_dir, fonts_dir)),
         ("l) footer_slack_and_avail_width", lambda: check_l(index_cj_text, chapter_cj_text)),
         ("m) station_row_geom", lambda: check_m(index_cj_text, chapter_cj_text)),
+        ("n) yicheng_scroll_position", lambda: check_n(index_cj_text, chapter_cj_text)),
     ]
 
     all_passed = True
