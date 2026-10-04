@@ -2249,7 +2249,11 @@ class EntryView {
             if (targetH - this.winH > 0.5 || this.winH - targetH > 0.5) {
                 this.winH = targetH
             }
-            // TODO(E2/E8): 宿主 setenv 时机待 Mac 实测;此处是宿主晚写 env 时的重读钩子
+            // E2/E8 实测(2026-10-04 Mac, iPhone 17 402×874, iOS 27): 宿主在
+            // makeKeyAndVisible+layoutIfNeeded 与 rootViewController 赋值后各 setenv
+            // 一次, 并在 viewSafeAreaInsetsDidChange/转屏完成/sceneDidBecomeActive 补写
+            // (YILU_SAFE_TOP=6200 仓颉 getVariable 已实测可读); 此处 onAreaChange 是
+            // 宿主更晚写 env 时的重读钩子, 首帧前后的 setenv 都能被拾取。
             let st = Theme.safeTop()
             let sb = Theme.safeBottom()
             if (st - this.padTop > 0.01 || this.padTop - st > 0.01) {

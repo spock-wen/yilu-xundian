@@ -21,7 +21,14 @@ on iOS 27. This script patches the generated host in place:
            Must be paired with Cangjie safe-top/bottom padding (merged in the
            same batch); if YILU_SAFE_TOP is not set, content sits right below the
            status bar. Exports safeAreaInsets via setenv YILU_SAFE_TOP /
-           YILU_SAFE_BOTTOM (1/100 logical points).
+           YILU_SAFE_BOTTOM (1/100 logical points); timing fixed by Mac E2/E3/E8
+           measurements (2026-10-04, iPhone 17 402x874 pt, iOS 27.0): window
+           insets are 0 before makeKeyAndVisible, readable after — exported
+           after makeKeyAndVisible+layoutIfNeeded (before the viewController
+           view access that triggers viewDidLoad), again after the
+           rootViewController assignment, and re-exported on
+           viewSafeAreaInsetsDidChange / viewWillTransitionToSize completion /
+           sceneDidBecomeActive.
   * paper           paper(#F3E8D6) window background, forced light mode,
            navigation bar kept but repainted opaque paper with no shadow
            hairline — Mac-measured colour-exact (ΔRGB 0 vs paper), content
@@ -146,7 +153,14 @@ PAPER_COLOR_DECL = (
 
 # --bars hide 模式宏定义与 safeAreaInsets 导出钩子（C 函数 + 宏）。
 # 单位 1/100 逻辑点，负数/NaN 记为 0；无任何硬编码 inset 数值常量。
-# TODO(E2): 时机与取值视图以 Mac E2 实测为准。
+# E2/E8 实测依据（2026-10-04 Mac，iPhone 17 402×874 pt，iOS 27.0，Xcode 27.0，
+# 见 /workspace/cjmp-smoke/bios/E2_E3_E8_RESULTS.md）：app_didFinish 与
+# scene_willConnect_pre 时 window.safeAreaInsets 为 0；makeKeyAndVisible 之后
+# （整个 setNavRootVC:inScene: 返回后实测 =(62,0,34,0)；iPhone 16 为 59）已可读；
+# vc.view.safeAreaInsets 在 viewDidLoad/viewWillAppear 仍为 0，要到
+# viewSafeAreaInsetsDidChange 之后才非 0（hide 变体 =62/34），故一律读 window
+# 而非根 VC view。E8 实测：仓颉 getVariable 能读到宿主 setenv
+# （YILU_SAFE_TOP=6200，逐字节 ASCII 解析无误）。
 HIDE_MACROS_AND_SAFE_EXPORT = """\
 #ifndef YILU_SAFE_EXPORT
 #define YILU_SAFE_EXPORT 1
@@ -196,6 +210,11 @@ static inline void yilu_export_safe_insets(UIView *v) {
 """
 
 # --bars hide 模式专用的 UINavigationController 子类定义（覆写深色内容状态栏）。
+# viewSafeAreaInsetsDidChange / viewWillTransitionToSize: 两个补导出方法在
+# #if YILU_SAFE_EXPORT 保护内，且整个类定义位于 yilu_export_safe_insets 的
+# static inline 定义（HIDE_MACROS_AND_SAFE_EXPORT）之后，同一编译单元内可见。
+# AppDelegate.m 在 keels 工程里是 Objective-C++（.mm）：static inline 同文件
+# 使用不受名字修饰影响，block 语法合法。
 YILU_NAVI_CONTROLLER_DECL = """\
 @interface YiluNavigationController : UINavigationController
 @end
@@ -210,6 +229,22 @@ YILU_NAVI_CONTROLLER_DECL = """\
 - (BOOL)prefersStatusBarHidden {
     return NO;
 }
+#if YILU_SAFE_EXPORT
+// E2 实测(2026-10-04 Mac, iPhone 17 402×874, iOS 27.0): vc.view.safeAreaInsets
+// 在 viewDidLoad/viewWillAppear 仍为 0, viewSafeAreaInsetsDidChange 之后才非 0
+// (hide 变体 =62/34), 此处变化后补导出。
+- (void)viewSafeAreaInsetsDidChange {
+    [super viewSafeAreaInsetsDidChange];
+    yilu_export_safe_insets(self.view);
+}
+// 转屏/分屏等尺寸变化完成后补导出。
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
+    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+    [coordinator animateAlongsideTransition:nil completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+        yilu_export_safe_insets(self.view);
+    }];
+}
+#endif
 @end
 """
 
@@ -250,11 +285,19 @@ IN_SCENE_METHOD_HIDE = """\
     self.window = [[UIWindow alloc] initWithWindowScene:scene];
     self.window.backgroundColor = paper;
     [self.window makeKeyAndVisible];
+    [self.window layoutIfNeeded];
 #if YILU_SAFE_EXPORT
-    // TODO(E2): 时机与取值视图以 Mac E2 实测为准
+    // E2 实测(2026-10-04 Mac, iPhone 17 402×874, iOS 27.0, Xcode 27.0):
+    // app_didFinish 与 willConnect_pre 时 window.safeAreaInsets 为 0;
+    // makeKeyAndVisible 之后已可读(rootViewController 赋值后实测 =(62,0,34,0),
+    // iPhone 16 为 59);vc.view.safeAreaInsets 要到 viewSafeAreaInsetsDidChange
+    // 之后才非 0, 故读 window 而非 vc.view;layoutIfNeeded 先让 window 布局落地。
+    // E8 实测:仓颉 getVariable 可读到宿主 setenv(YILU_SAFE_TOP=6200,ASCII 解析无误)。
     yilu_export_safe_insets(self.window);
 #endif
-    // TODO(E3): edgesForExtendedLayout=UIRectEdgeAll in template VC if hidden-nav layout needs it
+    // E3 实测(2026-10-04 Mac):模板 VC edgesForExtendedLayout=UIRectEdgeNone、
+    // extendedLayoutIncludesOpaqueBars=1;hide 模式导航栏隐藏后 vc.view 全屏
+    //(0,0,402,874),无白带,无需改 edgesForExtendedLayout。
     ((UIViewController *)viewController).view.backgroundColor = paper;
     YiluNavigationController *navi = [[YiluNavigationController alloc]initWithRootViewController:viewController];
     self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleLight;
@@ -262,6 +305,11 @@ IN_SCENE_METHOD_HIDE = """\
     [navi setNavigationBarHidden:YES animated:NO];
     [self setNaviAppearance:navi];
     self.window.rootViewController = navi;
+#if YILU_SAFE_EXPORT
+    // E2 实测:rootViewController 赋值后 window.safeAreaInsets=(62,0,34,0) 已可读,
+    // 此为实测已证明非 0 的时机,再导出一次兜底(首帧布局前仓颉 getVariable 可读到)。
+    yilu_export_safe_insets(self.window);
+#endif
 """
 
 
@@ -274,7 +322,11 @@ def in_scene_method(bars):
              为 opaque paper、无阴影细线。
     hide  —— window/navi/root-VC 背景改 paper，强制浅色模式，使用
              YiluNavigationController 隐藏导航栏并提供 UIStatusBarStyleDarkContent，
-             并在 makeKeyAndVisible 后调用 safe area inset 导出钩子。
+             并按 E2 实测时机导出 safe area inset：makeKeyAndVisible +
+             layoutIfNeeded 之后一次（早于触发 viewDidLoad 的
+             viewController.view.backgroundColor 访问）、rootViewController
+             赋值之后一次；viewSafeAreaInsetsDidChange / viewWillTransitionToSize:
+             / sceneDidBecomeActive: 再补读。
     """
     bodies = {"off": IN_SCENE_METHOD_OFF,
               "paper": IN_SCENE_METHOD_PAPER,
@@ -303,6 +355,97 @@ def insert_before_line(text, line_pred, block, anchor, path):
 
 # 已打补丁方法里的模式注释行（用于检测模式冲突）。
 RE_BARS_MODE = re.compile(r"//\s*yilu-bars-patch:\s*mode=(\w+)")
+
+RE_EXPORT_CALL = re.compile(r"yilu_export_safe_insets\(")
+
+# E2/E3 的旧 TODO 占位标记（拼接构造，避免本文件自身出现字面量）。
+STALE_MARKERS = ("TODO(" + "E2)", "TODO(" + "E3)")
+
+
+def _method_body(text, sig_needle):
+    """提取 ObjC 方法体：从签名行起，到下一个列 0 的 '}'（含）为止。
+
+    生成的方法体内部大括号都带缩进（4 空格），列 0 的 '}' 一定是方法收尾。
+    找不到签名或收尾时返回 None。
+    """
+    i = text.find(sig_needle)
+    if i < 0:
+        return None
+    j = text.find("\n}", i)
+    if j < 0:
+        return None
+    return text[i:j]
+
+
+def check_hide_inset_timing(adm_text):
+    """hide 模式 AppDelegate.m 的 safe-inset 导出时序静态检查。返回 (ok, msg)。
+
+    依据 E2/E3 实测（2026-10-04 Mac，iPhone 17 402×874，iOS 27.0；见
+    /workspace/cjmp-smoke/bios/E2_E3_E8_RESULTS.md）：
+      * setNavRootVC:inScene: 里所有 yilu_export_safe_insets( 调用都晚于
+        makeKeyAndVisible；
+      * 第一次导出晚于 makeKeyAndVisible、早于 viewController).view.backgroundColor
+        （会触发 viewDidLoad 的访问），且 makeKeyAndVisible 与第一次导出之间
+        有 layoutIfNeeded；
+      * self.window.rootViewController = navi; 之后还有一次导出（实测已证明
+        该时机 window.safeAreaInsets=(62,0,34,0)）；
+      * YiluNavigationController 有 viewSafeAreaInsetsDidChange 并在其中调用
+        导出（调 super）；有 viewWillTransitionToSize: 且其 completion 里调用
+        导出（调 super）；
+      * 文本里不得残留 E2/E3 的 TODO 占位标记。
+    """
+    errors = []
+    body = _method_body(adm_text, "setNavRootVC:(id)viewController inScene:")
+    if body is None:
+        return False, "setNavRootVC:inScene: method not found"
+    mk = body.find("makeKeyAndVisible")
+    if mk < 0:
+        errors.append("setNavRootVC:inScene: has no makeKeyAndVisible")
+    exports = [m.start() for m in RE_EXPORT_CALL.finditer(body)]
+    if not exports:
+        errors.append("setNavRootVC:inScene: has no yilu_export_safe_insets call")
+    if mk >= 0 and any(pos < mk for pos in exports):
+        errors.append("export call before makeKeyAndVisible")
+    bg = body.find("viewController).view.backgroundColor")
+    if exports and mk >= 0 and exports[0] < mk:
+        errors.append("first export not after makeKeyAndVisible")
+    if exports and bg >= 0 and exports[0] > bg:
+        errors.append("first export not before viewController).view.backgroundColor "
+                      "(must precede the viewDidLoad-triggering view access)")
+    if exports and mk >= 0 and "[self.window layoutIfNeeded]" not in body[mk:exports[0]]:
+        errors.append("no [self.window layoutIfNeeded] between makeKeyAndVisible "
+                      "and first export")
+    rvc = body.find("self.window.rootViewController = navi;")
+    if rvc >= 0 and not any(pos > rvc for pos in exports):
+        errors.append("no export after self.window.rootViewController = navi;")
+    vsaid = _method_body(adm_text, "- (void)viewSafeAreaInsetsDidChange")
+    if vsaid is None:
+        errors.append("YiluNavigationController: viewSafeAreaInsetsDidChange missing")
+    else:
+        if "[super viewSafeAreaInsetsDidChange]" not in vsaid:
+            errors.append("viewSafeAreaInsetsDidChange does not call super")
+        if not RE_EXPORT_CALL.search(vsaid):
+            errors.append("viewSafeAreaInsetsDidChange does not export insets")
+    vwt = _method_body(adm_text, "- (void)viewWillTransitionToSize:")
+    if vwt is None:
+        errors.append("YiluNavigationController: viewWillTransitionToSize: missing")
+    else:
+        if "[super viewWillTransitionToSize:" not in vwt:
+            errors.append("viewWillTransitionToSize: does not call super")
+        comp = vwt.find("completion:^")
+        if comp < 0 or not RE_EXPORT_CALL.search(vwt[comp:]):
+            errors.append("viewWillTransitionToSize: completion does not export insets")
+    for marker in STALE_MARKERS:
+        if marker in adm_text:
+            errors.append("stale marker %s present" % marker)
+    if errors:
+        return False, "; ".join(dict.fromkeys(errors))
+    return True, ("hide-mode inset timing OK: exports only after makeKeyAndVisible; "
+                  "first export bracketed by layoutIfNeeded and "
+                  "viewController).view.backgroundColor; re-export after "
+                  "rootViewController; navi re-export hooks "
+                  "(viewSafeAreaInsetsDidChange / viewWillTransitionToSize "
+                  "completion) present; no stale E2/E3 markers")
 
 
 def patch_app_delegate_m(m_path, changed, bars):
@@ -465,7 +608,8 @@ def scene_delegate_m_text(bundle_name, bars="hide"):
 
 - (void)sceneDidBecomeActive:(UIScene *)scene {
 #if YILU_SAFE_EXPORT
-    // TODO(E2): 时机与取值视图以 Mac E2 实测为准
+    // E2 实测(2026-10-04 Mac):app_didFinish/willConnect 之前 inset 为 0,
+    // makeKeyAndVisible 之后 window.safeAreaInsets=(62,0,34,0) 可读;此处补读兜底。
     yilu_export_safe_insets(self.window);
 #endif
 }
@@ -977,6 +1121,21 @@ def cmd_selftest():
         selftest_assert(sdm.count("{") == sdm.count("}"),
                         "default (hide): SceneDelegate.m braces unbalanced (%d vs %d)"
                         % (sdm.count("{"), sdm.count("}")))
+        # -- hide 导出时序（E2 实测固化）与旧 TODO 标记清除 ---------------
+        ok, msg = check_hide_inset_timing(adm)
+        selftest_assert(ok, "default (hide): inset timing check: %s" % msg)
+        for marker in STALE_MARKERS:
+            selftest_assert(marker not in adm,
+                            "default (hide): stale %s in AppDelegate.m" % marker)
+            selftest_assert(marker not in sdm,
+                            "default (hide): stale %s in SceneDelegate.m" % marker)
+        selftest_assert("layoutIfNeeded" in adm,
+                        "default (hide): layoutIfNeeded missing in adm")
+        with open(__file__, encoding="utf-8") as f:
+            self_src = f.read()
+        for marker in STALE_MARKERS:
+            selftest_assert(marker not in self_src,
+                            "patch_ios_scene.py source still contains %s" % marker)
 
         # -- patch is idempotent ------------------------------------------
         def snap(d):
@@ -1068,6 +1227,49 @@ def cmd_selftest():
                                 "hide: sceneDidBecomeActive missing in SceneDelegate.m")
                 selftest_assert("yilu_export_safe_insets" in sdm_bars,
                                 "hide: yilu_export_safe_insets missing in SceneDelegate.m")
+                ok_bars, msg_bars = check_hide_inset_timing(adm_bars)
+                selftest_assert(ok_bars,
+                                "--bars hide: inset timing check: %s" % msg_bars)
+
+        # -- 反例：时序违规的伪 AppDelegate.m 必须被判红 --------------------
+        adm_hide = read_text(os.path.join(mode_dirs["hide"], "xundian",
+                                          "AppDelegate.m"))
+        good_head = ("    [self.window makeKeyAndVisible];\n"
+                     "    [self.window layoutIfNeeded];\n"
+                     "#if YILU_SAFE_EXPORT\n")
+        bad_head = ("#if YILU_SAFE_EXPORT\n"
+                    "    yilu_export_safe_insets(self.window);\n"
+                    "#endif\n"
+                    "    [self.window makeKeyAndVisible];\n")
+        selftest_assert(good_head in adm_hide,
+                        "counterexample head anchor missing in hide adm")
+        bad_early = adm_hide.replace(good_head, bad_head, 1)
+        selftest_assert(bad_early != adm_hide, "counterexample swap failed")
+        ok, msg = check_hide_inset_timing(bad_early)
+        selftest_assert(not ok and "before makeKeyAndVisible" in msg,
+                        "counterexample (export before makeKeyAndVisible) not "
+                        "detected: %s" % msg)
+        export_stmt = "    yilu_export_safe_insets(self.window);\n"
+        last = adm_hide.rfind(export_stmt)
+        selftest_assert(last >= 0, "counterexample tail anchor missing")
+        bad_tail = adm_hide[:last] + adm_hide[last + len(export_stmt):]
+        ok, msg = check_hide_inset_timing(bad_tail)
+        selftest_assert(not ok and "no export after" in msg,
+                        "counterexample (no export after rootViewController) not "
+                        "detected: %s" % msg)
+        bad_nolayout = adm_hide.replace("    [self.window layoutIfNeeded];\n", "", 1)
+        selftest_assert(bad_nolayout != adm_hide, "counterexample layout removal failed")
+        ok, msg = check_hide_inset_timing(bad_nolayout)
+        selftest_assert(not ok and "layoutIfNeeded" in msg,
+                        "counterexample (no [self.window layoutIfNeeded]) not "
+                        "detected: %s" % msg)
+        bad_marker = adm_hide.replace(
+            "#if YILU_SAFE_EXPORT\n",
+            "#if YILU_SAFE_EXPORT\n    // %s: stale\n" % STALE_MARKERS[0], 1)
+        selftest_assert(bad_marker != adm_hide, "counterexample marker insert failed")
+        ok, msg = check_hide_inset_timing(bad_marker)
+        selftest_assert(not ok and "stale marker" in msg,
+                        "counterexample (stale E2 TODO marker) not detected: %s" % msg)
 
         # -- 同模式二次打补丁无变化（paper 为例） --------------------------
         d = mode_dirs["paper"]
