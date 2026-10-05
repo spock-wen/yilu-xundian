@@ -109,10 +109,45 @@ def cmd_launch(_: argparse.Namespace) -> int:
     time.sleep(0.4)
     r = hdc_shell(f"aa start -a {ABILITY} -b {BUNDLE}", check=False)
     print(r.stdout or r.stderr)
+    out = (r.stdout or "") + (r.stderr or "")
+    # hdc shell exits 0 even when aa reports an error; read the text too.
+    if r.returncode != 0 or "successfully" not in out:
+        print("launch FAIL: aa start did not report success", file=sys.stderr)
+        return r.returncode or 1
+    # `aa start` can print success while no process ever spawns (seen 2026-10-01
+    # and 2026-10-05 on Pura 90: aa dump -l shows the ability `state #INITIAL`,
+    # `app state #BEGIN`, hilog `pending state dropped START`, and dumpLayout
+    # stays on the launcher). Fail closed here instead of letting the drive
+    # report a misleading "no bounds for 开始传书".
+    pid = wait_for_pid(LAUNCH_PID_TIMEOUT_S)
+    if not pid:
+        print(
+            f"launch FAIL: no {BUNDLE} process {LAUNCH_PID_TIMEOUT_S:.0f}s after aa start "
+            "(stale mission stuck INITIAL). Recover the target: "
+            f"`hdc -t {TARGET} uninstall {BUNDLE}` then reinstall the HAP, and re-run.",
+            file=sys.stderr,
+        )
+        return 3
+    print(f"pid={pid}")
     # Cold start on emulator often lands dumpLayout on the launcher icon grid
     # if we probe too early (seen 2026-09-28: texts were demo labels + 驿路巡点 icon).
     time.sleep(2.5)
-    return 0 if r.returncode == 0 else r.returncode
+    return 0
+
+
+LAUNCH_PID_TIMEOUT_S = float(os.environ.get("YILU_LAUNCH_PID_TIMEOUT", "10"))
+
+
+def wait_for_pid(timeout_s: float) -> str:
+    deadline = time.monotonic() + timeout_s
+    while True:
+        p = hdc_shell(f"pidof {BUNDLE}", check=False)
+        pid = (p.stdout or "").strip().split()
+        if pid and pid[0].isdigit():
+            return pid[0]
+        if time.monotonic() >= deadline:
+            return ""
+        time.sleep(0.5)
 
 
 def cmd_cleanup(_: argparse.Namespace) -> int:
