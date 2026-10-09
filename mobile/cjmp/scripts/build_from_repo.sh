@@ -28,7 +28,8 @@
 #
 # Template patches applied automatically:
 #   STEP C   xundian.cpp FindClass com/example -> com/yilu (Android)
-#   STEP C2  EntryEntryAbilityActivity system-back guard (Android)
+#   STEP C2  EntryEntryAbilityActivity system-back guard (Android; forwards to
+#            the page onBackPress, else moveTaskToBack; logs `adb logcat -s xundian`)
 #   STEP C3  EntryEntryAbilityActivity setenv YILU_FILES_DIR (Android, progress save dir)
 #   STEP C4  EntryEntryAbilityActivity system bar colors (Android, paper palette;
 #            default OFF — zero visual effect on the API35 cutout-inset emulator,
@@ -212,19 +213,50 @@ fi
 echo "  Patch verified."
 
 # ---------------------------------------------------------------------------
-# STEP C2: Patch EntryEntryAbilityActivity — Android system back must not exit
+# STEP C2: Patch EntryEntryAbilityActivity — Android 系统 Back 守卫
 #
-# Keels 0.2.2 on Android never routes the system back to the Cangjie page
-# (log: ProcessBackPressed -> AceContainerSG::OnBackPressed returns false), so
-# StageActivity falls through to Activity.onBackPressed() and the app finishes
-# on the FIRST back press from any screen. The page-level onBackPress in
-# mobile/cjmp/lib/index.cj is therefore dead code on Android.
+# 真实链路（Keels 0.2.2 Android：页面级 onBackPress 是**被路由的**，不是死代码）：
+#   StageActivity.onBackPressed() = if (!windowView.backPressed()) super.onBackPressed()
+#     （javap 反编译 keels_android_adapter.jar 证实）
+#   WindowView.backPressed() -> nativeBackPressed -> ACE PipelineContext::OnBackPressed
+#   -> CJFrontend -> CJPageRouterNG::PopWithExitCheck -> PagePattern::OnBackPressed
+#   -> NativeView::FireOnBackPress -> 仓颉 @Entry 的 onBackPress()
+#     （即 mobile/cjmp/lib/index.cj:389 的 override，见文件内 screen 分发）
+#   源码（相对 Keels 仓根，仓库内可检索，不依赖任何盒子本地路径）：
+#     ace_engine/frameworks/bridge/cj_frontend/frontend/cj_page_router_ng.cpp
+#       的 PopWithExitCheck / SetOnBackPressed
+#     ace_engine/frameworks/bridge/cj_frontend/cppview/native_view.cpp
+#       的 FireOnBackPress / RemoteView::OnBackPress
 #
-# Fix: override onBackPressed to first forward to the runtime (windowView.
-# backPressed via reflection; if a future runtime routes it to the page the
-# Cangjie handler comes alive by itself), and when unconsumed move the task to
-# the background instead of finishing (acceptance: pressing back N times must
-# not exit the app; game process and board state survive).
+# 实测日志（2026-10-04 abf56b0 轮，Android API35 logcat）：
+#   WindowView backPressed called
+#   -> router consumed backpressed event
+#   -> AceContainerSG return true
+# 同轮 backkey 用例：棋盘/通关页 Back→首页，首页 Back→回桌面且 pid 不变。
+#
+# 已废弃的错误结论（勿再引用）：10-02 的 0310ebf 轮没有原始 logcat 存档，只有
+# BACK_TEST.txt 文字，其中报告过一次「ProcessBackPressed:
+# AceContainerSG::OnBackPressed return false → 一次即退」，当时据此写下
+# 「Keels 0.2.2 never routes … dead code」。该结论与上面的源码链路、实测日志
+# 均矛盾：页面级 onBackPress 在 Android 上是活的。但那一次 return false 的
+# 具体原因未查明（当轮未存原始 logcat，无法复核），此处不再猜测其成因；
+# 守卫保证即使再出现页面未消费，也只会转后台（进程与棋局保留）而不会
+# finish。测试可用 adb logcat -s xundian 的 `back: page consumed=` 行直接判读。
+#
+# 守卫的作用：先把系统 Back 转发给运行时（windowView.backPressed()），页面
+# 消费了就 return；未消费时（按 index.cj onBackPress，仅首页 screen==0 返回
+# false）走 moveTaskToBack(true) 而不是 finish —— 等同 Android 12+ 对根任务
+# Activity 的系统默认 Back 行为，且在 API 26-30 上避免被 super.onBackPressed()
+# finish 掉进程。应用 targetSdk 34 且未开 enableOnBackInvokedCallback，
+# onBackPressed 在所有系统版本都会被调用。
+#
+# 可诊断日志（注入的方法会打 android.util.Log.i，tag = "xundian"）：
+#   adb logcat -s xundian
+#     back: page consumed=true            页面已消费（棋盘/通关页 → 首页）
+#     back: page consumed=false           首页未消费
+#     back: unconsumed -> moveTaskToBack  转入后台，进程与棋局保留
+# 异常串 "backPressed forward failed" 同时是本 STEP 的幂等标记（grep -q 依赖
+# 它），勿改。
 # ---------------------------------------------------------------------------
 echo "STEP C2: Patching EntryEntryAbilityActivity (Android system back guard)"
 
@@ -245,20 +277,28 @@ src = open(path, encoding="utf-8").read()
 method = '''
     @Override
     public void onBackPressed() {
-        // Keels 0.2.2: ACE never routes page onBackPress on Android; default
-        // super() finishes the app on the first back press. Forward to the
-        // runtime first; if unconsumed, keep the app alive in background.
+        // Keels 0.2.2 会把系统 Back 路由到仓颉页面（StageActivity.onBackPressed
+        // -> windowView.backPressed() -> ACE PipelineContext ->
+        // CJPageRouterNG::PopWithExitCheck -> @Entry 的 onBackPress）。
+        // 页面消费则到此为止；未消费（仅首页 screen==0）时转入后台而不是
+        // finish，进程与棋局保留。
+        boolean consumed = false;
         try {
             java.lang.reflect.Field f =
                 ohos.stage.ability.adapter.StageActivity.class.getDeclaredField("windowView");
             f.setAccessible(true);
             Object wv = f.get(this);
-            if (wv != null && (Boolean) wv.getClass().getMethod("backPressed").invoke(wv)) {
-                return;
+            if (wv != null) {
+                consumed = (Boolean) wv.getClass().getMethod("backPressed").invoke(wv);
             }
         } catch (Throwable t) {
             android.util.Log.e("xundian", "backPressed forward failed", t);
         }
+        android.util.Log.i("xundian", "back: page consumed=" + consumed);
+        if (consumed) {
+            return;
+        }
+        android.util.Log.i("xundian", "back: unconsumed -> moveTaskToBack");
         moveTaskToBack(true);
     }
 '''
@@ -276,7 +316,7 @@ if ! grep -q "backPressed forward failed" "$ACT"; then
   echo "ERROR: back guard not present after patch" >&2
   exit 1
 fi
-echo "  Patched: onBackPressed guard -> forward-or-background."
+echo "  Patched: onBackPressed guard -> forward-or-background (log tag: xundian)."
 fi
 
 # ---------------------------------------------------------------------------
