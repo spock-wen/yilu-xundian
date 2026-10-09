@@ -3,7 +3,7 @@ package ohos_app_cangjie_entry
 /* Generated from resources/rawfile/levels.json. Do not invent levels here. */
 import std.collection.ArrayList
 import ohos_app_cangjie_entry.engine.Wall
-import ohos_app_cangjie_entry.game.{LevelDef, ParityEdge, Waypoint}
+import ohos_app_cangjie_entry.game.{FerryDef, LevelDef, ParityEdge, Waypoint}
 
 public class LevelCatalog {
     public static func all(): ArrayList<LevelDef> {
@@ -1055,7 +1055,9 @@ public class LevelCatalog {
         walls52.add(Wall(2, 5, 2, 6))
         let parityEdges52 = ArrayList<ParityEdge>()
         let stepLimit52 = 0
-        levels.add(LevelDef(52, "荆州·樊城·第 1 驿", 7, 7, wps52, walls52, parityEdges52, stepLimit52))
+        let level52 = LevelDef(52, "荆州·樊城·第 1 驿", 7, 7, wps52, walls52, parityEdges52, stepLimit52)
+        level52.ferry = Some(FerryDef(6, 5, 3, 5))
+        levels.add(level52)
 
         let wps53 = ArrayList<Waypoint>()
         wps53.add(Waypoint(1, 3, 5))
@@ -1177,7 +1179,9 @@ public class LevelCatalog {
         walls57.add(Wall(4, 3, 4, 4))
         let parityEdges57 = ArrayList<ParityEdge>()
         let stepLimit57 = 0
-        levels.add(LevelDef(57, "荆州·公安·第 1 驿", 7, 7, wps57, walls57, parityEdges57, stepLimit57))
+        let level57 = LevelDef(57, "荆州·公安·第 1 驿", 7, 7, wps57, walls57, parityEdges57, stepLimit57)
+        level57.ferry = Some(FerryDef(0, 5, 5, 5))
+        levels.add(level57)
 
         let wps58 = ArrayList<Waypoint>()
         wps58.add(Waypoint(1, 5, 5))
@@ -1235,7 +1239,9 @@ public class LevelCatalog {
         walls59.add(Wall(6, 4, 6, 5))
         let parityEdges59 = ArrayList<ParityEdge>()
         let stepLimit59 = 0
-        levels.add(LevelDef(59, "荆州·公安·第 2 驿", 7, 7, wps59, walls59, parityEdges59, stepLimit59))
+        let level59 = LevelDef(59, "荆州·公安·第 2 驿", 7, 7, wps59, walls59, parityEdges59, stepLimit59)
+        level59.ferry = Some(FerryDef(6, 2, 1, 3))
+        levels.add(level59)
 
         let wps60 = ArrayList<Waypoint>()
         wps60.add(Waypoint(1, 6, 2))
@@ -1255,7 +1261,9 @@ public class LevelCatalog {
         walls60.add(Wall(6, 1, 6, 2))
         let parityEdges60 = ArrayList<ParityEdge>()
         let stepLimit60 = 0
-        levels.add(LevelDef(60, "赤壁·樊口", 7, 7, wps60, walls60, parityEdges60, stepLimit60))
+        let level60 = LevelDef(60, "赤壁·樊口", 7, 7, wps60, walls60, parityEdges60, stepLimit60)
+        level60.ferry = Some(FerryDef(6, 0, 4, 0))
+        levels.add(level60)
 
         let wps61 = ArrayList<Waypoint>()
         wps61.add(Waypoint(1, 2, 6))
@@ -1320,7 +1328,9 @@ public class LevelCatalog {
         walls63.add(Wall(2, 5, 2, 6))
         let parityEdges63 = ArrayList<ParityEdge>()
         let stepLimit63 = 0
-        levels.add(LevelDef(63, "赤壁·陆口·第 1 驿", 7, 7, wps63, walls63, parityEdges63, stepLimit63))
+        let level63 = LevelDef(63, "赤壁·陆口·第 1 驿", 7, 7, wps63, walls63, parityEdges63, stepLimit63)
+        level63.ferry = Some(FerryDef(0, 2, 3, 1))
+        levels.add(level63)
 
         let wps64 = ArrayList<Waypoint>()
         wps64.add(Waypoint(1, 3, 3))
@@ -1410,7 +1420,9 @@ public class LevelCatalog {
         walls67.add(Wall(3, 4, 3, 5))
         let parityEdges67 = ArrayList<ParityEdge>()
         let stepLimit67 = 0
-        levels.add(LevelDef(67, "赤壁·柴桑·第 2 驿", 7, 7, wps67, walls67, parityEdges67, stepLimit67))
+        let level67 = LevelDef(67, "赤壁·柴桑·第 2 驿", 7, 7, wps67, walls67, parityEdges67, stepLimit67)
+        level67.ferry = Some(FerryDef(5, 5, 0, 6))
+        levels.add(level67)
 
         let wps68 = ArrayList<Waypoint>()
         wps68.add(Waypoint(1, 1, 3))
@@ -1863,7 +1875,9 @@ public class LevelCatalog {
         parityEdges87.add(ParityEdge(0, 0, 0, 1, false, true))
         parityEdges87.add(ParityEdge(5, 6, 6, 6, true, false))
         let stepLimit87 = 0
-        levels.add(LevelDef(87, "汉中·南郑·第 2 驿", 7, 7, wps87, walls87, parityEdges87, stepLimit87))
+        let level87 = LevelDef(87, "汉中·南郑·第 2 驿", 7, 7, wps87, walls87, parityEdges87, stepLimit87)
+        level87.ferry = Some(FerryDef(3, 1, 1, 4))
+        levels.add(level87)
 
         let wps88 = ArrayList<Waypoint>()
         wps88.add(Waypoint(1, 0, 2))
@@ -1907,7 +1921,9 @@ public class LevelCatalog {
         parityEdges89.add(ParityEdge(5, 1, 5, 2, false, true))
         parityEdges89.add(ParityEdge(5, 4, 6, 4, true, false))
         let stepLimit89 = 0
-        levels.add(LevelDef(89, "南中·滇池·第 2 驿", 7, 7, wps89, walls89, parityEdges89, stepLimit89))
+        let level89 = LevelDef(89, "南中·滇池·第 2 驿", 7, 7, wps89, walls89, parityEdges89, stepLimit89)
+        level89.ferry = Some(FerryDef(1, 5, 0, 2))
+        levels.add(level89)
 
         let wps90 = ArrayList<Waypoint>()
         wps90.add(Waypoint(1, 6, 6))

@@ -13,6 +13,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 import unittest
 from contextlib import redirect_stdout
@@ -630,6 +631,54 @@ class VerifiedCatalogTests(unittest.TestCase):
         generated = emit(levels)
         shipped = (ROOT / "entry/src/main/cangjie/levels.cj").read_text(encoding="utf-8")
         self.assertEqual(shipped, generated, "levels.cj must be emitted from levels.json")
+
+    def test_levels_cj_carries_exactly_the_json_ferry_boards(self) -> None:
+        """鸿蒙 levels.cj 携带 ferry：id 集合与坐标转换都必须对得上 levels.json。
+
+        生成侧唯一的坐标换算是 build_levels._ferry_stmt（[r, c] -> x=列, y=行），
+        与 mobile/shared/src/game/json_level.cj 的 readRcPair `Cell(c, r)` 以及
+        tools/solve_levels.py 的 rc_to_xy 同一约定。这里把 levels.cj 里实际出现
+        的 `FerryDef(...)` 文本解析回来和 levels.json 逐一比对，防止「生成器改了
+        而 levels.cj 没重跑」或「只 emit 了部分渡口关」。
+        """
+        from build_levels import _ferry_stmt, load_verified
+
+        levels = load_verified()
+        shipped = (ROOT / "entry/src/main/cangjie/levels.cj").read_text(encoding="utf-8")
+        emitted = {}
+        for line in shipped.splitlines():
+            m = re.fullmatch(
+                r"\s*level(\d+)\.ferry = Some\(FerryDef\((-?\d+), (-?\d+), (-?\d+), (-?\d+)\)\)",
+                line,
+            )
+            if m:
+                emitted[int(m.group(1))] = tuple(int(m.group(i)) for i in (2, 3, 4, 5))
+        expected = {}
+        for lv in levels:
+            stmts = _ferry_stmt(lv)
+            if stmts:
+                text = stmts[0].split("FerryDef(")[1].rstrip(")")
+                expected[int(lv["id"])] = tuple(int(v) for v in text.split(","))
+        self.assertEqual(
+            set(emitted),
+            {52, 57, 59, 60, 63, 67, 87, 89},
+            "levels.cj ferry board ids drifted from the 8 locked ferry boards",
+        )
+        self.assertEqual(
+            emitted,
+            expected,
+            "levels.cj FerryDef coords must be the [r,c]->(x=col,y=row) conversion of levels.json",
+        )
+        for lid in sorted(emitted):
+            src = levels[lid]["ferry"]
+            jr, jc = src["jia"]
+            yr, yc = src["yi"]
+            self.assertEqual(emitted[lid], (jc, jr, yc, yr), f"level {lid} ferry conversion")
+        # 导入也必须跟上，否则 FerryDef 未定义（编译期才炸）。
+        self.assertIn(
+            "import ohos_app_cangjie_entry.game.{FerryDef, LevelDef, ParityEdge, Waypoint}",
+            shipped,
+        )
 
     def test_mock_copy_is_in_ui(self) -> None:
         ui = (ROOT / "entry/src/main/cangjie/index.cj").read_text(encoding="utf-8")

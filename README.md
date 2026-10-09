@@ -90,7 +90,7 @@ python3 tools/test_rules.py
 
 退出码（`exit_code_strict` / `main`）：`0` = 全部有解；`1` = 存在已证明无解的关；`2` = 数据或参数错误（缺文件、非 100 关、坏 `--ids`、schema 不合法）；`3` = 不存在无解关但有超时关。
 
-生成的 `entry/src/main/cangjie/levels.cj` 目前**不携带**新增机制键（`ferry` / `one_ways` / `slide_cells` / `seal_gates` / `token_cells` / `collapse` / `burden`；HarmonyOS 路径不在这些机制的范围内）。CJMP / iOS / Android 路径经 `mobile/shared/src/game/json_level.cj` 读取 `levels.json`。
+生成的 `entry/src/main/cangjie/levels.cj` **携带 `ferry`**（渡口：`levelsN.ferry = Some(FerryDef(...))`，共 8 关 52/57/59/60/63/67/87/89；`entry/src/main/cangjie/game/{level,patrol}.cj` 实现了进甲一次输入推 `[甲,乙]`）。其余机制键仍**不携带**（`one_ways` / `slide_cells` / `seal_gates` / `token_cells` / `collapse` / `burden`；HarmonyOS 路径不在这些机制的范围内）。CJMP / iOS / Android 路径经 `mobile/shared/src/game/json_level.cj` 读取 `levels.json`。
 
 `tools/build_levels.py` **只**把已验证的 `levels.json` 抄成仓颉字面量，不生成路径、不发明关卡。改关后必须先改 JSON，再：
 

@@ -40,6 +40,24 @@ public class ParityEdge {
     }
 }
 
+/* 渡口：踏上甲的那一次输入同时铺甲与乙，落点为乙。
+   坐标与 Waypoint/Wall 一致：x = 列, y = 行（levels.json 的 [r,c] 由
+   tools/build_levels.py 转换，和 mobile/shared/src/game/json_level.cj 的
+   readRcPair `Cell(c, r)` 同一约定）。 */
+public class FerryDef {
+    public var jiaX: Int64
+    public var jiaY: Int64
+    public var yiX: Int64
+    public var yiY: Int64
+
+    public init(jiaX: Int64, jiaY: Int64, yiX: Int64, yiY: Int64) {
+        this.jiaX = jiaX
+        this.jiaY = jiaY
+        this.yiX = yiX
+        this.yiY = yiY
+    }
+}
+
 public class LevelDef {
     public var id: Int64
     public var name: String
@@ -49,6 +67,8 @@ public class LevelDef {
     public var walls: ArrayList<Wall>
     public var parityEdges: ArrayList<ParityEdge>
     public var stepLimit: Int64
+    /* 渡口（可选，缺省即无渡口）；构造签名不变，由生成代码在构造后赋值。 */
+    public var ferry: Option<FerryDef> = None
 
     public init(
         id: Int64,
