@@ -145,6 +145,24 @@ def _cj_bool(value: bool) -> str:
     return "true" if value else "false"
 
 
+def _ferry_stmt(lv: dict) -> list[str]:
+    """Emit the `ferry` assignment for one level (empty when it has none).
+
+    levels.json keeps `ferry = {"jia": [r, c], "yi": [r, c]}` in boards-locked
+    [row, col] form; the engine is x = column, y = row. Same conversion as
+    mobile/shared/src/game/json_level.cj `readRcPair` (Cell(c, r)) and
+    tools/solve_levels.py `rc_to_xy`.
+    """
+    f = lv.get("ferry")
+    if not f:
+        return []
+    jr, jc = (int(v) for v in f["jia"])
+    yr, yc = (int(v) for v in f["yi"])
+    return [
+        f"        level{lv['id']}.ferry = Some(FerryDef({jc}, {jr}, {yc}, {yr}))",
+    ]
+
+
 def emit(levels: list[dict]) -> str:
     lines = [
         "package ohos_app_cangjie_entry",
@@ -152,7 +170,7 @@ def emit(levels: list[dict]) -> str:
         "/* Generated from resources/rawfile/levels.json. Do not invent levels here. */",
         "import std.collection.ArrayList",
         "import ohos_app_cangjie_entry.engine.Wall",
-        "import ohos_app_cangjie_entry.game.{LevelDef, ParityEdge, Waypoint}",
+        "import ohos_app_cangjie_entry.game.{FerryDef, LevelDef, ParityEdge, Waypoint}",
         "",
         "public class LevelCatalog {",
         "    public static func all(): ArrayList<LevelDef> {",
@@ -174,9 +192,18 @@ def emit(levels: list[dict]) -> str:
                 f"        parityEdges{key}.add(ParityEdge({pe['x1']}, {pe['y1']}, {pe['x2']}, {pe['y2']}, {_cj_bool(pe['requireOdd'])}, {_cj_bool(pe['requireEven'])}))"
             )
         lines.append(f"        let stepLimit{key} = {int(lv.get('stepLimit') or 0)}")
-        lines.append(
-            f"        levels.add(LevelDef({lv['id']}, \"{lv['name']}\", {lv['cols']}, {lv['rows']}, wps{key}, walls{key}, parityEdges{key}, stepLimit{key}))"
-        )
+        if lv.get("ferry"):
+            # Only ferry boards need a local: the assignment goes after the
+            # constructor call, so every other entry stays byte-identical.
+            lines.append(
+                f"        let level{key} = LevelDef({lv['id']}, \"{lv['name']}\", {lv['cols']}, {lv['rows']}, wps{key}, walls{key}, parityEdges{key}, stepLimit{key})"
+            )
+            lines.extend(_ferry_stmt(lv))
+            lines.append(f"        levels.add(level{key})")
+        else:
+            lines.append(
+                f"        levels.add(LevelDef({lv['id']}, \"{lv['name']}\", {lv['cols']}, {lv['rows']}, wps{key}, walls{key}, parityEdges{key}, stepLimit{key}))"
+            )
         lines.append("")
     lines.extend(
         [

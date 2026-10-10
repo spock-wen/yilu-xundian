@@ -2,8 +2,9 @@ package ohos_app_cangjie_entry
 
 import kit.ArkUI.*
 import ohos.arkui.state_macro_manage.*
-import ohos_app_cangjie_entry.engine.{Cell, GridLayout, touchToCell}
-import ohos_app_cangjie_entry.game.{LevelDef, PatrolGame}
+import std.math.sqrt
+import ohos_app_cangjie_entry.engine.{Cell, GridLayout, GridPath, touchToCell}
+import ohos_app_cangjie_entry.game.{FerryDef, LevelDef, PatrolGame}
 
 /*
  * Canvas + onTouch from official docs_cangjie (kit.ArkUI.*).
@@ -462,6 +463,108 @@ class EntryView {
         this.strokeStationPath(path, h)
     }
 
+    /* ---- 渡口(仅 this.game.level.ferry 为 Some 时画) ---- */
+    /* 画法抄 mobile/cjmp/lib/board_mech.cj:
+       buildBoardMechDots —— 甲乙各两个同心描边圆(r=0.38c 线宽 1.5、r=0.30c
+         线宽 1.0,色 qingDeep,无填充);
+       buildBoardMechLabels —— 甲/乙 0.30c 居中(格内有驿号时小字 0.20c 放左上角),
+         甲乙中点「渡」0.24c 色 qing;
+       buildBoardMechPaths 的 d 段 —— 甲乙圆环之间的虚线,走过 甲→乙 后深色加粗。
+       层序同 CJMP(驿站圆 → 甲/乙/渡 字 → 虚线),故放在 waypoints 循环之后。 */
+    func drawFerry(f: FerryDef, cs: Float64): Unit {
+        let jx = (Float64(f.jiaX) + 0.5) * cs
+        let jy = (Float64(f.jiaY) + 0.5) * cs
+        let yx = (Float64(f.yiX) + 0.5) * cs
+        let yy = (Float64(f.yiY) + 0.5) * cs
+        this.drawFerryRings(jx, jy, cs)
+        this.drawFerryRings(yx, yy, cs)
+        /* 格内有驿号 → 小字放左上角 0.2c;否则居中 0.30c。 */
+        if (this.game.level.numberAt(f.jiaX, f.jiaY) != 0) {
+            let s = 0.20 * cs
+            this.drawFerryChar("甲", Float64(f.jiaX) * cs + 0.08 * cs + s * 0.5,
+                Float64(f.jiaY) * cs + 0.06 * cs + s * 0.5, s, Theme.qingDeep)
+        } else {
+            this.drawFerryChar("甲", jx, jy, 0.30 * cs, Theme.qingDeep)
+        }
+        if (this.game.level.numberAt(f.yiX, f.yiY) != 0) {
+            let s = 0.20 * cs
+            this.drawFerryChar("乙", Float64(f.yiX) * cs + 0.08 * cs + s * 0.5,
+                Float64(f.yiY) * cs + 0.06 * cs + s * 0.5, s, Theme.qingDeep)
+        } else {
+            this.drawFerryChar("乙", yx, yy, 0.30 * cs, Theme.qingDeep)
+        }
+        this.drawFerryChar("渡", (jx + yx) * 0.5, (jy + yy) * 0.5, 0.24 * cs, Theme.qing)
+        match (ferryDashSpan(jx, jy, yx, yy, cs)) {
+            case Some(span) =>
+                /* 走过 甲→乙 后虚线改深色加粗。 */
+                if (ferryTraversed(this.game.path, f.jiaX, f.jiaY, f.yiX, f.yiY)) {
+                    this.context.strokeStyle = Theme.qingDeep
+                    this.context.lineWidth = 2.5
+                } else {
+                    this.context.strokeStyle = Theme.qing
+                    this.context.lineWidth = 1.5
+                }
+                this.context.lineCap = "round"
+                this.drawFerryDashSeg(span[0], span[1], span[2], span[3])
+                this.drawFerryDashSeg(span[4], span[5], span[6], span[7])
+            case None => ()
+        }
+    }
+
+    func drawFerryRings(cx: Float64, cy: Float64, cs: Float64): Unit {
+        this.context.strokeStyle = Theme.qingDeep
+        this.context.beginPath()
+        this.context.arc(cx, cy, 0.38 * cs, 0.0, 6.28)
+        this.context.lineWidth = 1.5
+        this.context.stroke()
+        this.context.beginPath()
+        this.context.arc(cx, cy, 0.30 * cs, 0.0, 6.28)
+        this.context.lineWidth = 1.0
+        this.context.stroke()
+    }
+
+    /* 甲/乙/渡 是汉字,没法用笔画路径;沿用 drawHomeMark 的 fillText + font 写法。
+       风险:README 与本文件约 398 行记录过 fillText / font 的 px 在鸿蒙真机上未能
+       放大墨像素,甲/乙/渡 字号需真机确认;若过小,后续改 Path2D 字形或叠 Text。
+       x/y 传字形中心:基线 = cy + 0.36×字号,左缘 = cx − 0.5×字号。 */
+    func drawFerryChar(text: String, cx: Float64, cy: Float64, size: Float64, color: Int64): Unit {
+        this.context.fillStyle = color
+        this.context.font = "normal ${ferryFontPx(size)}px serif"
+        this.context.fillText(text, cx - size * 0.5, cy + size * 0.36)
+    }
+
+    /* 一段虚线:2vp 实 / 7vp 空(抄 board_mech.cj dashSub 的步进 2.0 / 9.0)。 */
+    func drawFerryDashSeg(ax: Float64, ay: Float64, bx: Float64, by: Float64): Unit {
+        let dx = bx - ax
+        let dy = by - ay
+        let l = sqrt(dx * dx + dy * dy)
+        if (l <= 0.0) {
+            return
+        }
+        let ux = dx / l
+        let uy = dy / l
+        var t: Float64 = 0.0
+        while (t < l) {
+            let t2 = if (t + 2.0 < l) { t + 2.0 } else { l }
+            this.context.beginPath()
+            this.context.moveTo(ax + ux * t, ay + uy * t)
+            this.context.lineTo(ax + ux * t2, ay + uy * t2)
+            this.context.stroke()
+            t = t + 9.0
+        }
+    }
+
+    /* 渡口 甲→乙 是非相邻格:path 折线跳过这一段(不画成穿过中间格的普通实线),
+       由上面的渡口虚线/加粗线表示。无渡口关 ferry 为 None,恒 false。 */
+    func isFerryJump(a: Cell, b: Cell): Bool {
+        match (this.game.level.ferry) {
+            case Some(f) =>
+                return a.x == f.jiaX && a.y == f.jiaY && b.x == f.yiX && b.y == f.yiY
+            case None =>
+                return false
+        }
+    }
+
     func drawHomeMark(): Unit {
         this.markContext.clearRect(0.0, 0.0, 400.0, 140.0)
         this.markContext.globalAlpha = 0.18
@@ -582,7 +685,17 @@ class EntryView {
             var i: Int64 = 1
             while (i < this.game.path.size()) {
                 let cell = this.game.path.at(i)
-                this.context.lineTo((Float64(cell.x) + 0.5) * cs, (Float64(cell.y) + 0.5) * cs)
+                let prev = this.game.path.at(i - 1)
+                let px = (Float64(cell.x) + 0.5) * cs
+                let py = (Float64(cell.y) + 0.5) * cs
+                /* 渡口 甲→乙 是非相邻格:这一段交给渡口虚线/加粗线,不画成
+                   穿过中间格的普通实线(CJMP buildBoardRoute 也只画相邻段)。
+                   无渡口关 isFerryJump 恒 false,折线与改动前逐点一致。 */
+                if (this.isFerryJump(prev, cell)) {
+                    this.context.moveTo(px, py)
+                } else {
+                    this.context.lineTo(px, py)
+                }
                 i = i + 1
             }
             this.context.stroke()
@@ -642,6 +755,14 @@ class EntryView {
                 this.context.strokeStyle = Theme.ink
                 this.drawStationNumber(wp.n, cx, cy, glyphH)
             }
+        }
+
+        /* 渡口标记:只在这关有 ferry 时进这段;无渡口关下面一次绘制调用都不发生,
+           画面与改动前一致。 */
+        match (this.game.level.ferry) {
+            case Some(f) =>
+                this.drawFerry(f, cs)
+            case None => ()
         }
     }
 
@@ -1584,4 +1705,58 @@ class EntryView {
         .backgroundColor(this.playPaper())
         .alignItems(HorizontalAlign.Center)
     }
+}
+
+/* ---- 渡口纯计算(不依赖 ohos/ArkUI,可在 cjpm 工程编译验证:
+   /workspace/cjmp-smoke/ferry6/y2_check/) ---- */
+
+/* Canvas font 只吃整数 px;0.30c / 0.24c / 0.20c 随格边 cs 缩放后四舍五入。 */
+func ferryFontPx(size: Float64): Int64 {
+    return Int64(size + 0.5)
+}
+
+/* 甲乙圆环之间虚线的两段(甲侧、乙侧)起止点,扁平数组
+   [sx,sy,m1x,m1y, m2x,m2y,ex,ey]:两端各让出环半径 r=0.38c+1,中段留
+   g=0.16c 缺口给「渡」字;总长放不下两段虚线时返回 None。
+   判定抄 board_mech.cj 的 d 段(L > 2r + 2g)。 */
+func ferryDashSpan(jx: Float64, jy: Float64, yx: Float64, yy: Float64, cs: Float64): Option<Array<Float64>> {
+    let dx = yx - jx
+    let dy = yy - jy
+    let l = sqrt(dx * dx + dy * dy)
+    if (l <= 0.0) {
+        return None
+    }
+    let ux = dx / l
+    let uy = dy / l
+    let r = 0.38 * cs + 1.0
+    let g = 0.16 * cs
+    if (l <= 2.0 * r + 2.0 * g) {
+        return None
+    }
+    let sx = jx + ux * r
+    let sy = jy + uy * r
+    let ex = yx - ux * r
+    let ey = yy - uy * r
+    let mx = (sx + ex) * 0.5
+    let my = (sy + ey) * 0.5
+    return Some([sx, sy, mx - ux * g, my - uy * g, mx + ux * g, my + uy * g, ex, ey])
+}
+
+/* 路径走过 甲→乙:path 里甲 的下一格是乙。 */
+func ferryTraversed(path: GridPath, jiaX: Int64, jiaY: Int64, yiX: Int64, yiY: Int64): Bool {
+    var i: Int64 = 0
+    while (i < path.size()) {
+        let pc = path.at(i)
+        if (pc.x == jiaX && pc.y == jiaY) {
+            if (i + 1 < path.size()) {
+                let nc = path.at(i + 1)
+                if (nc.x == yiX && nc.y == yiY) {
+                    return true
+                }
+            }
+            return false
+        }
+        i = i + 1
+    }
+    return false
 }
