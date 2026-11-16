@@ -2009,7 +2009,7 @@ def selftest():
     # Historical commits c711f3e and cec0712 must fail check_q
     for commit in ("c711f3e", "cec0712"):
         try:
-            res = subprocess.run(["git", "show", f"{commit}:mobile/cjmp/lib/chapter.cj"  # historical path (pre-restructure commits)],
+            res = subprocess.run(["git", "show", f"{commit}:mobile/cjmp/lib/chapter.cj"],  # historical path (pre-restructure commits)
                                  capture_output=True, text=True, check=True)
             ok_q_old, msg = check_q(good_q_index, res.stdout)
             assert not ok_q_old, f"selftest q: expected historical commit {commit} to fail check_q"

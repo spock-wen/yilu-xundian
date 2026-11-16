@@ -78,7 +78,7 @@ legacy/android/scripts/build_debug.sh
 4. 把 `libyilu_zip*.so` 和运行时 `.so` 拷到 `legacy/android/app/src/main/jniLibs/arm64-v8a/`。运行时目录的文档示例（API 31）是 `$CANGJIE_HOME/runtime/lib/linux_android31_aarch64_cjnative`。脚本会先找 `linux_android<API>_aarch64_cjnative`，再找 `linux_android_aarch64_cjnative`。都不在就停下，并列出 `runtime/lib`。可用 `YILU_CJ_ANDROID_RUNTIME` 指到实际目录。
 5. `libcangjie-runtime.so` 的 `DT_NEEDED` 包含 NDK 的 `libc++_shared.so`。脚本从 sysroot（或 NDK 里 aarch64 的那份）拷进 `jniLibs/arm64-v8a/`。
 6. 写 `assets/cangjie_native_libs.txt`：先 `c++_shared`，再运行时库，再 `libyilu_zip*.so`（根库最后）。Kotlin 按这个顺序 `System.loadLibrary`，最后加载 `yilu_jni`。
-7. `android/gradlew :app:assembleDebug`。CMake 用 `-L/-l` 链 `yilu_zip` 和 `cangjie-runtime`，这样 `DT_NEEDED` 是 `libyilu_zip.so` / `libcangjie-runtime.so`，不是编译机上的绝对路径。
+7. `legacy/android/gradlew :app:assembleDebug`。CMake 用 `-L/-l` 链 `yilu_zip` 和 `cangjie-runtime`，这样 `DT_NEEDED` 是 `libyilu_zip.so` / `libcangjie-runtime.so`，不是编译机上的绝对路径。
 
 APK：`legacy/android/app/build/outputs/apk/debug/app-debug.apk`。
 

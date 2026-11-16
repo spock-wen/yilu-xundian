@@ -32,8 +32,8 @@ ROOT = Path(__file__).resolve().parents[2]
 LEVELS = ROOT / "entry/src/main/resources/rawfile/levels.json"
 COPIES = (
     ROOT / "engine/shared/levels/zhuojun-fanyang.json",
-    ROOT / "ios/app/YiluXundian/level.json",
-    ROOT / "android/app/src/main/assets/level.json",
+    ROOT / "legacy/ios/app/YiluXundian/level.json",
+    ROOT / "legacy/android/app/src/main/assets/level.json",
 )
 SHARED_LEVELS = ROOT / "engine/shared/levels/levels.json"
 SHARED = ROOT / "engine/shared"
