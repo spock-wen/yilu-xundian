@@ -23,6 +23,8 @@ Start (or foreground) the app:
 python3 tools/verify/control_yilu.py launch
 ```
 
+`launch` force-stops, runs `aa start` (exit 1 if its output does not say `successfully`; `hdc shell` itself exits 0 on aa errors), then polls `pidof com.yilu.xundian` for up to 10 s (`YILU_LAUNCH_PID_TIMEOUT`). If no process appears it exits 3 with `launch FAIL: no com.yilu.xundian process`. That is a stale mission on the target (`aa dump -l` shows `state #INITIAL` / `app state #BEGIN`, hilog `pending state dropped START`), not a UI regression; `aa force-stop` does not clear it. Recover with `hdc -t "$YILU_HDC_TARGET" uninstall com.yilu.xundian`, reinstall the HAP, and re-run (seen 2026-10-01 and 2026-10-05 on the Pura 90 emulator).
+
 Ready when `doctor` passes (hdc on PATH, target listed, bundle installed, rules green) and a fresh screenshot can be taken. There is no long-lived server: each drive uses the shared device session. Do not double-drive the same target from two agents at once (shared touch focus).
 
 Teardown: `python3 tools/verify/control_yilu.py cleanup` (force-stops the ability only; leaves evidence).
@@ -45,7 +47,7 @@ If doctor fails, fix the environment before Drive.
 
 ## Drive
 
-Harness: `tools/verify/control_yilu.py`. Prefer text/bounds from `uitest dumpLayout` over hard-coded coordinates. Pixel fallbacks exist only for `撤销` / `重绘驿道`, taken from text-node centers in `_ship/verify-proof/20260916T092315Z/home-start.layout.json` (root bounds `[0,0][1320,2856]`). That dump is not a 1080-wide surface. If the root bounds change, ignore the fallbacks and re-dump. Home and chapter taps have no pixel fallback; a missing text match fails the drive. On the chapter list, do not needle `可入` or `驿程`: subtitle `选章入驿 · 开章可入 · 灰章未启` and footer `点开章入驿程` match before the badge and before any station title (`chapter-list.layout.json` in that same proof run).
+Harness: `tools/verify/control_yilu.py`. Prefer text/bounds from `uitest dumpLayout` over hard-coded coordinates. Pixel fallbacks exist only for `撤销` / `重绘驿道`, taken from text-node centers in `docs/verify-proof/20260916T092315Z/home-start.layout.json` (root bounds `[0,0][1320,2856]`). That dump is not a 1080-wide surface. If the root bounds change, ignore the fallbacks and re-dump. Home and chapter taps have no pixel fallback; a missing text match fails the drive. On the chapter list, do not needle `可入` or `驿程`: subtitle `选章入驿 · 开章可入 · 灰章未启` and footer `点开章入驿程` match before the badge and before any station title (`chapter-list.layout.json` in that same proof run).
 
 ```bash
 # Home → 开始传书 → current board (fresh install: 涿郡·涿)
@@ -69,7 +71,7 @@ Live directory (survives cleanup, gitignored): `artifacts/verify/<run-id>/`
 
 hdc `snapshot_display` writes **JPEG** (`<label>.jpeg`), not PNG. Pair with `<label>.layout.json` when claiming a tap.
 
-For a review gate, copy that run folder to `_ship/verify-proof/<run-id>/` (see the tracked `PROOF.md` there). Do not treat `artifacts/verify/` as the committed proof — it is ignored.
+For a review gate, copy that run folder to `docs/verify-proof/<run-id>/` (see the tracked `PROOF.md` there). Do not treat `artifacts/verify/` as the committed proof — it is ignored.
 
 Required for review gate:
 
@@ -113,6 +115,7 @@ Env:
 - `YILU_ABILITY` (default `EntryAbility`)
 - `YILU_ARTIFACTS` (default `artifacts/verify`)
 - `YILU_SKIP_RULES=1` (doctor skips `test_rules.py`)
+- `YILU_LAUNCH_PID_TIMEOUT` (default `10`, seconds `launch` waits for the app pid)
 
 ## Maintain
 

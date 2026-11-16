@@ -636,7 +636,7 @@ class VerifiedCatalogTests(unittest.TestCase):
         """鸿蒙 levels.cj 携带 ferry：id 集合与坐标转换都必须对得上 levels.json。
 
         生成侧唯一的坐标换算是 build_levels._ferry_stmt（[r, c] -> x=列, y=行），
-        与 mobile/shared/src/game/json_level.cj 的 readRcPair `Cell(c, r)` 以及
+        与 engine/shared/src/game/json_level.cj 的 readRcPair `Cell(c, r)` 以及
         tools/solve_levels.py 的 rc_to_xy 同一约定。这里把 levels.cj 里实际出现
         的 `FerryDef(...)` 文本解析回来和 levels.json 逐一比对，防止「生成器改了
         而 levels.cj 没重跑」或「只 emit 了部分渡口关」。
@@ -1547,7 +1547,7 @@ class ChapterFlowV13Tests(unittest.TestCase):
 
     def test_p1_skins_do_not_move_layout_or_lock(self) -> None:
         """P1 (ab3c9c9): 09 dual-tone + mock 6×6 only. BOARD_OY / isOpen frozen."""
-        ship = (ROOT / "mockups/chapter-skins-v9/ch05-10-SHIP.md").read_text(encoding="utf-8")
+        ship = (ROOT / "design/mockups/chapter-skins-v9/ch05-10-SHIP.md").read_text(encoding="utf-8")
         self.assertIn("示意盘 **6×6**", ship)
         self.assertIn("09 双调加力", ship)
         self.assertIn("BOARD_OY_VP=**202**", ship)
@@ -1837,8 +1837,8 @@ class BottomBarIconTests(unittest.TestCase):
     def test_committed_svgs_match_spec(self) -> None:
         from bar_icons import REDRAW, UNDO  # noqa: E402
 
-        undo_svg = (ROOT / "icons/icon-undo.svg").read_text(encoding="utf-8")
-        reset_svg = (ROOT / "icons/icon-reset.svg").read_text(encoding="utf-8")
+        undo_svg = (ROOT / "design/icons/icon-undo.svg").read_text(encoding="utf-8")
+        reset_svg = (ROOT / "design/icons/icon-reset.svg").read_text(encoding="utf-8")
         self.assertEqual(undo_svg, UNDO.icon_svg())
         self.assertEqual(reset_svg, REDRAW.icon_svg())
         for raw in (undo_svg, reset_svg):

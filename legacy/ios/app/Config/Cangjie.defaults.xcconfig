@@ -1,0 +1,26 @@
+// Shared linker policy for the Cangjie iOS staticlib.
+// legacy/ios/scripts/build_simulator.sh writes Config/Cangjie.local.xcconfig
+// with the SDK .a list, section.o, and cjstart.o before xcodebuild.
+//
+// Order required by the 1.1.3 cross-compile page:
+//   $CANGJIE_HOME/lib/<ios lib>/section.o
+//   $CANGJIE_HOME/lib/<ios lib>/cjstart.o
+//   -lc++
+// then Dead Code Stripping = No (set below).
+// Xcode 15 may also need -Wl,-no_compact_unwind (added by the script).
+// https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/compile_and_build/cross_compilation.html
+
+DEAD_CODE_STRIPPING = NO
+CODE_SIGNING_ALLOWED = NO
+CODE_SIGNING_REQUIRED = NO
+ENABLE_BITCODE = NO
+
+// cangjie-sdk-mac-aarch64-ios ships an arm64 simulator static runtime
+// (lib/ios_simulator_aarch64_cjnative). A generic iOS Simulator destination
+// also links x86_64, and _yilu_* is then undefined in that slice.
+// Mac 2026-09-26: generic/platform=iOS Simulator failed that way; arm64-only linked.
+EXCLUDED_ARCHS[sdk=iphonesimulator*] = x86_64
+ARCHS[sdk=iphonesimulator*] = arm64
+ONLY_ACTIVE_ARCH = YES
+
+#include? "Cangjie.local.xcconfig"

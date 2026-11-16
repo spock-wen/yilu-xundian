@@ -150,7 +150,7 @@ def _ferry_stmt(lv: dict) -> list[str]:
 
     levels.json keeps `ferry = {"jia": [r, c], "yi": [r, c]}` in boards-locked
     [row, col] form; the engine is x = column, y = row. Same conversion as
-    mobile/shared/src/game/json_level.cj `readRcPair` (Cell(c, r)) and
+    engine/shared/src/game/json_level.cj `readRcPair` (Cell(c, r)) and
     tools/solve_levels.py `rc_to_xy`.
     """
     f = lv.get("ferry")

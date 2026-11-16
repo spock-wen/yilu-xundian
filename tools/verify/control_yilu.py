@@ -109,10 +109,45 @@ def cmd_launch(_: argparse.Namespace) -> int:
     time.sleep(0.4)
     r = hdc_shell(f"aa start -a {ABILITY} -b {BUNDLE}", check=False)
     print(r.stdout or r.stderr)
+    out = (r.stdout or "") + (r.stderr or "")
+    # hdc shell exits 0 even when aa reports an error; read the text too.
+    if r.returncode != 0 or "successfully" not in out:
+        print("launch FAIL: aa start did not report success", file=sys.stderr)
+        return r.returncode or 1
+    # `aa start` can print success while no process ever spawns (seen 2026-10-01
+    # and 2026-10-05 on Pura 90: aa dump -l shows the ability `state #INITIAL`,
+    # `app state #BEGIN`, hilog `pending state dropped START`, and dumpLayout
+    # stays on the launcher). Fail closed here instead of letting the drive
+    # report a misleading "no bounds for 开始传书".
+    pid = wait_for_pid(LAUNCH_PID_TIMEOUT_S)
+    if not pid:
+        print(
+            f"launch FAIL: no {BUNDLE} process {LAUNCH_PID_TIMEOUT_S:.0f}s after aa start "
+            "(stale mission stuck INITIAL). Recover the target: "
+            f"`hdc -t {TARGET} uninstall {BUNDLE}` then reinstall the HAP, and re-run.",
+            file=sys.stderr,
+        )
+        return 3
+    print(f"pid={pid}")
     # Cold start on emulator often lands dumpLayout on the launcher icon grid
     # if we probe too early (seen 2026-09-28: texts were demo labels + 驿路巡点 icon).
     time.sleep(2.5)
-    return 0 if r.returncode == 0 else r.returncode
+    return 0
+
+
+LAUNCH_PID_TIMEOUT_S = float(os.environ.get("YILU_LAUNCH_PID_TIMEOUT", "10"))
+
+
+def wait_for_pid(timeout_s: float) -> str:
+    deadline = time.monotonic() + timeout_s
+    while True:
+        p = hdc_shell(f"pidof {BUNDLE}", check=False)
+        pid = (p.stdout or "").strip().split()
+        if pid and pid[0].isdigit():
+            return pid[0]
+        if time.monotonic() >= deadline:
+            return ""
+        time.sleep(0.5)
 
 
 def cmd_cleanup(_: argparse.Namespace) -> int:
@@ -189,7 +224,7 @@ def tap_text(needle: str, fallback: tuple[int, int] | None = None) -> bool:
 
 
 # Last-resort pixels only. Measured text-node centers in
-# _ship/verify-proof/20260916T092315Z/home-start.layout.json
+# docs/verify-proof/20260916T092315Z/home-start.layout.json
 # (root bounds [0,0][1320,2856]): 撤销 [355,2599][467,2665],
 # 重绘驿道 [910,2599][1134,2665]. Not a 1080-wide assumption.
 # Home / chapter taps have no measured fallback in that dump — fail closed.
@@ -213,7 +248,7 @@ def cmd_drive(ns: argparse.Namespace) -> int:
     if feat == "board-zhuo":
         # Home 章节 → chapter card label 涿郡 (badge text is 可入, but do not
         # search 可入: subtitle 开章可入 is the first hit in
-        # _ship/verify-proof/20260916T092315Z/chapter-list.layout.json).
+        # docs/verify-proof/20260916T092315Z/chapter-list.layout.json).
         # Screen 5 title is 涿郡·驿程; needle 涿 matches that title first.
         # Station row name is 涿郡·涿 (badge 当前). Do not search 驿程:
         # chapter-list footer 点开章入驿程 matches first.

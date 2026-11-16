@@ -1,0 +1,15 @@
+# OHOS-free Zip engine shared by the iOS and Android shells.
+# This committed manifest is the iOS static library (cjpm output-type "static").
+# Android writes a separate dynamic manifest under .android-build/ (gitignored).
+# The iOS cjc flag is --output-type=staticlib; cjpm passes that when building this module.
+# cjc-version matches entry/cjpm.toml and https://cangjie-lang.cn/download/1.1.3
+# Cross triples are passed on the cjpm/cjc command line (see legacy/ios/scripts/build_simulator.sh).
+# https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/compile_and_build/cross_compilation.html
+
+[package]
+  cjc-version = "1.1.3"
+  name = "yilu_zip"
+  description = "OHOS-free Zip engine static library for the iOS shell"
+  version = "1.0.0"
+  output-type = "static"
+  src-dir = "./src"

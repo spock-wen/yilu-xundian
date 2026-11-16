@@ -20,12 +20,12 @@ node_modules/
 artifacts/verify/**
 !artifacts/verify/.gitkeep
 
-# iOS / Android shell products (see ios/README.md and android/README.md)
-mobile/shared/target/
-mobile/shared/cjpm.lock
-mobile/shared/.android-build/
-ios/app/Config/Cangjie.local.xcconfig
-ios/app/YiluXundian/Cangjie/*.a
-ios/app/build/
-android/.gradle/
-android/app/src/main/assets/cangjie_native_libs.txt
+# iOS / Android shell products (see legacy/ios/README.md and legacy/android/README.md)
+engine/shared/target/
+engine/shared/cjpm.lock
+engine/shared/.android-build/
+legacy/ios/app/Config/Cangjie.local.xcconfig
+legacy/ios/app/YiluXundian/Cangjie/*.a
+legacy/ios/app/build/
+legacy/android/.gradle/
+legacy/android/app/src/main/assets/cangjie_native_libs.txt
