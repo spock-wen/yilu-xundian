@@ -224,7 +224,7 @@ def svg() -> str:
 
 
 def write_icon_svgs(dest: Path | None = None) -> None:
-    folder = dest if dest is not None else ROOT / "icons"
+    folder = dest if dest is not None else ROOT / "design" / "icons"
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "icon-undo.svg").write_text(UNDO.icon_svg(), encoding="utf-8")
     (folder / "icon-reset.svg").write_text(REDRAW.icon_svg(), encoding="utf-8")

@@ -22,10 +22,10 @@ Preconditions:
 
 - **Cold launch.** Run `python3 tools/verify/control_yilu.py launch`. Home shows `驿路巡点` and `开始传书` (confirm via dumpLayout or screenshot).
 - **Tap start.** Run `python3 tools/verify/control_yilu.py drive home-start`. Home CTA is gone; board chrome is present (`涿郡·涿` on a fresh install, plus `撤销` / `重绘驿道`).
-- **Evidence.** Run `python3 tools/verify/control_yilu.py evidence --label home-start`. JPEG under `artifacts/verify/<run-id>/home-start.jpeg` (ship copy: `_ship/verify-proof/<run-id>/`) shows the post-tap board fullscreen.
+- **Evidence.** Run `python3 tools/verify/control_yilu.py evidence --label home-start`. JPEG under `artifacts/verify/<run-id>/home-start.jpeg` (ship copy: `docs/verify-proof/<run-id>/`) shows the post-tap board fullscreen.
 
 ## Gotchas
 
 - A warm process may resume mid-board. Prefer `cleanup` then `launch` for Home proofs.
-- `drive home-start` taps `开始传书` from dumpLayout only (no pixel fallback). The tracked proof surface is 1320×2856 (`_ship/verify-proof/20260916T092315Z/home-start.layout.json` root bounds). Do not assume a 1080-wide tap point.
+- `drive home-start` taps `开始传书` from dumpLayout only (no pixel fallback). The tracked proof surface is 1320×2856 (`docs/verify-proof/20260916T092315Z/home-start.layout.json` root bounds). Do not assume a 1080-wide tap point.
 - Rules tests passing do not prove Home rendered.

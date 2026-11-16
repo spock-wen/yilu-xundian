@@ -224,7 +224,7 @@ def tap_text(needle: str, fallback: tuple[int, int] | None = None) -> bool:
 
 
 # Last-resort pixels only. Measured text-node centers in
-# _ship/verify-proof/20260916T092315Z/home-start.layout.json
+# docs/verify-proof/20260916T092315Z/home-start.layout.json
 # (root bounds [0,0][1320,2856]): 撤销 [355,2599][467,2665],
 # 重绘驿道 [910,2599][1134,2665]. Not a 1080-wide assumption.
 # Home / chapter taps have no measured fallback in that dump — fail closed.
@@ -248,7 +248,7 @@ def cmd_drive(ns: argparse.Namespace) -> int:
     if feat == "board-zhuo":
         # Home 章节 → chapter card label 涿郡 (badge text is 可入, but do not
         # search 可入: subtitle 开章可入 is the first hit in
-        # _ship/verify-proof/20260916T092315Z/chapter-list.layout.json).
+        # docs/verify-proof/20260916T092315Z/chapter-list.layout.json).
         # Screen 5 title is 涿郡·驿程; needle 涿 matches that title first.
         # Station row name is 涿郡·涿 (badge 当前). Do not search 驿程:
         # chapter-list footer 点开章入驿程 matches first.

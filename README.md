@@ -1,12 +1,54 @@
 # 驿路巡点
 
-鸿蒙 2D 可玩原型。规则对齐 LinkedIn Zip（正交哈密顿路径 + 按号巡驿），**不是**中国「一笔画」描边。
+2D 路径解谜游戏。规则对齐 LinkedIn Zip（正交哈密顿路径 + 按号巡驿），**不是**中国「一笔画」描边。无内购、无登录、无 Game Service。锁定 100 关（10 章 × 10 关，ids 0..99）。项目已于 2026-10-24 结项，本仓库现在只做维护。
 
-- 语言：仓颉 1.1.3
-- UI：官方仓颉 ArkUI Canvas + `onTouch`
-- 无内购、无登录、无 Game Service
-- 本仓库 **没有** 在 CI / 云主机上编出 HAP：当前环境没有 DevEco / 仓颉鸿蒙工具链。请用本机 DevEco 打开后编译。
-- iOS 壳见 [ios/README.md](ios/README.md)。Android 壳见 [android/README.md](android/README.md)。两边共用 [mobile/shared](mobile/shared) 里的仓颉 Zip 引擎，不是把规则重写成 Swift 或 Kotlin。**iOS 模拟器冒烟 PASSED**（tip `eaf7aed`，进入涿郡·范阳 id 1；截图目录 `qa-shots/ios-shell-eaf7aed-gate`，本检出不含该目录）。**Android** 把程序员 Mac 冒烟和测试门禁分开记，都在 tip `f25f813`（`f25f813d81388b550fd336f3b819b93117f214c5`）。**程序员 Mac 冒烟 PASSED**（AVD `grokdump`，进入涿郡·范阳 id 1，6×6 可见；目录 `_smoke/android-fanyang-f25f813-resmoke-*`、`qa-shots/android-shell-f25f813-gate/`，本检出可不含）。**测试门禁 PASS**（全屏目录 `qa-shots/android-shell-f25f813-tester`，本检出可不含）。更早 tip `4986524` 因缺少 `CJ_MRT_CjRuntimeInit` 为 FAIL。见 [android/README.md](android/README.md)。
+## 三端各在哪个目录，现在用哪套
+
+| 平台 | 目录 | 状态 | 一句话 |
+| --- | --- | --- | --- |
+| 鸿蒙 | 仓库根的 `entry/`、`AppScope/`、`hvigor/`、`build-profile.json5`、`hvigorfile.ts`、`oh-package.json5` | **在用** | DevEco 工程。要求这些文件留在仓库根，所以没有挪。仓颉 1.1.3 + ArkUI Canvas。 |
+| iOS + Android | [`app-ios-android/`](app-ios-android/README.md) | **在用** | CJMP 0.2.2 / Keels 跨平台应用（原 `mobile/cjmp`，它是目录，不是 git 分支）。 |
+| 共用引擎 | [`engine/`](engine/ENGINE.md) | 在用 | `engine/shared` 是无 ohos 依赖的仓颉 Zip 引擎（包名 `yilu_zip`）+ 共用 `levels.json`；`app-ios-android` 构建时从这里同步。 |
+| 旧 iOS / Android 原生壳 | [`legacy/ios/`](legacy/ios/README.md)、[`legacy/android/`](legacy/android/README.md) | **已废弃** | UIKit / Kotlin 壳，10-03 之后没再动，已被 `app-ios-android/` 取代。保留作历史，不删。 |
+
+## 目录结构
+
+```text
+entry/ AppScope/ hvigor/               鸿蒙 DevEco 工程（必须留在仓库根）
+build-profile.json5 hvigorfile.ts oh-package.json5
+app-ios-android/                       iOS + Android（CJMP / Keels）：lib/ 源码、fonts/、scripts/（构建与检查脚本）
+engine/
+  shared/                              共用仓颉 Zip 引擎 + levels.json
+  shared-test/                         引擎的 cjpm 测试模块
+  include/yilu_zip.h                   旧原生壳用的 C ABI 头文件
+  scripts/check_level.py               共用关卡一致性检查
+  ENGINE.md                            引擎说明
+boards-locked/                         锁定的 100 关棋盘数据（10 章 JSON），关卡的源头
+tools/                                 求解器、关卡生成、规则测试、鸿蒙 verify 脚本（tools/verify）
+design/                                设计资产：icons/（撤销/重绘 SVG）、mockups/（章节皮肤稿）
+third_party/                           第三方字体许可说明（Noto Serif SC）
+docs/                                  文档与历史记录（见下）
+legacy/                                已废弃的旧 iOS / Android 原生壳
+.cursor/skills/                        verify-yilu-xundian 鸿蒙 verify skill
+```
+
+文档索引（`docs/`）：
+
+- [harmony-build.md](docs/harmony-build.md)：用 DevEco 编译运行鸿蒙版
+- [harmony-architecture.md](docs/harmony-architecture.md)：引擎 / 规则 / 皮肤分层，工程形状
+- [harmony-api-notes.md](docs/harmony-api-notes.md)：用到的仓颉 / ArkUI API 的文档依据
+- [design-tokens.md](docs/design-tokens.md)：设计师 token
+- [level-name-sources.md](docs/level-name-sources.md)：驿名的史地依据
+- [history/native-shell-gates.md](docs/history/native-shell-gates.md)：旧原生壳的门禁 / 冒烟记录
+- [verify-proof/](docs/verify-proof/20260916T092315Z/PROOF.md)：鸿蒙 verify 的留档证据
+
+## 怎么编
+
+- **鸿蒙**：本机 DevEco Studio 打开仓库根，步骤见 [docs/harmony-build.md](docs/harmony-build.md)。本仓库没有在 CI / 云主机上编出 HAP（没有 DevEco / 仓颉鸿蒙工具链）。
+- **iOS / Android**：装好 CJMP OpenSDK 0.2.2 后运行 `app-ios-android/scripts/build_from_repo.sh [--android] [--ios] [--auto-venv]`，前置条件见 [app-ios-android/README.md](app-ios-android/README.md)。iOS 需要 Mac + Xcode，Android 需要 SDK + NDK。
+- **引擎测试**：`cd engine/shared-test && cjpm test`（需要仓颉 SDK）。
+- **不用编译器就能跑的检查**：见下文「本机检查」。
+
 
 ## 玩法
 
@@ -59,25 +101,6 @@
 
 章名 / 关数 / 首末关 / 尺寸与 `levels.json`（及 `tools/build_levels.py` 的 `EXPECTED_NAMES`）一致，共 100 行；逐关的驿名 / 尺寸 / 驿站数 / 墙数以 `levels.json` 本身为准。
 
-驿名取东汉郡县城，不是自造地名。
-
-依据：
-
-- 目录本身：`entry/src/main/resources/rawfile/levels.json` ids 0..99（10 章每章 10 关）；测试锁在 `tools/test_rules.py` 的 `VerifiedCatalogTests` / `ChapterFlowV13Tests`。
-- 涿、范阳、故安、遒：西汉涿郡属县。班固《汉书·地理志下》涿郡「县二十九：涿，迺，…故安，…范阳，…」（维基文库 [漢書/卷028](https://zh.wikisource.org/wiki/%E6%BC%A2%E6%9B%B8/%E5%8D%B7028%E4%B8%8B)）。志文作「迺」，后世常写「遒」，本关用「遒」。
-- 中山、卢奴、安喜：中山国有卢奴（《汉书·地理志》中山国）；刘备「涿郡涿县人」「除安喜尉」，裴注《典略》作「中山安喜尉」（《三国志·蜀书·先主传》，维基文库 [三國志/卷32](https://zh.wikisource.org/wiki/%E4%B8%89%E5%9C%8B%E5%BF%97/%E5%8D%B732)）。
-- 高唐、安德、鬲、祝阿：西汉平原郡属县。《汉书·地理志上》平原郡「县十九：…鬲，高唐，…祝阿，…安德，…」（同上卷028）。刘备后为高唐尉、试守平原令、领平原相（同上先主传）。
-
-## 引擎 vs 占位
-
-| 层 | 路径 | 职责 |
-| --- | --- | --- |
-| 可复用网格引擎 | `entry/src/main/cangjie/engine/` | 格子、墙、触摸落格、撤销栈、路径。无 Canvas、无本关规则。 |
-| 本游戏规则 | `entry/src/main/cangjie/game/` | 升序驿站 + 填满网格 + 终点最高号。 |
-| 关卡数据 | `levels.json` + `levels.cj` | 同一套锁定 100 关（10 章：涿郡…北伐，ids 0..99）。 |
-| 设计师皮肤 | `theme.cj` + Canvas 描线 | 手稿 token：纸底、已访底、墨环、青填已过、金发丝下一驿、朱印。 |
-
-引擎可以在没有 Canvas 的情况下被推理 / 用 Python 镜像单测（`tools/test_rules.py`）。仓颉侧目前没有在本机跑 `cjpm test`（无 `cjc`）。
 
 ## 独立求解器
 
@@ -102,131 +125,22 @@ python3 tools/test_rules.py
 
 禁止随机乱画格子当关卡。
 
-## 工程形状（官方 Empty Ability）
-
-对照 [docs_cangjie 第一个仓颉应用](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/cj-start/start/quick-start/cj-quick-start-first-cangjie-app.md) 的目录（无 `ets/`）：
-
-```text
-entry/
-├── cjpm.toml                          # name = ohos_app_cangjie_entry
-├── build-profile.json5                # cangjieOptions.path = "./cjpm.toml"
-└── src/main/
-    ├── module.json5
-    └── cangjie/
-        ├── ability_stage.cj
-        ├── index.cj
-        ├── main_ability.cj
-        ├── theme.cj                   # 本仓库附加：皮肤
-        ├── levels.cj                  # 本仓库附加：关卡字面量
-        ├── engine/                    # 本仓库附加：无 UI 网格引擎
-        └── game/                      # 本仓库附加：Zip 规则薄层
-```
-
-`cjpm.toml` 的 `src-dir = "./src/main/cangjie"`，`cjc-version = "1.1.3"`。
-
-## 用 DevEco 编译运行
-
-仓颉 HAP **必须**用与 DevEco 锁步的仓颉插件。插件 5.x 不能装在 DevEco 6.0.1 上。仓颉 SDK 1.1.3 见 [cangjie-lang.cn/download/1.1.3](https://cangjie-lang.cn/download/1.1.3)。入门流程见仓颉官网《HarmonyOS 应用开发入门指导》：报名 → 安装匹配的 DevEco + 仓颉插件 → **[Cangjie] Empty Ability**。
-
-### 推荐：先建官方空工程再铺源码
-
-这是官方创建路径，也最不容易和本机 SDK / hvigor 插件版本打架。
-
-1. 安装 **DevEco Studio**，用 **Plugins → Install Plugin from Disk** 安装 **与该 DevEco 同号** 的仓颉插件，重启 IDE。
-2. `File → New → Create Project` → Application → **[Cangjie] Empty Ability**。仓颉目前只提供 Phone。
-3. 工程名 / 显示名填 **驿路巡点**，bundle name 建议 `com.yilu.xundian`。
-4. 等工程同步结束（仓颉 SDK 默认在 macOS `$HOME/.cangjie-sdk`、Windows `%USERPROFILE%\.cangjie-sdk`）。
-5. 用本仓库覆盖生成工程里的：
-   - `entry/src/main/cangjie/`
-   - `entry/cjpm.toml`
-   - `entry/src/main/resources/`
-   - `entry/src/main/module.json5`（或只改 `label` / `icon`）
-   - `AppScope/app.json5` 的 `bundleName` / `label`
-   - `AppScope/resources/base/element/string.json`（`app_name` = 驿路巡点）
-6. 若走 x86 模拟器，确认 `entry/build-profile.json5` 含：
-
-```json5
-"cangjieOptions": {
-  "path": "./cjpm.toml",
-  "abiFilters": ["arm64-v8a", "x86_64"]
-}
-```
-
-（出处：上述官方第一应用目录把 `cjpm.toml` 放在 `entry/`；x86 过滤器见仓颉 Empty Ability 构建说明。默认只编 `arm64-v8a`。）
-
-7. 配置签名，选 Phone 模拟器或真机，Run。
-8. **不要**添加 IAP / 登录 / Game Service。
-
-### 直接打开本仓库
-
-也可以 `File → Open` 本仓库。首次同步时 DevEco 可能改写：
-
-- `build-profile.json5` 的 `compatibleSdkVersion`（请改成你本机 HarmonyOS SDK）
-- `hvigor/hvigor-config.json5` 里的仓颉 hvigor 支持包版本
-- `local.properties`（SDK 路径，已 gitignore）
-
-这些文件因本机插件而异，不要从网上抄一个对不上的 `cangjie-build-support-*.tgz` 版本。仓颉插件会在本机提供 `@ohos/cangjie-build-support`，该本机路径不要提交进 `hvigor/hvigor-config.json5`（仓库里保持 `dependencies: {}`）。
-
-## API 依据（未编造 `@ohos.*` / ArkTS-only）
-
-全部对照 [openharmony/docs_cangjie](https://gitcode.com/openharmony/docs_cangjie) 的仓颉文档，**不是** ArkTS 文档。
-
-| 用法 | 依据 |
-| --- | --- |
-| Empty Ability 树：`entry/src/main/cangjie/{ability_stage,index,main_ability}.cj` + `entry/cjpm.toml` + `module.json5` | [cj-quick-start-first-cangjie-app.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/cj-start/start/quick-start/cj-quick-start-first-cangjie-app.md) |
-| `import kit.ArkUI.*` + `import ohos.arkui.state_macro_manage.*`；`@Entry` `@Component` `@State` | 同上 `index.cj` 初始代码；Canvas 指南同套 import |
-| `kit.AbilityKit.*`、`UIAbility`、`windowStage.loadContent("EntryView")` | [cj-application-window-stage.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/windowmanager/cj-application-window-stage.md) |
-| `RenderingContextSettings(antialias: true)` 再 `CanvasRenderingContext2D(settings)`（无 `new`） | [cj-drawing-customization-on-canvas.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/arkui-cj/cj-drawing-customization-on-canvas.md) |
-| 颜色 `0XF3E8D6` 等 token 整数，坐标 `Float64` vp（`50.0`） | 同上示例 `0XF5DC62`、`fillRect(50.0, 50.0, …)`；色值来自设计师手稿 |
-| `Text.fontFamily("serif")` / `"sans-serif"` | [cj-text-input-text.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/reference/arkui-cj/cj-text-input-text.md) `func fontFamily`。非棋盘文案仍用系统 generic family |
-| `Divider` / `Blank` / `Stack` / `.rotate(angle:)` / `.border` / `.layoutWeight` | docs_cangjie 对应通用属性与容器页 |
-| `lineWidth` / `strokeStyle` / `fillStyle` / `font` 是 **属性**：`this.context.lineWidth = 2.0` | [cj-canvas-drawing-canvasrenderingcontext2d.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/reference/arkui-cj/cj-canvas-drawing-canvasrenderingcontext2d.md)（`prop lineWidth` / `prop font`） |
-| 棋盘驿站数字：`Path2D` + `moveTo` / `lineTo` / `arc` + `stroke(path)`，单位 **vp**（与驿站圆同一套） | [cj-canvas-drawing-path2d.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/reference/arkui-cj/cj-canvas-drawing-path2d.md) `moveTo`/`lineTo`/`arc`「默认单位：vp」；[cj-canvas-drawing-canvasrenderingcontext2d.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/reference/arkui-cj/cj-canvas-drawing-canvasrenderingcontext2d.md) `func stroke(Path2D)`。字形高 = 直径 × 0.60（教程 40vp → 24vp）。`fillText` / `font` 的 `px` 与 `vp`、以及 `vp2px` 在真机上未能放大墨像素（教程站 1 的 180×180 裁切相对 e90cacf 为 0 px diff），因此数字不用 font |
-| 首次绘制在 `onReady`；`clearRect` / `fillRect` / `beginPath` / `moveTo` / `lineTo` / `stroke` / `fill` / `fillText` / `arc` | 上述两篇 Canvas 文档 |
-| 底栏「撤销」「重绘驿道」：可点击 `Row` + 24vp Canvas；弧用 `Path2D()` + `stroke(path)`，三角箭头用当前路径 `fill()`；`lineWidth` 是属性。不用 `Button("撤销")` | [cj-canvas-drawing-canvasrenderingcontext2d.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/reference/arkui-cj/cj-canvas-drawing-canvasrenderingcontext2d.md) 的 `func stroke(Path2D)`、`func fill()`。HarmonyOS 6.1.1 默认 Button 仍带 start icon，缺字形会变成方块。几何见 `tools/bar_icons.py`（手稿甲） |
-| `onTouch({ event => match (event.eventType) { case TouchType.Down => … } })`；点 `event.touches[0].x` / `.y` | [cj-common-events-touch-screen-event.md](https://gitcode.com/openharmony/docs_cangjie/blob/master/zh-cn/application-dev/arkui-cj/cj-common-events-touch-screen-event.md) 的**代码示例**。字段是 `event.eventType`（类型定义见 `cj-common-types.md` 的 `TouchEvent.eventType`），**不是** ArkTS 的 `event.type`（该页散文里的 `event.type` 与示例不一致，以代码与类型定义为准） |
-| `ArrayList.add` / `remove(at:)` / `size` | [仓颉 1.1.3 ArrayList](https://cj-docs.gitcode.com/zh/1.1.3/dev-guide/source_zh_cn/collections/collection_arraylist.html) |
-
-明确 **没有** 使用：
-
-- 过时 `import ohos.component.*` / `ohos.state_manage.*`
-- 未在官方 Canvas 页出现的 `import ohos.arkui.component.Canvas`
-- ArkTS `event.type`、`new CanvasRenderingContext2D`
-- OffscreenCanvas / XComponent / Component3D
-- 未核对的 `@ohos.*` 包
-
-用户提到的 Beat Roguelike 仓库 https://gitcode.com/yunitia/qwe 当前页面无可用 Canvas 源码，**没有抄游戏代码**。
 
 ## 显示名
 
 - 应用名 / Ability label：`驿路巡点`
 - bundleName：`com.yilu.xundian`
 
-## 本机已跑过的检查
+## 本机检查
 
 ```bash
-python3 tools/solve_levels.py
-python3 tools/test_rules.py
+python3 tools/solve_levels.py                  # 100 关逐关求解
+python3 tools/test_rules.py                    # 规则 / 目录 / UI 契约测试
+python3 tools/replay_locked_paths.py           # boards-locked 归档路径重放
+python3 tools/check_parity_wire.py
+python3 engine/scripts/check_level.py          # 共用关卡一致性
+python3 -m unittest discover -s tools/verify -p test_skill_doctor_contract.py
+python3 app-ios-android/scripts/check_ui_diffs.py --selftest   # app-ios-android/scripts/check_*.py 同类
 ```
 
-当前环境：`cjc` / DevEco **不存在**，因此没有声称编过 HAP，也无法在真机上对照六张手稿逐像素验收。
-
-## 设计师 token（勿漂移）
-
-| token | hex | 仓颉 |
-| --- | --- | --- |
-| paper | `#F3E8D6` | `0XF3E8D6` |
-| paper-shade | `#E6D5B8` | `0XE6D5B8` |
-| paper-line | `#D4C4A8` | `0XD4C4A8` |
-| ink | `#2C2A26` | `0X2C2A26` |
-| ink-muted | `#5C574E` | `0X5C574E` |
-| qing | `#6B7A78` | `0X6B7A78` |
-| qing-deep | `#3D4A47` | `0X3D4A47` |
-| path | `#3F4F4C` | `0X3F4F4C` |
-| gold | `#C4A35A` | `0XC4A35A`（只作发丝线） |
-| vermillion-seal | `#9B3A2F` | `0X9B3A2F`（只作印） |
-| locked | `#C9BBA6` | `0XC9BBA6` |
-| success-celadon | `#5E7A6A` | `0X5E7A6A` |
-| white-paper | `#FBF6EC` | `0XFBF6EC` |
-
-间距（vp）：屏边 20，顶栏 56，底栏 72，教程格 48，驿站直径 40（随格子 `cs/48` 缩放），驿站数字 Path2D 高 24vp（直径 × 0.60，下限 22，同样随 `cs/48` 缩放），路宽 8，主按钮高 52，撤销/重绘 56，底栏图标 24。
+当前环境：`cjc` / DevEco / CJMP SDK **不存在**，因此没有声称编过 HAP / APK / iOS 包，也无法在真机上对照六张手稿逐像素验收。
